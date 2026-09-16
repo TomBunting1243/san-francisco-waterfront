@@ -1,10 +1,10 @@
 # San Francisco Waterfront
 
-A playful, interactive miniature of the Embarcadero, built by Tom Bunting with React, TypeScript and Three.js.
+I wanted a fun, little, interactive cityscape of the Embarcadero as the header image for my portfolio. Here is the result, built with Typescript and Javascript primary.
 
 ![The San Francisco waterfront](public/city-poster.webp)
 
-This repository contains the city animation on its own: the Ferry Building, Bay Bridge, surrounding architecture, people, parks, streetcars, ferries and a departing fireboat with a rotating water salute. Daylight, building lights and the clock follow the real time in San Francisco.
+Detailed representations of the the Ferry Building, Bay Bridge, surrounding architecture, people, parks, streetcars, ferries and a departing fireboat with a rotating water salute. Time of day, building lights and the clock follow the real time in San Francisco.
 
 ## Run locally
 
