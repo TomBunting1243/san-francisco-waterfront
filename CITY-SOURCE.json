@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "sourceCommit": "f51152322208659b53df19eec225a937615d737f",
-  "treeHash": "2711175dca0550c043fc7f95d7b7bdb4362631d8949fe82bf5184a1d846b2b86",
+  "sourceCommit": "e7a5fae3f7c4257d8a0793ed53e754b4513d9271",
+  "treeHash": "cbb812dffdce24beb80e117809a05e16217a913953e9ac5fb4245904adc5e8ba",
   "files": {
     ".github/workflows/check.yml": "6c70a8c7d87048a4fce02ad15c5a4fac974eaa4e21e01345b73f36edbe2af2f4",
     ".gitignore": "ecd5010a3402cecec47b1b1a958bdf052e2aefabcc3be0a2a36a2292d7a4d8f7",
@@ -28,13 +28,13 @@
     "package.json": "5af4d8bdb321356345f4cf38f2edc71efd8b58609d5684e37f1ff6fdddb7b5af",
     "public/city-poster.webp": "f6ddef3c2cb6478125f2e73f140ff97bc19556c9c344ec7facf76d69cab75fc2",
     "public/data/sf-waterfront.json": "6f3dcbe3b0ac9512f8ee6377b2ca9c25b7c096bc4fada52e64163031c5a64bb5",
-    "README.md": "17070f68cbecb29b635cdf911e34defea322f4b74ebf56b51ecb949516ac3116",
+    "README.md": "2486c72690ce0e778bd01ac15d87afef14cdd539348f18ac08f46dae07af1fcb",
     "scripts/render-city-poster.mjs": "e8c6162f80b2d9d95436c594643d2f466aed5e5848021118d0d19bfcf13042bd",
     "src/city.css": "732027086320a0d88f42e5dd917369c294788dd79676a334a4c7028b7ad5145b",
     "src/main.tsx": "512a7b60ed2aec05a28c1c80854631a535ed4bc7d6390b18dc6481f6eec3517a",
     "src/standalone.css": "2968926fa5d7893b26876986d2ed7e776adfa487264e8218674e63f3a4856e05",
     "tests/portfolio.test.mjs": "f18d73afb27f05e571eaa90318891086f8c7e22569145341d001c7a26c0be4c4",
-    "THIRD-PARTY-NOTICES.md": "cc8020df089d8a84a895131d672b3b09698bba59334f81d68058800696fb8c81",
+    "THIRD-PARTY-NOTICES.md": "bc39941c07085ea1ed53b8dcf6b76987736cd684da5568dfdf088f80e17f98ba",
     "tsconfig.json": "7f5d83ab7599a9699f601d44b644577da3ae68076a1a812cd2d1bf7d386385ba",
     "vite.config.ts": "de77530b0f0f6eb8e9121046755802083f5f223d2b8d3a30a4c477960ac1596e"
   }
