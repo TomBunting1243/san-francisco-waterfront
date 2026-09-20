@@ -1,4 +1,5 @@
 'use client';
+import CityCredits from './CityCredits';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { landmarks, type Landmark } from './landmarks';
 import { pacificLighting } from './lighting';
@@ -59,7 +60,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const cinematic = createCinematicView(renderer,scene,camera);
       const maxQuality=streetView||window.innerWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
-      let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, visible=true, intersecting=true, rendering=true, presented=false, lastVisual='';
+      let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       const target = new THREE.Vector3(...openingCamera.target), destination = target.clone();
       let lighting=pacificLighting();
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=openingCamera.yaw, edgeTurn=0, edgeSince=0, hoveredPerson=-1;
@@ -134,7 +135,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const baseOffset=new THREE.Vector3(0,openingCamera.desktop.elevation,openingCamera.desktop.distance), offset=new THREE.Vector3(), axis=new THREE.Vector3(0,1,0);
       function animate(now:number) {
         if(disposed)return; frame=requestAnimationFrame(animate);
-        const frameMs=now-last,dt=Math.min(frameMs/1000,.05); last=now; if(!visible||!rendering)return;
+        const frameMs=now-last,dt=Math.min(frameMs/1000,.05); last=now; if((!visible&&presented)||!rendering||document.hidden)return;
         if(now-lastDraw<(streetView?1000/30:0))return;const motionDt=streetView?Math.min((now-lastDraw)/1000,.1):dt;lastDraw=now;
         if(!streetView&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
         const config=settings.current, still=config.paused||reducedMotion.current;
@@ -164,7 +165,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity,lightEase);sun.color.lerp(sunColor,lightEase);fill.intensity=.4+duskAmount*.25;
         const azimuth=lighting.azimuth*Math.PI/180;
         sun.position.set(Math.sin(azimuth)*60,Math.max(5,Math.sin(lighting.altitude*Math.PI/180)*75),-Math.cos(azimuth)*60);
-        host.parentElement?.style.setProperty('--world-ink',duskAmount>.55?'#e7eee4':'#24434b');
+        const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.parentElement?.style.setProperty('--world-ink',ink);lastInk=ink;}
         starMaterial.opacity=Math.max(0,(duskAmount-.55)*1.4);
         world.clockHands.forEach(({minute,hour,angle})=>{
           for(const [hand,t,length] of [[minute,lighting.minutes/60*Math.PI*2,.47],[hour,(lighting.hours%12+lighting.minutes/60)/12*Math.PI*2,.36]] as const){
@@ -208,8 +209,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         }
         world.waterTime.value=elapsed;
         const visual=[width,height,target.x.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),camera.zoom.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
-        host.dataset.motion=still?'paused':'playing';
-        if(!still||visual!==lastVisual){renderer.info.reset();cinematic.render();if(!presented){presented=true;setStatus('ready');}host.dataset.triangles=String(renderer.info.render.triangles);}lastVisual=visual;
+        const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
+        if(!still||visual!==lastVisual){renderer.info.reset();cinematic.render();if(!presented){presented=true;setStatus('ready');}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
       }
       frame=requestAnimationFrame(animate);
       teardown=()=>{
@@ -232,7 +233,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}
     {status==='loading'&&<div className="world-loading" role="status"><span className="sr-only">Loading the waterfront</span></div>}
     {status==='fallback'&&fallback}
-    <a className="world-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a><div className="world-tools"><div className="world-controls" aria-label="Landscape controls"><button onClick={()=>changeZoom(-.25)} disabled={zoom<=.75} aria-label="Zoom out" title="Zoom out (−)">−</button><button onClick={()=>changeZoom(.25)} disabled={zoom>=2.75} aria-label="Zoom in" title="Zoom in (+)">+</button><span className="tool-divider"/><button onClick={reset} aria-label="Reset the view" title="Reset view and zoom">↺</button><span className="tool-divider"/><button onClick={toggleMotion} aria-pressed={paused} aria-label={paused?'Resume landscape motion':'Pause landscape motion'}>{paused?'▷':'Ⅱ'}</button></div></div>
+    <CityCredits/><div className="world-tools"><div className="world-controls" aria-label="Landscape controls"><button onClick={()=>changeZoom(-.25)} disabled={zoom<=.75} aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button><button onClick={()=>changeZoom(.25)} disabled={zoom>=2.75} aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span className="tool-divider"/><button onClick={reset} aria-label="Reset the view" title="Reset view and zoom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9a7 7 0 1 1-.4 5M5 4v5h5"/></svg></button><span className="tool-divider"/><button onClick={toggleMotion} aria-pressed={paused} aria-label={paused?'Resume landscape motion':'Pause landscape motion'}><svg viewBox="0 0 24 24" aria-hidden="true">{paused?<path d="m9 5 10 7-10 7Z"/>:<path d="M8 5v14M16 5v14"/>}</svg></button></div></div>
 
   </section>;
 }

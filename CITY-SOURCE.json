@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "sourceCommit": "e7a5fae3f7c4257d8a0793ed53e754b4513d9271",
-  "treeHash": "cbb812dffdce24beb80e117809a05e16217a913953e9ac5fb4245904adc5e8ba",
+  "sourceCommit": "09dae918e541b5ebfb57c314242bd2841ca64276",
+  "treeHash": "80aab9731706ccf65385ebee9bc8f2f8824b4e2c1da444a154b6dceb910f24b5",
   "files": {
     ".github/workflows/check.yml": "6c70a8c7d87048a4fce02ad15c5a4fac974eaa4e21e01345b73f36edbe2af2f4",
     ".gitignore": "ecd5010a3402cecec47b1b1a958bdf052e2aefabcc3be0a2a36a2292d7a4d8f7",
@@ -10,7 +10,8 @@
     "app/camera.ts": "9311b3dfac958951d0a6896105d8851211739dbe6434f8f0f4abf5a039e0a6ae",
     "app/cinematic.ts": "d2556d7cb9eaa7cfd0b05dfb7d482fc676bae2c5566cc96f5c2a65890aef61c7",
     "app/city-runtime.ts": "1dafe7d97f721c40170103c5866735b1b5d2e27d4db99dded2ed5ae2c363b1b8",
-    "app/CityWorld.tsx": "5cbb26208a54f8815b8cb655e47a305705fd259e76122cc04d03109c7ca631b5",
+    "app/CityCredits.tsx": "d5c39f824ec93a6ef57907704d57179d874a64fbe1b15d3253bdeb3a621c2382",
+    "app/CityWorld.tsx": "12dea561b77cc789a77e30fb74e9f9521b37cf647e73b207f42b4c002a23e246",
     "app/fireboat.ts": "803a277bf91571df8b6549b3c812b32d17cfea99aadd397460a0b681a5457155",
     "app/harbor-font.json": "d5c5467690f74061179a292af83bd85c4c551e0f106b2af99714f11184c96981",
     "app/landmarks.ts": "ba13073569a22cd042016f473d718e6284ac4682260239703a0d571910137327",
@@ -30,7 +31,7 @@
     "public/data/sf-waterfront.json": "6f3dcbe3b0ac9512f8ee6377b2ca9c25b7c096bc4fada52e64163031c5a64bb5",
     "README.md": "2486c72690ce0e778bd01ac15d87afef14cdd539348f18ac08f46dae07af1fcb",
     "scripts/render-city-poster.mjs": "e8c6162f80b2d9d95436c594643d2f466aed5e5848021118d0d19bfcf13042bd",
-    "src/city.css": "732027086320a0d88f42e5dd917369c294788dd79676a334a4c7028b7ad5145b",
+    "src/city.css": "216285cd52abcc39b50aaeb70e84ce14dff7e15a38b0303cbfb26f75436e2fa4",
     "src/main.tsx": "512a7b60ed2aec05a28c1c80854631a535ed4bc7d6390b18dc6481f6eec3517a",
     "src/standalone.css": "2968926fa5d7893b26876986d2ed7e776adfa487264e8218674e63f3a4856e05",
     "tests/portfolio.test.mjs": "f18d73afb27f05e571eaa90318891086f8c7e22569145341d001c7a26c0be4c4",
