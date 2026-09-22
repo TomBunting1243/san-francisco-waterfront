@@ -9,6 +9,7 @@ import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighbo
 import {waterfrontGardens} from './waterfront-gardens.ts';
 import {architectureProfile,referenceColor,refineReferenceMassing,referenceArchitecture} from './reference-architecture.ts';
 import {isMooredVessel,mooredVessel} from './moored-vessels.ts';
+import {windowGlow,applyWindowLighting} from './window-lighting.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bridgeLayout,bridgePoint,bridgeApproaches} from './bridge-layout.ts';
@@ -767,8 +768,11 @@ export function createLandscape() {
     return {group:bird,wings};
   });
   // Instanced windows keep the detailed city inexpensive to draw.
-  const windowMaterial=new THREE.MeshStandardMaterial({color:'#597b85',roughness:.8,emissive:'#f4bb68',emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
-  const windowMesh=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),windowMaterial,windowPositions.length);
+  const windowMaterial=new THREE.MeshStandardMaterial({color:'#597b85',roughness:.8,emissive:'#e4c89a',emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
+  applyWindowLighting(windowMaterial);
+  const windowGeometry=new THREE.PlaneGeometry(1,1);
+  windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(windowPositions.map(windowGlow)),1));
+  const windowMesh=new THREE.InstancedMesh(windowGeometry,windowMaterial,windowPositions.length);
   const dummy=new THREE.Object3D();
   windowPositions.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(0,p.ry,0);dummy.scale.set(p.w,p.h,1);dummy.updateMatrix();windowMesh.setMatrixAt(i,dummy.matrix);windowMesh.setColorAt(i,new THREE.Color().setScalar((Math.sin(i*12.9898)*43758.5453)%1>.0?1:.72));});root.add(windowMesh);
   const ripples=new THREE.Group();root.add(ripples);
@@ -831,6 +835,7 @@ export function createLandscape() {
   root.traverse(o=>{if(o instanceof THREE.Mesh){for(const mat of Array.isArray(o.material)?o.material:[o.material])if(mat instanceof THREE.MeshStandardMaterial||mat instanceof THREE.MeshBasicMaterial)hazeMaterials.add(mat);}});
   for(const mat of hazeMaterials){
     const previousCompile=mat.onBeforeCompile;
+    const previousCacheKey=mat.customProgramCacheKey();
     mat.onBeforeCompile=(shader,renderer)=>{
       previousCompile.call(mat,shader,renderer);
       shader.uniforms.edgeFogColor=edgeFogColor;
@@ -844,7 +849,7 @@ export function createLandscape() {
         float edgeHaze=max(smoothstep(37.0,66.0,harborPosition.x),smoothstep(75.0,125.0,-harborPosition.z));
         gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,edgeHaze);`);
     };
-    mat.customProgramCacheKey=()=> 'waterfront-edge-haze-v2';
+    mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-edge-haze-v2`;
   }
   const hitTargets:THREE.Mesh[]=[];
   const hitMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
@@ -873,7 +878,10 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   const matrix=new THREE.Matrix4(),point=new THREE.Vector3(),indices:number[]=[];
   for(let i=0;i<original.count;i++){original.getMatrixAt(i,matrix);point.setFromMatrixPosition(matrix);if(bounds.containsPoint(point))indices.push(i);}
   const windowMaterial=copiedMaterial(source.windowMaterial) as THREE.MeshStandardMaterial;
-  const windows=new THREE.InstancedMesh(original.geometry,windowMaterial,indices.length);windows.userData.sharedGeometry=true;
+  // The tiny plane is copied so the filtered instance attributes match the vignette.
+  const windowGeometry=original.geometry.clone(),glow=original.geometry.getAttribute('windowGlow');
+  windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(indices.map(i=>glow.getX(i))),1));
+  const windows=new THREE.InstancedMesh(windowGeometry,windowMaterial,indices.length);
   indices.forEach((index,i)=>{original.getMatrixAt(index,matrix);windows.setMatrixAt(i,matrix);const color=new THREE.Color();original.getColorAt(index,color);windows.setColorAt(i,color);});root.add(windows);
   const water=new THREE.Mesh(new THREE.PlaneGeometry(240,240,1,1),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=-.7;water.receiveShadow=true;root.add(water);
   const residents=source.residentPositions.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));

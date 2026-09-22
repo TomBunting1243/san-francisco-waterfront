@@ -56,7 +56,7 @@ The Ferry Building, Bay Bridge, Hills Bros, One Market, Audiffred, Pier 1, Hotel
 ## Remaining fidelity limits
 
 - This does **not** establish that every visible building matches every real elevation. Unnamed inland/backdrop blocks still use mapped extrusions and generic window grids. 139 Steuart and the far northern Battery/Green background need additional building-specific reference work.
-- Façades repeated around a footprint, colors, roof equipment, tree crowns and many street furnishings are artistic interpretations. Exact masonry courses, tenancy signs and hidden façades have not been surveyed.
+- Façades repeated around a footprint, colors, roof equipment, tree crowns and many street furnishings are artistic interpretations. Night window occupancy is a fixed artistic pattern, not live occupancy data. Exact masonry courses, tenancy signs and hidden façades have not been surveyed.
 - Park geometry combines mapped paths/planting and photographed landscape character. It is not a complete current tree or sculpture census. Dates differ across the references; proposed future landscaping is excluded.
 - The added geometry stays batched and glazing instanced. Automated checks establish geometry, placement and animation invariants, not device FPS, GPU memory, thermals or exhaustive flicker-free operation on every camera path.
 

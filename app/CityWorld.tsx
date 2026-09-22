@@ -165,7 +165,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.coffeeMaterial.emissiveIntensity=duskAmount*2.6;
         world.bridgeLightMaterial.opacity=duskAmount*.8;world.roadLightMaterial.opacity=duskAmount;world.streetcarGlazing.emissiveIntensity=duskAmount*.7;world.streetcarLamp.emissiveIntensity=.35+duskAmount*1.3;
         world.waterMaterial.roughness=.38+duskAmount*.3;
-        world.waterMaterial.color.lerp(waterColor,lightEase);world.windowMaterial.emissiveIntensity=duskAmount*2.2;
+        world.waterMaterial.color.lerp(waterColor,lightEase);world.windowMaterial.emissiveIntensity=duskAmount*.8;
         ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,lighting.ambient*.78,lightEase);
         sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity,lightEase);sun.color.lerp(sunColor,lightEase);fill.intensity=.4+duskAmount*.25;
         const azimuth=lighting.azimuth*Math.PI/180;

@@ -143,12 +143,37 @@ test('ferry materials and wakes receive the same world-space haze as the waterfr
 test('regional city views reuse geometry and exclude most of the full city',async()=>{
   const {createCityVignette}=await import('../app/landscape.ts');
   const full=createLandscape();
+  const fullWindows=full.root.children.find(o=>o instanceof THREE.InstancedMesh&&o.material===full.windowMaterial);
+  const originalGlow=fullWindows.geometry.getAttribute('windowGlow').array.slice();
+  const byTransform=new Map(),sourceMatrix=new THREE.Matrix4();
+  for(let i=0;i<fullWindows.count;i++){fullWindows.getMatrixAt(i,sourceMatrix);byTransform.set(sourceMatrix.elements.join(','),originalGlow[i]);}
   for(const variant of ['street','plaza']){
     const view=createCityVignette(variant);
     assert.ok(view.architectureChunks.length<full.architectureChunks.length/3);
     for(const chunk of view.architectureChunks){assert.ok(full.architectureChunks.some(source=>source.geometry===chunk.geometry));assert.equal(chunk.userData.sharedGeometry,true);assert.notEqual(chunk.material,full.architectureChunks[0].material);}
     assert.ok(view.walkers.count<full.walkers.count);assert.equal(view.ferries.length,0);assert.ok(view.traffic.length>0);
+    const windows=view.root.children.find(o=>o instanceof THREE.InstancedMesh&&o.material===view.windowMaterial);
+    const glow=windows.geometry.getAttribute('windowGlow'),matrix=new THREE.Matrix4();
+    assert.equal(glow.count,windows.count);
+    for(let i=0;i<windows.count;i++){windows.getMatrixAt(i,matrix);assert.equal(glow.getX(i),byTransform.get(matrix.elements.join(',')),'Window occupancy changed in a regional view');}
+    assert.deepEqual(fullWindows.geometry.getAttribute('windowGlow').array,originalGlow);
+    assert.equal(view.windowMaterial.customProgramCacheKey(),full.windowMaterial.customProgramCacheKey());
   }
+});
+
+test('night windows retain dark rooms without changing daylight glazing or flickering',async()=>{
+  const {windowGlow,applyWindowLighting}=await import('../app/window-lighting.ts');
+  const panes=Array.from({length:1200},(_,i)=>({x:(i%30)*.24,y:Math.floor(i/30)*.24,z:-8}));
+  const values=panes.map(windowGlow),dark=values.filter(v=>v===0).length;
+  assert.ok(dark>panes.length*.5&&dark<panes.length*.75);
+  assert.ok(values.every(v=>Number.isFinite(v)&&v>=0&&v<.86));
+  assert.deepEqual(panes.slice().reverse().map(windowGlow).reverse(),values);
+  const material=new THREE.MeshStandardMaterial({emissiveIntensity:0});applyWindowLighting(material);
+  const shader={vertexShader:'#include <begin_vertex>',fragmentShader:'#include <color_fragment>\n#include <emissivemap_fragment>'};
+  material.onBeforeCompile(shader,{});
+  assert.ok(shader.fragmentShader.includes('#include <color_fragment>'));
+  assert.match(shader.fragmentShader,/totalEmissiveRadiance\*=roomGlow/);
+  assert.notEqual(material.customProgramCacheKey(),new THREE.MeshStandardMaterial().customProgramCacheKey());
 });
 
 test('adaptive quality backs off under sustained load and avoids rapid oscillation',async()=>{
