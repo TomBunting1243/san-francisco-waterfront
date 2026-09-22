@@ -12,5 +12,5 @@ const lines=[
 ];
 
 createRoot(document.getElementById('root')!).render(
-  <main><CityWorld passerbyLines={lines} fallback={<p className="standalone-fallback" role="status">The interactive city needs a browser with WebGL. You can still enjoy this view of the waterfront.</p>}/></main>
+  <main><CityWorld passerbyLines={lines} fallback={<p className="standalone-fallback" role="status">The interactive city needs a browser with WebGL. You can still enjoy this view of the waterfront.</p>}/><footer className="standalone-credit">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">ODbL</a></footer></main>
 );

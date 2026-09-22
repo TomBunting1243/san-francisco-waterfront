@@ -2,7 +2,7 @@
 
 ## OpenStreetMap
 
-Map data © OpenStreetMap contributors. The derived dataset in public/data/sf-waterfront.json is licensed under ODbL 1.0.
+Map data © OpenStreetMap contributors. The derived datasets in public/data/sf-waterfront.json and public/data/waterfront-landscape.json are licensed under ODbL 1.0. Landscape and architectural reference provenance is recorded in references/WATERFRONT-REFERENCE-AUDIT.md.
 
 https://www.openstreetmap.org/copyright
 https://opendatacommons.org/licenses/odbl/1-0/

@@ -6,3 +6,16 @@ export const openingCamera = {
   desktop: { focalLength: 40, elevation: 5, distance: 50 },
   mobile: { focalLength: 21, elevation: 6, distance: 66 },
 };
+
+export type CameraAxis = { value: number; velocity: number };
+
+/** Critically damped motion settles without a spring bounce, regardless of frame rate. */
+export function dampCameraAxis(axis: CameraAxis, destination: number, dt: number, response = 4, immediate = false) {
+  if (immediate) { axis.value = destination; axis.velocity = 0; return axis.value; }
+  const change = axis.value - destination;
+  const step = (axis.velocity + response * change) * dt;
+  const decay = Math.exp(-response * dt);
+  axis.value = destination + (change + step) * decay;
+  axis.velocity = (axis.velocity - response * step) * decay;
+  return axis.value;
+}

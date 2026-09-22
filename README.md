@@ -41,11 +41,13 @@ npm run check
 npm run build
 ```
 
-Tests cover finite batched geometry, daylight and DST, opening composition, street routes, ferry and fireboat clearance, water contact, shared character animation and atmospheric haze. Physical-device thermal behavior and frame-rate benchmarks have not been established.
+Tests cover finite batched geometry, daylight and DST, opening composition, full-horizon stars, smooth camera settling, park and tree placement, roof visibility, street routes, ferry and fireboat clearance, water contact, shared character animation and atmospheric haze. Physical-device thermal behavior and frame-rate benchmarks have not been established.
 
 ## Attribution and rights
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). The derived waterfront dataset and source metadata are in `public/data/sf-waterfront.json`; keep the on-screen map attribution and dataset attribution when reusing it.
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). The derived waterfront and landscape datasets are in `public/data/sf-waterfront.json` and `public/data/waterfront-landscape.json`; keep the page and dataset attribution when reusing them.
+
+The [reference audit](references/WATERFRONT-REFERENCE-AUDIT.md) records the photographs, architectural sources and map features used for Embarcadero Center, the parks, historic piers and waterfront façades, along with unverified areas. `scripts/import-waterfront-landscape.py` reproduces the landscape data import.
 
 The poster is rendered from this project's own geometry. Buildings and vessels are stylized approximations, not surveyed reconstructions. The fireboat is inspired by the SFFD's St. Francis. No AI-generated bitmap artwork is used.
 

@@ -218,3 +218,89 @@ test('fireboat water contact matches the actual animated surface triangles',asyn
   }
   geometry.dispose();material.dispose();
 });
+
+
+test('camera settling is smooth and independent of the display refresh rate',async()=>{
+  const {dampCameraAxis}=await import('../app/camera.ts');
+  const final=[];
+  for(const hz of [30,60,120]){
+    const axis={value:0,velocity:0};let previous=0;
+    for(let frame=0;frame<hz;frame++){
+      dampCameraAxis(axis,10,1/hz);
+      assert.ok(axis.value>=previous&&axis.value<10,'Camera overshot or moved backward');previous=axis.value;
+    }
+    final.push(axis.value);
+    dampCameraAxis(axis,4,1/hz,4,true);assert.deepEqual(axis,{value:4,velocity:0});
+  }
+  assert.ok(Math.max(...final)-Math.min(...final)<1e-10);
+});
+
+test('stars cover every camera heading on desktop and mobile',async()=>{
+  const {starfieldData}=await import('../app/sky.ts');
+  const {openingCamera}=await import('../app/camera.ts');
+  const {positions,colors}=starfieldData(),point=new THREE.Vector3();
+  assert.ok([...positions,...colors].every(Number.isFinite));
+  for(const [width,height,setup] of [[1440,950,openingCamera.desktop],[390,844,openingCamera.mobile]]){
+    const camera=new THREE.PerspectiveCamera(20,width/height,1.5,650);camera.setFocalLength(setup.focalLength);
+    const counts=[];
+    for(let heading=0;heading<24;heading++){
+      const azimuth=heading*Math.PI/12;
+      camera.lookAt(Math.sin(azimuth)*setup.distance,-setup.elevation,Math.cos(azimuth)*setup.distance);camera.updateMatrixWorld();
+      let count=0;
+      for(let i=0;i<positions.length;i+=3){point.fromArray(positions,i).project(camera);if(Math.abs(point.x)<1&&Math.abs(point.y)<1&&point.z>-1&&point.z<1)count++;}
+      counts.push(count);
+    }
+    assert.ok(Math.min(...counts)>15,`Empty sky sector at ${width}px: ${counts}`);
+    assert.ok(Math.max(...counts)/Math.min(...counts)<1.6,'Star density changes sharply during an orbit');
+  }
+});
+
+test('reference-based Gateway facades keep glazing outside all adjoining volumes',async()=>{
+  const {neighborhoodDetail,refineNeighborhoodMassing}=await import('../app/neighborhood-detail.ts');
+  const {insideBuilding}=await import('../app/building-character.ts');
+  const buildings=refineNeighborhoodMassing(mappedBuildings),detail=neighborhoodDetail(buildings);
+  assert.ok(detail.windows.length>200,'The low-rise facades lost their glazing');
+  for(const p of detail.windows){
+    assert.ok([p.x,p.y,p.z,p.w,p.h].every(Number.isFinite));
+    for(const b of buildings.filter(b=>p.y>(b.minH||0)&&p.y<b.h))assert.ok(!insideBuilding(p.x,p.z,b.p),`Glazing buried in mapped building ${b.id}`);
+  }
+});
+
+test('waterfront parks preserve mapped paths and keep tree trunks out of buildings',async()=>{
+  const {waterfrontGardens,gardenAreas}=await import('../app/waterfront-gardens.ts');
+  const {refineNeighborhoodMassing}=await import('../app/neighborhood-detail.ts');
+  const {refineReferenceMassing}=await import('../app/reference-architecture.ts');
+  const {insideBuilding}=await import('../app/building-character.ts');
+  const buildings=refineReferenceMassing(refineNeighborhoodMassing(mappedBuildings)),gardens=waterfrontGardens(buildings);
+  assert.ok(gardens.treeAnchors.length>350);
+  for(const t of gardens.treeAnchors)for(const b of buildings.filter(b=>b.h>t.y+.08&&(b.minH||0)<t.y+.08))assert.ok(!insideBuilding(t.x,t.z,b.p),`Tree ${t.id} grows through building ${b.id}`);
+  for(const p of gardens.pathSegments){const area=gardenAreas.find(a=>a.id===p.area);assert.ok(insideBuilding(p.x,p.z,area.p));}
+  for(const id of [175516006,585983823,-1])assert.ok(gardens.treeAnchors.filter(t=>insideBuilding(t.x,t.z,gardenAreas.find(a=>a.id===id).p)).length>=8,`Park ${id} lacks its canopy`);
+  assert.equal(gardenAreas.filter(a=>a.kind==='podium').length,4);
+});
+
+test('Embarcadero Center crowns preserve the mapped envelope and summit',async()=>{
+  const {refineReferenceMassing}=await import('../app/reference-architecture.ts');
+  const {polygonArea}=await import('../app/sf-map.ts');
+  const buildings=refineReferenceMassing(mappedBuildings),tower=mappedBuildings.find(b=>b.id===616812910),parts=buildings.filter(b=>b.parent===tower.id);
+  assert.equal(parts.length,3);assert.equal(Math.max(...parts.map(p=>p.h)),tower.h);
+  const original=new THREE.Box2().setFromPoints(tower.p.map(p=>new THREE.Vector2(...p)));
+  for(const part of parts){assert.ok(polygonArea(part.p)>0);for(const p of part.p)assert.ok(original.containsPoint(new THREE.Vector2(...p)));assert.ok(part.h>part.minH);}
+});
+
+test('Ferry Plaza roof glazing remains visible after merging into front-sided batches',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
+  const {mergeGeometries}=await import('three/addons/utils/BufferGeometryUtils.js');
+  const {refineReferenceMassing,referenceArchitecture}=await import('../app/reference-architecture.ts');
+  const font=new FontLoader().parse(JSON.parse(readFileSync(new URL('../app/harbor-font.json',import.meta.url),'utf8')));
+  const buildings=refineReferenceMassing(mappedBuildings);
+  for(const id of [123559872,123559869]){
+    const detail=referenceArchitecture(buildings.find(b=>b.id===id),buildings,font);
+    const roof=detail.root.getObjectByName('Ferry Plaza glazed roof').geometry;
+    assert.ok(roof.attributes.position.count>=12);
+    assert.equal(roof.attributes.uv.count,roof.attributes.position.count);
+    for(let i=0;i<roof.attributes.normal.count;i++)assert.ok(roof.attributes.normal.getY(i)>0,'Roof faces away from an elevated camera');
+    assert.ok(mergeGeometries([new THREE.BoxGeometry().toNonIndexed(),roof]),'Roof cannot merge with the static architecture');
+  }
+});

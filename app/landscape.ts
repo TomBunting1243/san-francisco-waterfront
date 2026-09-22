@@ -5,6 +5,10 @@ import {createPeople} from './people.ts';
 import {createFireboat} from './fireboat.ts';
 import {waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
+import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
+import {waterfrontGardens} from './waterfront-gardens.ts';
+import {architectureProfile,referenceColor,refineReferenceMassing,referenceArchitecture} from './reference-architecture.ts';
+import {isMooredVessel,mooredVessel} from './moored-vessels.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bridgeLayout,bridgePoint,bridgeApproaches} from './bridge-layout.ts';
@@ -130,18 +134,24 @@ export function createLandscape() {
   }
   const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
   const hillsIds=new Set([-157,1487160484,944986473]);
-  const detailedBuildings=[...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing];
+  const detailedBuildings=refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing]));
+  const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
+  const gardens=waterfrontGardens(detailedBuildings);root.add(gardens.root);
   detailedBuildings.forEach(b=>{
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
+    if(isMooredVessel(b)){
+      if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
+      return;
+    }
     const [cx,cz]=center(b.p),h=b.h,minH=b.minH||0;
-    const family=b.parent||b.id;
+    const family=b.parent||b.id,reference=architectureProfile(b);
     const ribbed=b.name.includes('Embarcadero Center')||['Spear Tower','Steuart Tower'].includes(b.name);
     const hotel=b.name.includes('Hyatt Regency');
     const historic=['Southern Pacific Building','The Audiffred Building','Ferry Station Post Office Building','Pier 1'].includes(b.name);
-    const color=characterColors[b.name]??(hillsIds.has(b.id)?'#ad7354':b.name==='Southern Pacific Building'?'#ad765d':b.name==='The Audiffred Building'?'#b57e62':historic?'#d3c4a9':ribbed||hotel?'#d4cdb9':b.id===28240176?'#66828b':h>8?['#8ba8af','#7496a5','#b3bbb6','#a8b4b3'][family%4]:['#e1c193','#caab95','#d3ccac','#9fbab0','#cf9e87'][family%5]);
+    const color=hasNeighborhoodDetail(b)?neighborhoodColor(b):referenceColor(b)??characterColors[b.name]??(hillsIds.has(b.id)?'#ad7354':b.name==='Southern Pacific Building'?'#ad765d':b.name==='The Audiffred Building'?'#b57e62':historic?'#d3c4a9':ribbed||hotel?'#d4cdb9':b.id===28240176?'#66828b':h>8?['#8ba8af','#7496a5','#b3bbb6','#a8b4b3'][family%4]:['#e1c193','#caab95','#d3ccac','#9fbab0','#cf9e87'][family%5]);
     mesh(footprintGeometry(b.p,h-minH),color,0,minH,0);
     // Polygon-aligned windows follow each actual facade, with floors scaled in metres.
-    if(h>.9&&cz>-64&&!hillsIds.has(b.id)&&!detailedWaterfrontNames.has(b.name)&&!characterBuildings.has(b.name))for(let edge=1;edge<b.p.length;edge++){
+    if(h>.9&&cz>-64&&!reference&&!hasNeighborhoodDetail(b)&&!hillsIds.has(b.id)&&!detailedWaterfrontNames.has(b.name)&&!characterBuildings.has(b.name))for(let edge=1;edge<b.p.length;edge++){
       const [ax,az]=b.p[edge-1],[bx,bz]=b.p[edge],dx=bx-ax,dz=bz-az,len=Math.hypot(dx,dz);
       if(len<.45)continue;
       const midx=(ax+bx)/2,midz=(az+bz)/2;let nx=dz/len,nz=-dx/len;
@@ -153,7 +163,8 @@ export function createLandscape() {
     }
     if(detailedWaterfrontNames.has(b.name)){const detail=waterfrontLandmark(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
     if(characterBuildings.has(b.name)){const detail=buildingCharacter(b,detailedBuildings,font);root.add(detail.root);windowPositions.push(...detail.windows);}
-    if(['One Steuart Lane','Embarcadero Center 4','Spear Tower','Steuart Tower'].includes(b.name)||b.id===944095688)root.add(modernBuildingAccents(b,detailedBuildings));
+    if(reference){const detail=referenceArchitecture(b,detailedBuildings,font);root.add(detail.root);windowPositions.push(...detail.windows);}
+    if(['Spear Tower','Steuart Tower'].includes(b.name)||b.id===944095688)root.add(modernBuildingAccents(b,detailedBuildings));
     if(historic&&!detailedWaterfrontNames.has(b.name)&&!characterBuildings.has(b.name)){
       const cornice=b.p.map(([x,z])=>[cx+(x-cx)*1.018,cz+(z-cz)*1.018]);
       mesh(footprintGeometry(cornice,.065),'#e1d5bd',0,h-.02,0);
@@ -180,12 +191,12 @@ export function createLandscape() {
         }
       }
     }
-    if(hillsIds.has(b.id)||b.name==='One Steuart Lane'){
+    if(hillsIds.has(b.id)){
       for(let e=1;e<b.p.length;e++){
         const [ax,az]=b.p[e-1],[bx,bz]=b.p[e],len=Math.hypot(bx-ax,bz-az);if(len<.5)continue;
         let nx=(bz-az)/len,nz=-(bx-ax)/len;if(nx*((ax+bx)/2-cx)+nz*((az+bz)/2-cz)<0){nx=-nx;nz=-nz;}
         const face=new THREE.Group();face.position.set((ax+bx)/2,0,(az+bz)/2);face.rotation.y=Math.atan2(nx,nz);root.add(face);
-        if(hillsIds.has(b.id)){
+        {
           // Romanesque brick bays, stepped pilasters and recessed steel windows.
           for(const y of [.14,1.18,h-.27,h-.08])box(len+.08,.075,.15,0,y,.085,'#d2aa7d',face);
           const bays=Math.max(1,Math.round(len/.65)),spacing=len/bays;
@@ -207,9 +218,6 @@ export function createLandscape() {
           // Mortar bands stay separated from the facade and window layers.
           for(let y=.25;y<h-.35;y+=.16)box(len,.012,.018,0,y,.017,'#b9815d',face);
           for(let x=-len/2+.1;x<len/2;x+=.18)box(.075,.10,.13,x,h-.20,.07,'#c79b6a',face);
-        }else{
-          for(let x=-len/2+.1;x<len/2;x+=.6)box(.06,h,.2,x,h/2,.12,'#ebe4d2',face);
-          for(let y=.38;y<h-.2;y+=.45){box(len,.07,.25,0,y,.16,'#e5dfcf',face);for(let x=-len/2+.3;x<len/2;x+=.85)box(.3,.11,.13,x,y+.1,.18,'#76907a',face);}
         }
       }
     }
@@ -221,10 +229,10 @@ export function createLandscape() {
         let nx=dz/len,nz=-dx/len;
         if(nx*((ax+bx)/2-cx)+nz*((az+bz)/2-cz)<0){nx=-nx;nz=-nz;}
         const point=(t:number,y:number)=>new THREE.Vector3(ax+dx*t+nx*.07,y,az+dz*t+nz*.07);
-        if(ribbed)for(let d=.1;d<len;d+=.22) pole(point(d/len,minH+.04),point(d/len,h+.03),.026,'#e5dfca');
-        if(hotel||b.id===667097308)for(let y=minH+.2;y<h+.04;y+=.21) pole(point(0,y),point(1,y),.037,'#e5dece');
+        if(ribbed&&!reference)for(let d=.1;d<len;d+=.22) pole(point(d/len,minH+.04),point(d/len,h+.03),.026,'#e5dfca');
+        if(hotel)for(let y=minH+.2;y<h+.04;y+=.21) pole(point(0,y),point(1,y),.037,'#e5dece');
         if(b.id===28240176||b.id===445566153){
-          const bay=Math.ceil(len/1.8),floor=1.45;
+          const bay=Math.ceil(len/1.8),floor=b.id===28240176?2.40:1.45;
           for(let i=0;i<bay;i++)for(let y=minH+.12;y<h-.15;y+=floor){
             const top=Math.min(y+floor,h);
             pole(point(i/bay,y),point((i+1)/bay,top),.034,'#d1d6ce');
@@ -652,7 +660,6 @@ export function createLandscape() {
     pole(new THREE.Vector3(x,0,z),new THREE.Vector3(x,1.5,z),.025,dark);
     mesh(new THREE.SphereGeometry(.075,6,4),cream,x,1.56,z);
   }
-  for(const park of sfMap.parks){const [x,z]=center(park.p);if(park.name!=='Rincon Park'&&park.name!=='Embarcadero Plaza'&&x>-50&&x<50&&z>-20)for(let i=0;i<3;i++)tree(x+(i-1)*.8,z+(i%2)*.5,.4);}
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
   const railPath=Array.from({length:261},(_,i)=>{const p=streetcarPose(-65+i*.5);return [p.x,p.z];});
