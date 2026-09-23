@@ -88,14 +88,14 @@ test('Bay Bridge follows the mapped crossing and has two full suspension spans',
 
 
 test('opening composition keeps the Ferry Building and bridge tower inside desktop and phone frames', async()=>{
-  const {openingCamera: view}=await import('../app/camera.ts');
+  const {openingCamera: view,openingLens,openingYaw}=await import('../app/camera.ts');
   const bridge=bridgePoint(0,bridgeLayout.towers[0]);
-  for(const [width,height] of [[1440,950],[1010,1031],[390,844]]){
-    const setup=width<650?view.mobile:view.desktop;
+  for(const [width,height] of [[1440,950],[1010,1031],[725,1030],[390,844]]){
+    const setup=openingLens(width,height);
     const camera=new THREE.PerspectiveCamera(20,width/height,1.5,650);
     camera.setFocalLength(setup.focalLength);camera.zoom=view.zoom;camera.updateProjectionMatrix();
     const target=new THREE.Vector3(...view.target);
-    camera.position.copy(target).add(new THREE.Vector3(0,setup.elevation,setup.distance).applyAxisAngle(new THREE.Vector3(0,1,0),view.yaw));
+    camera.position.copy(target).add(new THREE.Vector3(0,setup.elevation,setup.distance).applyAxisAngle(new THREE.Vector3(0,1,0),openingYaw(width,height)));
     camera.lookAt(target);camera.updateMatrixWorld();
     for(const point of [new THREE.Vector3(0,4.6,0),new THREE.Vector3(bridge.x,9.8,bridge.z)]){
       point.project(camera);

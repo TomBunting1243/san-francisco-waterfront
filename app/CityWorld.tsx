@@ -5,7 +5,7 @@ import { pacificLighting } from './lighting';
 import { ferryPose, birdPose } from './motion';
 import { streetPose, streetcarPose } from './streets';
 import { bridgeLayout } from './bridge-layout';
-import { openingCamera, dampCameraAxis } from './camera';
+import { openingCamera, openingLens, openingYaw, dampCameraAxis } from './camera';
 import { starfieldData } from './sky';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,edgeOrbit,createQualityMonitor,walkingTime} from './city-runtime';
 
@@ -38,12 +38,12 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     reducedMotion.current = motionQuery.matches;
     const onMotion = () => { reducedMotion.current = motionQuery.matches; };
     motionQuery.addEventListener('change', onMotion);
-    Promise.all([import('three'), import('./landscape'), import('./cinematic')]).then(([THREE, { createLandscape, createCityVignette }, { createCinematicView }]) => {
+    Promise.all([import('three'), import('./landscape')]).then(([THREE, { createLandscape, createCityVignette }]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' }); }
       catch { setStatus('fallback'); return; }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.65));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
       renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
       renderer.info.autoReset=false;
       renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -57,14 +57,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       sun.shadow.normalBias=.06; sun.shadow.bias=-.00015; scene.add(sun);
       const fill = new THREE.DirectionalLight('#c6e1ef',.5); fill.position.set(40,20,-20); scene.add(fill);
       const world = streetView?createCityVignette(variant):createLandscape(); scene.add(world.root);
-      const cinematic = createCinematicView(renderer,scene,camera);
-      const maxQuality=streetView||window.innerWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
+      let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
-      let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
+      let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
+      const startYaw=openingYaw(host.clientWidth,host.clientHeight);settings.current.yaw=startYaw;
       const target = new THREE.Vector3(...openingCamera.target), destination = target.clone();
-      const cameraAxes={x:{value:target.x,velocity:0},y:{value:target.y,velocity:0},z:{value:target.z,velocity:0},yaw:{value:openingCamera.yaw,velocity:0},zoom:{value:1,velocity:0}};
+      const cameraAxes={x:{value:target.x,velocity:0},y:{value:target.y,velocity:0},z:{value:target.z,velocity:0},yaw:{value:startYaw,velocity:0},zoom:{value:1,velocity:0}};
       let lighting=pacificLighting();
-      let lastLightingCheck=0, duskAmount=lighting.night, yaw=openingCamera.yaw, edgeTurn=0, edgeSince=0, hoveredPerson=-1;
+      let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, edgeTurn=0, edgeSince=0, hoveredPerson=-1;
       stopEdgeTurn.current=()=>{edgeTurn=0;};
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
@@ -99,18 +99,23 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
       function pick(e:PointerEvent){const rect=host.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);return raycaster.intersectObjects(world.hitTargets)[0]?.object.userData.landmark as Landmark|undefined;}
       function resize() {
-        width=host.clientWidth; height=host.clientHeight;renderer.setPixelRatio(Math.min(window.devicePixelRatio,quality===2?1.65:quality===1?1.25:1)); renderer.setSize(width,height);
-        cinematic.setQuality(quality);renderer.shadowMap.enabled=quality>0;renderer.shadowMap.needsUpdate=true;host.dataset.quality=String(quality);
-        camera.aspect=width/height;camera.setFocalLength(streetView?42:(width<650?openingCamera.mobile:openingCamera.desktop).focalLength);camera.updateProjectionMatrix();cinematic.resize(width,height);
+        width=host.clientWidth; height=host.clientHeight;
+        const viewportQuality=streetView||width<650?1:2;
+        if(viewportQuality!==maxQuality){maxQuality=viewportQuality;qualityMonitor=createQualityMonitor(maxQuality);quality=Math.min(quality,maxQuality);}
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio,quality===2?1.25:1)); renderer.setSize(width,height);
+        renderer.shadowMap.enabled=quality>0&&duskAmount<.85;renderer.shadowMap.needsUpdate=true;host.dataset.quality=String(quality);host.dataset.shadows=String(renderer.shadowMap.enabled);
+        camera.aspect=width/height;camera.setFocalLength(streetView?42:openingLens(width,height).focalLength);camera.updateProjectionMatrix();
       }
       const resizeObserver=new ResizeObserver(resize); resizeObserver.observe(host); resize();
       const onDown=(e:PointerEvent)=>{
         if(streetView||e.button!==0)return;
+        lastInput=performance.now();
         if(e.pointerType==='touch'){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size===2){pinchDistance=touchDistance();pinchZoom=settings.current.zoom;wasPinch=true;pointer.down=false;return;}wasPinch=false;}
         pointer.down=true;pointer.startX=e.clientX;pointer.startY=e.clientY;pointer.startYaw=cameraAxes.yaw.value;settings.current.yaw=pointer.startYaw;cameraAxes.yaw.velocity=0;host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});edgeTurn=0;
       };
       const onMove=(e:PointerEvent)=>{
         if(streetView)return;
+        lastInput=performance.now();
         if(touches.has(e.pointerId)){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size>=2&&pinchDistance>0){e.preventDefault();setZoom(clampZoom(pinchZoom*touchDistance()/pinchDistance));return;}}
         if(pointer.down){settings.current.yaw=pointer.startYaw+(e.clientX-pointer.startX)/Math.max(width,320)*Math.PI*.85;edgeTurn=0;}
         else if(e.pointerType==='mouse'){
@@ -123,11 +128,11 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const onTouchStart=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){pinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchZoom=settings.current.zoom;wasPinch=true;}};
       const onTouchMove=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){e.preventDefault();const distance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pinchDistance>0)setZoom(clampZoom(pinchZoom*distance/pinchDistance));}};
       host.addEventListener('touchstart',onTouchStart,{passive:true});host.addEventListener('touchmove',onTouchMove,{passive:false});
-      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
+      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
       host.addEventListener('wheel',onWheel,{passive:false});
       const onLeave=()=>{edgeTurn=0;hoveredPerson=-1;};
       const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;edgeTurn=0;};
-      const onUp=(e:PointerEvent)=>{touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pinchDistance=0;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
+      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pinchDistance=0;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
       host.addEventListener('pointerdown',onDown);host.addEventListener('pointermove',onMove);host.addEventListener('pointerup',onUp);host.addEventListener('pointercancel',onCancel);host.addEventListener('pointerleave',onLeave);
       const onLost=(e:Event)=>{e.preventDefault();rendering=false;setStatus('fallback');}; renderer.domElement.addEventListener('webglcontextlost',onLost);
       const onVisibility=()=>{visible=intersecting&&!document.hidden;}; document.addEventListener('visibilitychange',onVisibility);
@@ -135,18 +140,22 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const offset=new THREE.Vector3(), axis=new THREE.Vector3(0,1,0);
       function animate(now:number) {
         if(disposed)return; frame=requestAnimationFrame(animate);
-        const frameMs=now-last,dt=Math.min(frameMs/1000,.05); last=now; if((!visible&&presented)||!rendering||document.hidden)return;
-        if(now-lastDraw<(streetView?1000/30:0))return;const motionDt=streetView?Math.min((now-lastDraw)/1000,.1):dt;lastDraw=now;
-        if(!streetView&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
+        const frameMs=now-last;last=now;if((!visible&&presented)||!rendering||document.hidden)return;
+        const movingCamera=pointer.down||touches.size>0||edgeTurn!==0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005||target.distanceToSquared(destination)>1e-5;
+        // The living scene can draw at 30 fps; camera gestures keep the full display rate.
+        if(now-lastDraw<(streetView||!movingCamera?1000/31:0))return;
+        const dt=Math.min((now-lastDraw)/1000,.05);lastDraw=now;
+        // A deliberately paced idle scene is not evidence that the GPU is struggling.
+        if(!streetView&&movingCamera&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
         const config=settings.current, still=config.paused||reducedMotion.current;
-        if(!still)elapsed+=motionDt;
+        if(!still)elapsed+=dt;
         if(!still&&!pointer.down&&now-edgeSince>650)config.yaw+=edgeTurn*dt*.14;
         const point=config.focus ? landmarks[config.focus].position : [0,5,-8];
         destination.set(config.focus ? point[0]*.85 : openingCamera.target[0],config.focus ? 4 : openingCamera.target[1],config.focus ? point[2]*.75-3 : openingCamera.target[2]);
         target.set(dampCameraAxis(cameraAxes.x,destination.x,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.y,destination.y,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.z,destination.z,dt,3.8,reducedMotion.current));
         yaw=dampCameraAxis(cameraAxes.yaw,config.yaw,dt,pointer.down?9:4.5,reducedMotion.current);
         const dolly=dampCameraAxis(cameraAxes.zoom,config.zoom*(config.focus ? (width<650?1.12:1.18) : 1),dt,4,reducedMotion.current);
-        const lens=width<650?openingCamera.mobile:openingCamera.desktop;
+        const lens=openingLens(width,height);
         // A modest physical dolly adds depth while the remaining lens zoom avoids clipping the city.
         const travel=Math.pow(dolly,.32);
         offset.set(0,lens.elevation/Math.sqrt(travel),lens.distance/travel).applyAxisAngle(axis,yaw);camera.position.copy(target).add(offset);camera.lookAt(target);
@@ -159,6 +168,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(now-lastLightingCheck>30000||lastLightingCheck===0){lighting=pacificLighting();lastLightingCheck=now;skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);}
         const lightEase=reducedMotion.current?1:1-Math.exp(-dt*2);
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
+        const shadows=quality>0&&duskAmount<.85;
+        if(renderer.shadowMap.enabled!==shadows){renderer.shadowMap.enabled=shadows;if(shadows)renderer.shadowMap.needsUpdate=true;host.dataset.shadows=String(shadows);}
         (scene.background as InstanceType<typeof THREE.Color>).lerp(skyColor,lightEase);
         (scene.fog as InstanceType<typeof THREE.Fog>).color.copy(scene.background as InstanceType<typeof THREE.Color>);
         world.edgeFogColor.value.copy(scene.background as InstanceType<typeof THREE.Color>);
@@ -215,7 +226,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.waterTime.value=elapsed;
         const visual=[width,height,target.x.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),camera.zoom.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
-        if(!still||visual!==lastVisual){renderer.info.reset();cinematic.render();if(!presented){presented=true;setStatus('ready');}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
+        if(!still||visual!==lastVisual){renderer.info.reset();renderer.render(scene,camera);renderedFrames++;if(!presented){presented=true;setStatus('ready');}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
+        if(now-lastFpsReport>=1000){host.dataset.fps=String(Math.round(renderedFrames*1000/(now-lastFpsReport)));renderedFrames=0;lastFpsReport=now;}
       }
       frame=requestAnimationFrame(animate);
       teardown=()=>{
@@ -223,12 +235,12 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
-        cinematic.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer.dispose();renderer.domElement.remove();
+        starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer.dispose();renderer.domElement.remove();
       };
     }).catch(()=>{if(!disposed)setStatus('fallback');});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
   },[streetView,variant]);
-  const reset=()=>{stopEdgeTurn.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw;settings.current.yaw=yaw+Math.atan2(Math.sin(openingCamera.yaw-yaw),Math.cos(openingCamera.yaw-yaw));};
+  const reset=()=>{stopEdgeTurn.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;

@@ -4,8 +4,19 @@ export const openingCamera = {
   zoom: 1,
   target: [-15, 3, 2] as const,
   desktop: { focalLength: 40, elevation: 5, distance: 50 },
-  mobile: { focalLength: 21, elevation: 6, distance: 66 },
+  portrait: { focalLength: 44, elevation: 5, distance: 50 },
+  mobile: { focalLength: 27, elevation: 6, distance: 66 },
 };
+
+export function openingLens(width: number, height: number) {
+  return width < 650 ? openingCamera.mobile
+    : width < 950 && height > width * 1.2 ? openingCamera.portrait
+    : openingCamera.desktop;
+}
+
+export function openingYaw(width: number, height: number) {
+  return width < 950 && height > width * 1.2 ? 1.4 : openingCamera.yaw;
+}
 
 export type CameraAxis = { value: number; velocity: number };
 
