@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import landscapeData from '../public/data/waterfront-landscape.json' with {type:'json'};
 import {sfMap,center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
+import {waterfrontTree} from './waterfront-trees.ts';
 
 type Building={id:number;p:number[][];h:number;minH?:number};
 type Area={id:number;name:string;kind:string;sport?:string|null;p:number[][]};
@@ -25,13 +26,8 @@ export function waterfrontGardens(buildings:Building[]){
   function strip(a:number[],b:number[],w:number,y:number,color:string){const len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.001)return;const m=box(w,.022,len,(a[0]+b[0])/2,y,(a[1]+b[1])/2,color);m.rotation.y=Math.atan2(b[0]-a[0],b[1]-a[1]);return m;}
   function tree(x:number,z:number,y:number,id:number,species='',heightTag:string|null=null){
     const seed=Math.abs(Math.sin(id*1.618)),tag=parseFloat(heightTag||'');
-    const h=Number.isFinite(tag)?THREE.MathUtils.clamp(tag*.06,.5,1.7):.83+seed*.47;
-    const narrow=/Populus|poplar|Lombard|Ginkgo/i.test(species),radius=narrow?.20:.34+seed*.14;
-    mesh(new THREE.CylinderGeometry(.023,.039,h*.76,5),'#75654e',x,y+h*.38,z);
-    for(let i=0;i<3;i++){
-      const a=i*2.4+seed*6,crown=mesh(new THREE.IcosahedronGeometry(radius,1),['#56795c','#70916a','#839963'][i],x+Math.cos(a)*radius*.43,y+h*.73+(i%2)*h*.15,z+Math.sin(a)*radius*.43);
-      crown.scale.set(1,narrow?1.8:1.06,.9);
-    }
+    const h=Number.isFinite(tag)?THREE.MathUtils.clamp(tag*.06,.5,1.7):.95+seed*.47;
+    waterfrontTree(mesh,x,y,z,id,h,species);
     treeAnchors.push({id,x,y,z});
   }
   function shrub(x:number,z:number,y:number,s=.12){const crown=mesh(new THREE.IcosahedronGeometry(s,1),'#617f55',x,y+s*.55,z);crown.scale.set(1,.65,1);}

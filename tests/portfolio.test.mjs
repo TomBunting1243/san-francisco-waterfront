@@ -10,8 +10,11 @@ import { bridgeLayout, bridgePoint } from '../app/bridge-layout.ts';
 test('detailed geometry stays finite and uses batched rendering',()=>{
   const scene=createLandscape();let meshes=0,windows=0;
   scene.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(o instanceof THREE.Mesh)meshes++;for(const v of o.geometry.attributes.position.array)assert.ok(Number.isFinite(v));if(o instanceof THREE.InstancedMesh){windows+=o.count;for(const v of o.instanceMatrix.array)assert.ok(Number.isFinite(v));}}});
-  assert.ok(meshes<240,`Too many separately culled batches: ${meshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
+  let reliefMeshes=0;scene.relief.root.traverse(o=>{if(o instanceof THREE.Mesh)reliefMeshes++;});
+  assert.ok(reliefMeshes>0 && reliefMeshes<110,'Regional terrain stays spatially batched');
+  assert.ok(meshes-reliefMeshes<240,`Too many separately culled waterfront batches: ${meshes-reliefMeshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
   assert.equal(scene.hitTargets.length,3);assert.equal(scene.clockHands.length,4);
+  for(const name of ['Hi Dive',"Red's Java House",'Pier 24','Pier 26','Pier 28','Ferry Building hall'])assert.ok(scene.root.getObjectByName(name),name);
 });
 test('Pacific daylight and standard time are independent of the visitor timezone',()=>{
   for(const [date,hour,phase] of [['2026-09-09T19:00:00Z',12,'day'],['2026-09-10T07:00:00Z',0,'night'],['2026-12-09T20:00:00Z',12,'day'],['2026-12-10T08:00:00Z',0,'night']]){
@@ -106,7 +109,7 @@ test('opening composition keeps the Ferry Building and bridge tower inside deskt
 });
 
 
-test('cartoon walkers keep finite transforms while their arms and feet move',async()=>{
+test('cut-paper walkers keep finite transforms while their arms and feet move',async()=>{
   const {createPeople}=await import('../app/people.ts');const crowd=createPeople();
   for(let i=0;i<22;i++)crowd.update(i,i*.3,0,0,i%2?1:-1);
   const before=crowd.group.children.map(mesh=>Array.from(mesh.instanceMatrix.array));
@@ -120,8 +123,17 @@ test('cartoon walkers keep finite transforms while their arms and feet move',asy
 test('ferry materials and wakes receive the same world-space haze as the waterfront',()=>{
   const world=createLandscape();
   const materials=new Set();
-  for(const boat of world.ferries)boat.traverse(o=>{if(o instanceof THREE.Mesh)materials.add(o.material);});
-  assert.ok(materials.size>3);
+  for(const boat of world.ferries){
+    const [skin]=boat.children;
+    assert.equal(boat.children.length,1);
+    assert.ok(skin.material.vertexColors);
+    const paint=skin.geometry.getAttribute('color');
+    assert.equal(paint.count,skin.geometry.getAttribute('position').count);
+    const pigments=new Set();
+    for(let i=0;i<paint.count;i++)pigments.add(`${paint.getX(i)},${paint.getY(i)},${paint.getZ(i)}`);
+    assert.ok(pigments.size>12,'The complete ferry palette survives the batch');
+    materials.add(skin.material);
+  }
   materials.add(world.waterMaterial);
   for(const material of materials){
     const shader={uniforms:{},vertexShader:'#include <begin_vertex>\n#include <project_vertex>',fragmentShader:'#include <fog_fragment>'};
@@ -135,7 +147,7 @@ test('ferry materials and wakes receive the same world-space haze as the waterfr
   world.residentPositions.forEach((anchor,i)=>{
     world.walkerHeads.getMatrixAt(i+22,matrix);position.setFromMatrixPosition(matrix);
     assert.ok(Math.abs(position.x-anchor.x)<.05);
-    assert.ok(position.y>anchor.y+.35);
+    assert.ok(position.y>anchor.y+.15 && position.y<anchor.y+.20);
   });
 });
 
@@ -158,6 +170,17 @@ test('regional city views reuse geometry and exclude most of the full city',asyn
     for(let i=0;i<windows.count;i++){windows.getMatrixAt(i,matrix);assert.equal(glow.getX(i),byTransform.get(matrix.elements.join(',')),'Window occupancy changed in a regional view');}
     assert.deepEqual(fullWindows.geometry.getAttribute('windowGlow').array,originalGlow);
     assert.equal(view.windowMaterial.customProgramCacheKey(),full.windowMaterial.customProgramCacheKey());
+    const spillways=view.root.getObjectByName('Fountain spillways');
+    if(variant==='plaza'){
+      const original=full.root.getObjectByName('Fountain spillways');
+      view.root.updateMatrixWorld(true);
+      assert.equal(spillways.geometry,original.geometry);
+      assert.equal(spillways.userData.sharedGeometry,true);
+      const originalCenter=new THREE.Box3().setFromObject(original).getCenter(new THREE.Vector3());
+      assert.ok(new THREE.Box3().setFromObject(spillways).getCenter(new THREE.Vector3()).distanceTo(originalCenter)<.00001);
+      assert.equal(spillways.material.uniforms.flowTime,view.waterTime);
+      assert.notEqual(view.waterTime,full.waterTime);
+    }else assert.equal(spillways,undefined);
   }
 });
 
@@ -353,4 +376,219 @@ test('light studies are deterministic and local time still tracks the Pacific su
     assert.equal(sceneLighting(preset,date).phase,phase);
     assert.deepEqual(sceneLighting(preset,date),sceneLighting(preset,new Date(0)));
   }
+});
+
+
+test('waterfront signs face the appropriate façades at the mapped sites',async()=>{
+  const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
+  const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
+  const {harborBuilding,harborDiners}=await import('../app/harbor-architecture.ts');
+  const font=new FontLoader().parse(fontData);
+  const position=new THREE.Vector3(),normal=new THREE.Vector3();
+  assert.deepEqual(harborDiners.map(b=>b.id),[104600008,124659443]);
+  for(const [id,label] of [[104600008,'HI DIVE'],[124659443,"RED'S JAVA HOUSE"],[186071977,'PIER 24'],[104599978,'PIER 26'],[104599994,'PIER 28']]){
+    const b=sfMap.buildings.find(b=>b.id===id);
+    const {root}=harborBuilding(b,font);
+    root.updateMatrixWorld(true);
+    const directions=[];
+    root.traverse(o=>{
+      if(o.name!==label)return;
+      o.getWorldPosition(position);
+      const nearest=Math.min(...b.p.slice(1).map(([x,z],i)=>new THREE.Line3(
+        new THREE.Vector3(b.p[i][0],position.y,b.p[i][1]),new THREE.Vector3(x,position.y,z),
+      ).closestPointToPoint(position,true,new THREE.Vector3()).distanceTo(position)));
+      assert.ok(nearest<.16,`${label} sign escaped its mapped façade`);
+      directions.push(normal.set(0,0,1).transformDirection(o.matrixWorld).z);
+    });
+    assert.ok(directions.some(z=>z<-.52)&&directions.some(z=>z>.52),label);
+  }
+});
+
+test('Ferry Building front arcade is open to recessed glazing and the Port sign faces the water',async()=>{
+  const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
+  const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
+  const {ferryHall}=await import('../app/ferry-architecture.ts');
+  const {root,towerX,towerZ}=ferryHall(new FontLoader().parse(fontData));
+  root.updateMatrixWorld(true);
+  const centerPortal=root.getObjectByName('Central three-arch entrance');
+  const ray=new THREE.Raycaster(new THREE.Vector3(towerX,.4,-3),new THREE.Vector3(0,0,1));
+  const clear=ray.intersectObject(centerPortal,true);
+  assert.ok(clear.length>0);
+  assert.ok(clear[0].point.z>-1.4,'A projecting wall filled the central arch');
+  ray.ray.origin.x=towerX+2.63/6+.045;
+  assert.ok(ray.intersectObject(centerPortal,true)[0].point.z<-1.73,'Stone pier no longer separates the arch openings');
+  const coastSign=root.getObjectByName('PORT OF SAN FRANCISCO');
+  assert.ok(coastSign.position.z>1.4&&coastSign.position.y>1.3);
+  assert.ok(towerZ<-1);
+});
+
+test('pedestrians stay in architectural scale, plant their feet and keep shadows on the plaza',async()=>{
+  const {createPeople}=await import('../app/people.ts');
+  const {pedestrianPace}=await import('../app/waterfront-routes.ts');
+  const people=createPeople(4), shoes=people.group.getObjectByName('Shoes'), contacts=people.group.getObjectByName('Foot contact shadows');
+  const matrix=new THREE.Matrix4(), p=new THREE.Vector3(), ground=.15;
+  const heads=people.heads;
+  heads.geometry.computeBoundingBox();
+  for(let i=0;i<4;i++){
+    people.update(i,1,3,0,1,ground,0,true);
+    heads.getMatrixAt(i,matrix);
+    const headTop=heads.geometry.boundingBox.clone().applyMatrix4(matrix).max.y;
+    assert.ok(headTop-ground>.173 && headTop-ground<.220,'adult height should stay close to building scale');
+  }
+  for(const [direction,speed] of [[1,pedestrianPace],[-1,pedestrianPace*.87]]){
+    const previous=[null,null];
+    for(let t=0;t<4;t+=.017){
+      people.update(0,1+t*speed*direction,3,t,direction,ground);
+      let planted=0;
+      for(const foot of [0,1]){
+        shoes.getMatrixAt(foot,matrix);
+        const shoe=p.setFromMatrixPosition(matrix).clone();
+        const scale=Math.hypot(matrix.elements[0],matrix.elements[1],matrix.elements[2]);
+        const touching=Math.abs(shoe.y-ground-.020*scale)<.000008;
+        if(touching){
+          planted++;
+          if(previous[foot]!==null)assert.ok(Math.abs(shoe.x-previous[foot])<.000008,'stance foot slid through the plaza');
+        }
+        previous[foot]=touching?shoe.x:null;
+        contacts.getMatrixAt(foot,matrix);
+        const shadow=p.setFromMatrixPosition(matrix);
+        assert.ok(Math.abs(shadow.y-ground-.0009)<.00001);
+        assert.ok(Math.hypot(shadow.x-shoe.x,shadow.z-shoe.z)<.00001);
+        assert.ok(Math.hypot(matrix.elements[0],matrix.elements[2])<.059);
+      }
+      assert.ok(planted>=1);
+    }
+  }
+});
+
+
+test('drawn pedestrian contours face an orbiting camera with the same world foot contacts',async()=>{
+  const {createPeople}=await import('../app/people.ts');
+  const people=createPeople(2), ground=.14, t=.32;
+  const matrix=new THREE.Matrix4(), p=new THREE.Vector3(), normal=new THREE.Vector3();
+  const shoes=people.group.getObjectByName('Shoes');
+  const position=(mesh,index)=>{mesh.getMatrixAt(index,matrix);return p.setFromMatrixPosition(matrix).clone();};
+  people.update(0,1,3,t,1,ground);
+  const original=[position(shoes,0),position(shoes,1)];
+  for(const [x,z] of [[9,2],[-5,-1],[1,12],[1,-4]]){
+    people.setViewer(x,z);
+    people.update(0,1,3,t,1,ground);
+    const head=position(people.heads,0);
+    normal.set(0,0,1).transformDirection(matrix);
+    const sight=new THREE.Vector3(x-head.x,0,z-head.z).normalize();
+    assert.ok(Math.abs(normal.dot(sight))>.995);
+    assert.ok(head.y>ground+.149 && head.y<ground+.19);
+    for(const i of [0,1])assert.ok(position(shoes,i).distanceTo(original[i])<.000003);
+  }
+  people.group.children.forEach(mesh=>assert.equal(mesh.geometry.type,mesh.name==='Foot contact shadows'?'PlaneGeometry':'ShapeGeometry'));
+});
+
+
+test('Rincon Park and ferry routes stay continuous and meet the built walking surfaces',async()=>{
+  const {walkingRouteLength,cyclingRouteLength,pedestrianPace,cyclingPace,waterfrontWalker,waterfrontCyclist}=await import('../app/waterfront-routes.ts');
+  const scene=createLandscape();
+  scene.root.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.25);
+  const assertGround=p=>{
+    ray.ray.origin.set(p.x,p.y+.223,p.z);
+    const chunks=scene.architectureChunks.filter(mesh=>{
+      const b=mesh.geometry.boundingBox;
+      return p.x>=b.min.x&&p.x<=b.max.x&&p.z>=b.min.z&&p.z<=b.max.z;
+    });
+    const y=ray.intersectObjects(chunks,false)[0]?.point.y;
+    assert.ok(Math.abs(y-p.y)<.009,`Blocked or unsupported at (${p.x.toFixed(3)}, ${p.z.toFixed(3)}) with y=${y}`);
+  };
+  const periods=[
+    [walkingRouteLength.rincon/pedestrianPace,t=>waterfrontWalker(t,0,'street')],
+    [walkingRouteLength.ferry/pedestrianPace,t=>waterfrontWalker(t,0,'plaza')],
+    [cyclingRouteLength/cyclingPace,t=>waterfrontCyclist(t,0)],
+  ];
+  for(const [duration,poseAt] of periods){
+    const a=poseAt(0), b=poseAt(duration);
+    assert.ok(Math.hypot(a.x-b.x,a.z-b.z)<.00001,'cycle should join without a reset jump');
+    for(let i=0;i<67;i++){
+      const t=duration*i/67, p=poseAt(t), q=poseAt(t+.033);
+      assertGround(p);
+      const tangent=(q.x-p.x)*Math.cos(p.heading)+(q.z-p.z)*Math.sin(p.heading);
+      assert.ok(tangent>0&&tangent<.016,'route poses should move forward in the facing direction');
+    }
+  }
+  scene.residentPositions.forEach(assertGround);
+});
+
+
+test('Vaillancourt uses square precast courses and fourteen spillways above a lower basin',async()=>{
+  const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
+  const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
+  const {createRememberedWaterfront,vaillancourtPoolContains}=await import('../app/remembered-waterfront.ts');
+  const root=createRememberedWaterfront(new FontLoader().parse(fontData));
+  const fountain=root.getObjectByName('Vaillancourt Fountain');
+  const {fountainCourses,basinOutline,tubeWidth}=await import('../app/vaillancourt-plan.ts');
+  assert.equal(basinOutline.length,5);
+  assert.ok(Math.abs(tubeWidth-4.5*.3048*.06)<.00001);
+  const ej=fountainCourses.find(c=>c.id==='EJ').path;
+  assert.ok(ej[2][1]>.60 && ej.at(-1)[1]<.07,'The tall diagonal must return to the pool');
+  const footprintRises=fountainCourses.filter(c=>c.path[0][1]<0).map(c=>c.path[0]);
+  assert.ok(Math.max(...footprintRises.map(p=>p[2]))-Math.min(...footprintRises.map(p=>p[2]))>.9,'Northern and eastern roots must wrap around the basin');
+  assert.equal(fountain.getObjectsByProperty('name','Fountain overlook').length,2);
+  const spillways=fountain.getObjectByName('Fountain spillways');
+  assert.equal(spillways.userData.outlets.length,14);
+  assert.equal(spillways.parent.children.length,2,'All falls and turbulence share two water materials');
+  assert.equal(spillways.material.forceSinglePass,true);
+  const pool=fountain.getObjectByName('Sunken fountain pool');
+  assert.ok(new THREE.Box3().setFromObject(pool).max.y<.139);
+  assert.ok(vaillancourtPoolContains(4.65,-8.12));
+  assert.ok(!vaillancourtPoolContains(4.65,-10));
+  assert.equal(fountain.getObjectsByProperty('name','Overlook access stair').length,2);
+  assert.equal(fountain.getObjectsByProperty('name','Concrete lily pad').length,17);
+  const fallPositions=spillways.geometry.getAttribute('position');
+  for(const {start,count} of spillways.userData.outlets){
+    const heights=Array.from({length:count},(_,i)=>fallPositions.getY(start+i));
+    assert.ok(Math.abs(Math.min(...heights)+.013)<.0001 && Math.max(...heights)>-.007,
+      'Each falling sheet must reach the surface from its own outlet');
+  }
+  const weathered=fountain.getObjectsByProperty('name','Architectural cast concrete');
+  assert.ok(weathered.every(panel=>{
+    const paint=panel.geometry.getAttribute('color');
+    return panel.geometry.userData.paintVertices&&paint.count===panel.geometry.getAttribute('position').count&&
+      paint.array.some(v=>v<.93)&&paint.array.some(v=>v>1.04);
+  }));
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),d=new THREE.Vector3(),normal=new THREE.Vector3();
+  for(const panel of fountain.getObjectsByProperty('name','Hollow core concrete ducts')){
+    const vertices=panel.geometry.attributes.position;
+    for(let i=0;i<vertices.count;i+=6){
+      a.fromBufferAttribute(vertices,i);b.fromBufferAttribute(vertices,i+1);c.fromBufferAttribute(vertices,i+2);d.fromBufferAttribute(vertices,i+5);
+      normal.subVectors(b,a).cross(c.sub(a)).normalize();
+      assert.ok(Math.abs(normal.dot(d.sub(a)))<.000002,'A straight precast panel must remain planar');
+    }
+  }
+});
+
+test('stance anchors stay in place through a turn on the actual Rincon route',async()=>{
+  const {createPeople}=await import('../app/people.ts');
+  const {waterfrontWalker,walkingRouteLength,pedestrianPace}=await import('../app/waterfront-routes.ts');
+  const crowd=createPeople(1), feet=crowd.group.getObjectByName('Shoes'), contact=crowd.group.getObjectByName('Foot contact shadows');
+  const matrix=new THREE.Matrix4(), position=new THREE.Vector3();
+  const shoeAt=(m,i)=>{m.getMatrixAt(i,matrix);return position.setFromMatrixPosition(matrix).clone();};
+  let compared=0;
+  const duration=walkingRouteLength.rincon/pedestrianPace;
+  for(let segment=0;segment<8;segment++){
+    const baseline=duration*segment/8, tracked=[null,null];
+    for(let i=0;i<67;i++){
+      const elapsed=baseline+i*.018, poseAt=(offset)=>waterfrontWalker(elapsed+offset,0,'street');
+      const p=poseAt(0);
+      crowd.update(0,p.x,p.z,elapsed,1,p.y,0,false,p.heading,poseAt);
+      for(let foot=0;foot<2;foot++){
+        const shoe=shoeAt(feet,foot), mark=shoeAt(contact,foot);
+        const grounded=Math.abs(shoe.y-p.y-.020*(1.65*.06*1.85/.548))<.000001;
+        if(grounded&&tracked[foot]){
+          assert.ok(shoe.distanceTo(tracked[foot])<.000008);
+          compared++;
+        }
+        tracked[foot]=grounded?shoe:null;
+        assert.ok(Math.hypot(mark.x-shoe.x,mark.z-shoe.z)<.00001);
+      }
+    }
+  }
+  assert.ok(compared>300);
 });

@@ -19,11 +19,10 @@ Build static files with `npm run build`; review that build with `npm run preview
 
 ## Explore
 
-- Drag to orbit; select a landmark to move closer.
-- Open **Scene** to choose local light, daylight, sunset or night, visit a landmark, or save graphics power. Light, motion and power preferences are remembered in this browser.
-- Use the zoom, reset and pause controls at the bottom right.
-- Focus the city and use the arrow keys to orbit, `+`/`−` to zoom, Escape to reset, and Enter to hear from a passerby.
-- On touch screens, use two fingers to zoom. Motion pauses when the tab is hidden and respects reduced-motion preferences.
+- Drag to orbit and tilt. Double-click a spot on the waterfront to zoom toward it.
+- The bottom-right controls zoom, return to the opening view, and pause or resume motion.
+- With the city focused, use the arrow keys to orbit and tilt, `+` and `−` to zoom, Escape to reset, and Enter to hear from a passerby.
+- On touch screens, drag horizontally to orbit or pinch to zoom at a spot. The page scrolls with one finger. Motion pauses in a hidden tab and honors the system reduced-motion preference. An explicit pause or resume is remembered.
 
 The fireboat leaves Station 35, performs its five-stream display, and returns on a two-minute animation cycle. Pausing the scene also pauses the boat and water.
 
@@ -35,6 +34,24 @@ The city is maintained with Tom's portfolio project. A local post-commit hook ex
 
 The repository can be cloned and developed independently. Changes to the managed mirror should be made in the source project before synchronization; the sync process stops if someone has independently changed a managed file here.
 
+## Regenerate the waterfront posters
+
+Install Node.js 22.18 or newer, run `npm ci`, and install a recent Chrome or Chromium with antialiased WebGL 2 available in headless mode. Start the standalone city in one terminal.
+
+```sh
+npm run dev -- --host localhost --port 5173 --strictPort
+```
+
+In a second terminal, run the capture from the same checkout.
+
+```sh
+npm run poster
+```
+
+The capture defaults to `http://localhost:5173/`. Pass a different local preview URL with `npm run poster -- --url http://localhost:4173/`. Set `CHROME_PATH` to the executable if it lives outside a standard installation directory or your PATH.
+
+The script opens a temporary Chrome profile and pauses the live WebGL scene under fixed afternoon and night lighting. It captures only the canvas at 1440×940 and 390×844 CSS pixels, with native high-density drawing buffers. It writes `city-poster.webp`, `city-poster-portrait.webp`, `city-night.webp`, and `city-night-portrait.webp` in `public/` after validating all four captures.
+
 ## Checks
 
 ```sh
@@ -42,11 +59,13 @@ npm run check
 npm run build
 ```
 
+With the preview running, `npm run poster -- --check-interactions --check-fog` exercises the arrival fog, keyboard and touch conversations, camera controls, pause persistence and reduced motion in Chrome. Add `--evidence-dir /path/to/folder` to retain the screenshots.
+
 Tests cover finite batched geometry, daylight and DST, opening composition, full-horizon stars, smooth camera settling, park and tree placement, roof visibility, street routes, ferry and fireboat clearance, water contact, shared character animation and atmospheric haze. Physical-device thermal behavior and frame-rate benchmarks have not been established.
 
 ## Attribution and rights
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). The derived waterfront and landscape datasets are in `public/data/sf-waterfront.json` and `public/data/waterfront-landscape.json`; keep the page and dataset attribution when reusing them.
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). The mapped features are included in the datasets under `public/data`. Regional elevations come from the [Mapzen Terrarium terrain archive](https://registry.opendata.aws/terrain-tiles/). Keep the page and data attribution when reusing them.
 
 The [reference audit](references/WATERFRONT-REFERENCE-AUDIT.md) records the photographs, architectural sources and map features used for Embarcadero Center, the parks, historic piers and waterfront façades, along with unverified areas. `scripts/import-waterfront-landscape.py` reproduces the landscape data import.
 

@@ -7,7 +7,8 @@ export function readMotionPreference(){
   return sessionPaused??(typeof window!=='undefined'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 export function writeMotionPreference(paused:boolean){sessionPaused=paused;try{localStorage.setItem(motionKey,String(paused));}catch{/* Storage can be unavailable in private contexts. */}window.dispatchEvent(new Event(motionEvent));}
-export const clampZoom=(zoom:number)=>Math.max(.75,Math.min(2.75,zoom));
+export const minZoom=.75, maxZoom=20;
+export const clampZoom=(zoom:number)=>Math.max(minZoom,Math.min(maxZoom,zoom));
 /** A slow dwell activates edge orbit; controls and the title are outside its vertical band. */
 export function edgeOrbit(x:number,y:number){if(y<.22||y>.78)return 0;return x<.035?x/.035-1:x>.965?(x-.965)/.035:0;}
 export function createQualityMonitor(initial=2){
@@ -16,3 +17,9 @@ export function createQualityMonitor(initial=2){
 }
 /** Cumulative walk distance with a short, smooth pause, avoiding jumps at restarts. */
 export function walkingTime(t:number,i:number){const period=24+i%4*3,rest=3+i%3,phase=i*5.17;const travel=(v:number)=>{const cycle=Math.floor(v/period),local=v-cycle*period;return cycle*(period-rest)+Math.min(local,period-rest);};return travel(t+phase)-travel(phase);}
+
+/** Bound total samples on large displays while keeping ordinary Retina viewports native. */
+export function drawingPixelRatio(width:number,height:number,dpr:number,economy:boolean,vignette=false) {
+  const budget=economy?1_600_000:vignette?2_500_000:8_500_000;
+  return Math.min(dpr,economy?1:3,Math.sqrt(budget/Math.max(1,width*height)));
+}

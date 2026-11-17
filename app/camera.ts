@@ -3,9 +3,9 @@ export const openingCamera = {
   yaw: 1.08,
   zoom: 1,
   target: [-15, 3, 2] as const,
-  desktop: { focalLength: 40, elevation: 5, distance: 50 },
-  portrait: { focalLength: 44, elevation: 5, distance: 50 },
-  mobile: { focalLength: 27, elevation: 6, distance: 66 },
+  desktop: { focalLength: 40, elevation: 8.5, distance: 52 },
+  portrait: { focalLength: 44, elevation: 8.5, distance: 52 },
+  mobile: { focalLength: 27, elevation: 8, distance: 66 },
 };
 
 export function openingLens(width: number, height: number) {

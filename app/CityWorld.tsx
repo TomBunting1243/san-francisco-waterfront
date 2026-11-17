@@ -1,21 +1,24 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { landmarks, type Landmark } from './landmarks';
-import { sceneLighting } from './lighting';
+import { pacificLighting } from './lighting';
 import SceneControls from './SceneControls';
-import { readScenePreferences, saveScenePreferences, sceneEvent, type ScenePreferences } from './scene-preferences';
 import { ferryPose, birdPose, sailingPose } from './motion';
 import { streetPose, streetcarPose } from './streets';
 import { bridgeLayout } from './bridge-layout';
 import { openingCamera, openingLens, openingYaw, dampCameraAxis } from './camera';
 import { starfieldData } from './sky';
-import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,edgeOrbit,createQualityMonitor,walkingTime} from './city-runtime';
+import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
+import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,createQualityMonitor,drawingPixelRatio} from './city-runtime';
+
+const clampTilt=(angle:number)=>Math.min(.72,Math.max(-.095,angle));
 
 export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[], overlay, fallback }: { onVisit?: (landmark: Landmark) => void; variant?: 'harbor'|'street'|'plaza'; passerbyLines?: readonly string[]; overlay?: ReactNode; fallback?: ReactNode }) {
   const streetView=variant!=='harbor';
   const mount = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const [speech, setSpeech] = useState<{text:string;serial:number}|null>(null);
+  const dismissSpeech = useRef<()=>void>(()=>{});
   const speak = useRef<()=>void>(()=>{});
   const visitRef = useRef(onVisit);
   const linesRef = useRef(passerbyLines);
@@ -26,21 +29,19 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   useEffect(()=>{const sync=()=>setPaused(readMotionPreference());sync();window.addEventListener(motionEvent,sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener(motionEvent,sync);window.removeEventListener('storage',sync);};},[]);
   const toggleMotion=()=>{const next=!paused;setPaused(next);writeMotionPreference(next);};
   const [zoom,setZoom]=useState(openingCamera.zoom);
-  const changeZoom=(amount:number)=>setZoom(value=>clampZoom(value+amount));
+  const changeZoom=(amount:number)=>setZoom(value=>clampZoom(value+amount*Math.max(1,value*.8)));
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
-  const [preferences,setPreferences]=useState<ScenePreferences>({light:'live',economy:false});
-  useEffect(()=>{
-    const sync=(event?:Event)=>setPreferences(event instanceof CustomEvent ? event.detail : readScenePreferences());
-    sync();window.addEventListener(sceneEvent,sync);window.addEventListener('storage',sync);
-    return ()=>{window.removeEventListener(sceneEvent,sync);window.removeEventListener('storage',sync);};
-  },[]);
-  const settings = useRef({ focus, paused, zoom, preferences, yaw: openingCamera.yaw });
+  const settings = useRef({ paused, zoom, tilt: 0, yaw: openingCamera.yaw, aim:[...openingCamera.target] as number[] });
   const wake = useRef<()=>void>(()=>{});
   const reducedMotion = useRef(false);
-  const stopEdgeTurn = useRef(()=>{});
-  useEffect(()=>{settings.current.focus=focus;settings.current.paused=paused;settings.current.zoom=zoom;settings.current.preferences=preferences;wake.current();},[focus,paused,zoom,preferences]);
+  useEffect(()=>{settings.current.paused=paused;settings.current.zoom=zoom;wake.current();},[paused,zoom]);
   useEffect(() => {
     const host = mount.current!;
+    const localLight=pacificLighting();
+    if(!streetView&&host.parentElement){
+      host.parentElement.dataset.solar=localLight.night>.55?'night':'day';
+      if(localLight.night>.55)host.closest('main')?.setAttribute('data-harbor-light','dark');
+    }
     let disposed = false;
     let teardown = () => {};
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -50,9 +51,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     Promise.all([import('three'), import('./landscape'),import('./harbor-sky')]).then(([THREE, { createLandscape, createCityVignette },{createHarborSky}]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
-      try { renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' }); }
+      try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
       catch { setStatus('fallback'); return; }
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
       renderer.shadowMap.autoUpdate=false;
       renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
       renderer.info.autoReset=false;
@@ -61,69 +61,144 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       renderer.domElement.setAttribute('aria-hidden', 'true'); host.appendChild(renderer.domElement);
       const scene = new THREE.Scene(); scene.background = new THREE.Color('#d6e4e6'); scene.fog = new THREE.Fog('#d6e4e6', 250, 470);
       const sky=streetView?null:createHarborSky();if(sky)scene.add(sky.dome);
-      const camera = new THREE.PerspectiveCamera(20,1,1.5,650);
+      const camera = new THREE.PerspectiveCamera(20,1,.35,1800);
       const ambient = new THREE.HemisphereLight('#ffffff','#94a8a3',2.5); scene.add(ambient);
       const sun = new THREE.DirectionalLight('#fff0d2',3.2); sun.position.set(-30,55,28); sun.castShadow=true;
-      sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-70; sun.shadow.camera.right=70; sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60;
-      sun.shadow.normalBias=.06; sun.shadow.bias=-.00015; scene.add(sun);
+      const shadowSize=Math.min(renderer.capabilities.maxTextureSize,streetView?2048:4096);
+      sun.shadow.mapSize.set(shadowSize,shadowSize);
+      Object.assign(sun.shadow.camera,{left:-59,right:59,top:51,bottom:-51,far:190});
+      sun.shadow.camera.updateProjectionMatrix();sun.shadow.radius=2.3;
+      sun.target.position.set(streetView&&variant==='street'?-32:-9,0,-7);scene.add(sun.target);
+      sun.shadow.normalBias=.023; sun.shadow.bias=-.00008; scene.add(sun);
       const fill = new THREE.DirectionalLight('#c6e1ef',.5); fill.position.set(40,20,-20); scene.add(fill);
       const world = streetView?createCityVignette(variant):createLandscape(); scene.add(world.root);
       let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
       let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       const startYaw=openingYaw(host.clientWidth,host.clientHeight);settings.current.yaw=startYaw;
-      const target = new THREE.Vector3(...openingCamera.target), destination = target.clone();
-      const cameraAxes={x:{value:target.x,velocity:0},y:{value:target.y,velocity:0},z:{value:target.z,velocity:0},yaw:{value:startYaw,velocity:0},zoom:{value:1,velocity:0}};
-      let selectedLight=settings.current.preferences.light;
-      let economy=settings.current.preferences.economy;
-      let lighting=sceneLighting(selectedLight);
-      let lastShadow=-Infinity, timer:ReturnType<typeof setTimeout>|undefined;
+      const target = new THREE.Vector3(...openingCamera.target), destination = target.clone(), homeTarget=target.clone();
+      const cameraAxes={x:{value:target.x,velocity:0},y:{value:target.y,velocity:0},z:{value:target.z,velocity:0},yaw:{value:startYaw,velocity:0},tilt:{value:0,velocity:0},zoom:{value:1,velocity:0}};
+      const economy=window.matchMedia('(prefers-reduced-data: reduce)').matches;
+      let lighting=localLight;
+      let nightPrint=document.documentElement.dataset.palette==='ink';
+      const refreshPalette=()=>{nightPrint=document.documentElement.dataset.palette==='ink';lastLightingCheck=-Infinity;requestFrame();};
+      window.addEventListener('portfolio-palette-change',refreshPalette);
+      let shadowRegion='',lastShadowSun='', nextDraw=0, timer:ReturnType<typeof setTimeout>|undefined;
       function requestFrame(){
         if(timer!==undefined){clearTimeout(timer);timer=undefined;}
         if(!disposed&&!frame&&visible&&rendering&&!document.hidden)frame=requestAnimationFrame(animate);
       }
       wake.current=requestFrame;
-      let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, edgeTurn=0, edgeSince=0, hoveredPerson=-1;
-      stopEdgeTurn.current=()=>{edgeTurn=0;};
+      let figureViewX=NaN,figureViewZ=NaN;
+      let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
       const mistTint=new THREE.Color(.93,.85,.70);
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
       const starData=starfieldData();
       const starGeometry=new THREE.BufferGeometry();starGeometry.setAttribute('position',new THREE.BufferAttribute(starData.positions,3));starGeometry.setAttribute('color',new THREE.BufferAttribute(starData.colors,3));
       const starMaterial=new THREE.PointsMaterial({size:1.5,sizeAttenuation:false,vertexColors:true,transparent:true,opacity:lighting.night,depthWrite:false,fog:false,toneMapped:false});
-      const stars=new THREE.Points(starGeometry,starMaterial);scene.add(stars);
+      const stars=new THREE.Points(starGeometry,starMaterial);stars.scale.setScalar(3.8);scene.add(stars);
       let conversation: {person:number;until:number}|null=null, speechCount=0;
-      const personMatrix=new THREE.Matrix4(), personPoint=new THREE.Vector3();
+      const personMatrix=new THREE.Matrix4(), head=new THREE.Vector3(), foot=new THREE.Vector3();
+      const shoes=world.people.group.getObjectByName('Shoes') as InstanceType<typeof THREE.InstancedMesh>;
+      const sightRay=new THREE.Raycaster();
+      let hoveredSince=0, nextQuip=18;
       function personScreen(index:number){
-        if(index<world.walkerHeads.count){world.walkerHeads.getMatrixAt(index,personMatrix);personPoint.setFromMatrixPosition(personMatrix).applyMatrix4(world.walkerHeads.matrixWorld);}
-        else {personPoint.set(.14,1.3,0).applyMatrix4(world.cyclists[index-world.walkerHeads.count].matrixWorld);}
-        personPoint.project(camera);
-        return {x:(personPoint.x+1)*width/2,y:(1-personPoint.y)*height/2,visible:personPoint.z>-1&&personPoint.z<1&&Math.abs(personPoint.x)<1&&Math.abs(personPoint.y)<1};
+        if(index<world.walkerHeads.count){
+          world.walkerHeads.getMatrixAt(index,personMatrix);
+          head.setFromMatrixPosition(personMatrix).applyMatrix4(world.walkerHeads.matrixWorld);
+          shoes.getMatrixAt(index*2,personMatrix);
+          foot.setFromMatrixPosition(personMatrix).applyMatrix4(shoes.matrixWorld);
+        }else{
+          const bike=world.cyclists[index-world.walkerHeads.count];
+          head.set(.14,1.30,0).applyMatrix4(bike.matrixWorld);
+          foot.set(0,-.24,0).applyMatrix4(bike.matrixWorld);
+        }
+        const distance=camera.position.distanceTo(head);
+        head.project(camera);foot.project(camera);
+        return {x:(head.x+1)*width/2,y:(1-head.y)*height/2,
+          fx:(foot.x+1)*width/2,fy:(1-foot.y)*height/2,distance,
+          visible:head.z>-1&&head.z<1&&Math.abs(head.x)<1&&Math.abs(head.y)<1};
       }
-      function say(person:number){if(!linesRef.current.length)return;requestFrame();conversation={person,until:performance.now()+6500};setSpeech({text:linesRef.current[speechCount%linesRef.current.length],serial:speechCount++});}
-      speak.current=()=>{
-        // Keyboard entry chooses the passerby closest to the middle of the view.
-        let nearest=0,distance=Infinity;
-        for(let i=0;i<world.walkerHeads.count;i++){const p=personScreen(i),d=Math.abs(p.x-width/2);if(p.visible&&d<distance){nearest=i;distance=d;}}
-        if(Number.isFinite(distance))say(nearest);
-      };
-      function pickPerson(e:PointerEvent){
+      type PersonProjection=ReturnType<typeof personScreen>;
+      function seen(person:PersonProjection){
+        // A visible head may project in front of a building across the bay.
+        // Only test the actual depth of a candidate when opening a conversation.
+        sightRay.setFromCamera(new THREE.Vector2(person.x/width*2-1,1-person.y/height*2),camera);
+        sightRay.far=Math.max(.01,person.distance-.028);
+        return !sightRay.intersectObjects(world.architectureChunks,false).length;
+      }
+      const closeConversation=()=>{conversation=null;setSpeech(null);};
+      dismissSpeech.current=closeConversation;
+      function say(person:number){
+        if(!linesRef.current.length)return;
+        requestFrame();conversation={person,until:performance.now()+6500};nextQuip=elapsed+58;
+        setSpeech({text:linesRef.current[speechCount%linesRef.current.length],serial:speechCount++});
+      }
+      function centralPasserby(){
+        const options=[];
+        for(let i=0;i<world.walkerHeads.count;i++){
+          const p=personScreen(i);
+          if(p.visible&&p.y>110&&p.y<height-45)options.push({i,p,d:Math.hypot(p.x-width*.5,p.y-height*.61)});
+        }
+        for(const candidate of options.sort((a,b)=>a.d-b.d))if(seen(candidate.p))return candidate.i;
+        return -1;
+      }
+      speak.current=()=>{const person=centralPasserby();if(person>=0)say(person);};
+      function pickPerson(e:PointerEvent,confirm=false){
         const rect=host.getBoundingClientRect(),px=e.clientX-rect.left,py=e.clientY-rect.top;
-        let nearest=-1,distance=e.pointerType==='touch'?23:13;
-        for(let i=0;i<world.walkerHeads.count+world.cyclists.length;i++){const p=personScreen(i),d=Math.hypot(p.x-px,p.y-py);if(p.visible&&d<distance){nearest=i;distance=d;}}
-        return nearest;
+        const options=[];
+        for(let i=0;i<world.walkerHeads.count+world.cyclists.length;i++){
+          const p=personScreen(i);if(!p.visible)continue;
+          const dx=p.fx-p.x,dy=p.fy-p.y,len=dx*dx+dy*dy;
+          const t=len?Math.max(0,Math.min(1,((px-p.x)*dx+(py-p.y)*dy)/len)):0;
+          const d=Math.hypot(p.x+t*dx-px,p.y+t*dy-py);
+          if(d<(e.pointerType==='touch'?21:8)+Math.min(7,Math.sqrt(len)*.13))options.push({i,p,d});
+        }
+        for(const c of options.sort((a,b)=>a.d-b.d||a.p.distance-b.p.distance))if(!confirm||seen(c.p))return c.i;
+        return -1;
       }
-      const pointer = {down:false,startX:0,startY:0,startYaw:0};
+      const pointer = {down:false,startX:0,startY:0,startYaw:0,startTilt:0};
       const touches=new Map<number,{x:number;y:number}>();let pinchDistance=0,pinchZoom=1,wasPinch=false;
       const touchDistance=()=>{const [a,b]=[...touches.values()];return a&&b?Math.hypot(a.x-b.x,a.y-b.y):0;};
       const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
       function pick(e:PointerEvent){const rect=host.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);return raycaster.intersectObjects(world.hitTargets)[0]?.object.userData.landmark as Landmark|undefined;}
+      // Keep one continuous camera. A precise zoom can center any point along the modeled waterfront.
+      const ground=new THREE.Plane(new THREE.Vector3(0,1,0),0), picked=new THREE.Vector3();
+      // Continue the inspection area along the western span to its island landing.
+      // Elsewhere a click on the far horizon stays with the current waterfront view.
+      function canInspect(x:number,z:number){
+        if(x<=-148||x>=85||z<=-168)return false;
+        if(z<65)return true;
+        const dx=x-bridgeLayout.origin[0],dz=z-bridgeLayout.origin[1];
+        const sin=Math.sin(bridgeLayout.angle),cos=Math.cos(bridgeLayout.angle);
+        return dx*sin+dz*cos<bridgeLayout.length+13&&Math.abs(dx*cos-dz*sin)<9;
+      }
+      function aimAt(clientX:number,clientY:number) {
+        const rect=host.getBoundingClientRect();
+        mouse.set((clientX-rect.left)/width*2-1,1-(clientY-rect.top)/height*2);
+        raycaster.setFromCamera(mouse,camera);
+        if(settings.current.zoom>=1.65){
+          const surface=raycaster.intersectObjects(world.architectureChunks,false)[0]?.point;
+          if(surface&&surface.y>.16&&canInspect(surface.x,surface.z)){
+            settings.current.aim=surface.toArray();return;
+          }
+        }
+        if(raycaster.ray.intersectPlane(ground,picked)&&canInspect(picked.x,picked.z)){
+          settings.current.aim=[picked.x,.7,picked.z];
+        }
+      }
+      function zoomHere(e:MouseEvent){
+        if(streetView)return;
+        aimAt(e.clientX,e.clientY);conversation=null;setSpeech(null);setZoom(value=>clampZoom(Math.max(2,value*1.65)));setFocus(null);wake.current();
+      }
+      host.addEventListener('dblclick',zoomHere);
       function resize() {
         width=host.clientWidth; height=host.clientHeight;
         if(!width||!height)return;
         const viewportQuality=economy?0:streetView||width<650?1:2;
         if(viewportQuality!==maxQuality){maxQuality=viewportQuality;qualityMonitor=createQualityMonitor(maxQuality);quality=maxQuality;}
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio,economy ? .85 : quality===2 ? 1.25 : 1)); renderer.setSize(width,height);
+        renderer.setPixelRatio(drawingPixelRatio(width,height,window.devicePixelRatio||1,economy,streetView)); renderer.setSize(width,height);
         renderer.shadowMap.enabled=quality>0&&duskAmount<.85;renderer.shadowMap.needsUpdate=true;host.dataset.quality=String(quality);host.dataset.shadows=String(renderer.shadowMap.enabled);
         camera.aspect=width/height;camera.setFocalLength(streetView?42:openingLens(width,height).focalLength);camera.updateProjectionMatrix();lastVisual='';requestFrame();
       }
@@ -131,34 +206,34 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const onDown=(e:PointerEvent)=>{
         if(streetView||e.button!==0)return;requestFrame();
         lastInput=performance.now();
-        if(e.pointerType==='touch'){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size===2){pinchDistance=touchDistance();pinchZoom=settings.current.zoom;wasPinch=true;pointer.down=false;return;}wasPinch=false;}
-        pointer.down=true;pointer.startX=e.clientX;pointer.startY=e.clientY;pointer.startYaw=cameraAxes.yaw.value;settings.current.yaw=pointer.startYaw;cameraAxes.yaw.velocity=0;host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});edgeTurn=0;
+        if(e.pointerType==='touch'){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size===2){const pair=[...touches.values()];aimAt((pair[0].x+pair[1].x)/2,(pair[0].y+pair[1].y)/2);pinchDistance=touchDistance();pinchZoom=settings.current.zoom;wasPinch=true;pointer.down=false;return;}wasPinch=false;}
+        pointer.down=true;pointer.startX=e.clientX;pointer.startY=e.clientY;pointer.startYaw=cameraAxes.yaw.value;pointer.startTilt=cameraAxes.tilt.value;settings.current.yaw=pointer.startYaw;cameraAxes.yaw.velocity=0;host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});
       };
       const onMove=(e:PointerEvent)=>{
         if(streetView)return;requestFrame();
         lastInput=performance.now();
         if(touches.has(e.pointerId)){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size>=2&&pinchDistance>0){e.preventDefault();setZoom(clampZoom(pinchZoom*touchDistance()/pinchDistance));return;}}
-        if(pointer.down){settings.current.yaw=pointer.startYaw+(e.clientX-pointer.startX)/Math.max(width,320)*Math.PI*.85;edgeTurn=0;}
+        if(pointer.down){settings.current.yaw=pointer.startYaw+(e.clientX-pointer.startX)/Math.max(width,320)*Math.PI*.85;
+          if(e.pointerType!=='touch')settings.current.tilt=clampTilt(pointer.startTilt+(e.clientY-pointer.startY)/height);
+        }
         else if(e.pointerType==='mouse'){
-          const r=host.getBoundingClientRect(),next=edgeOrbit((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height);
-          if(Math.sign(next)!==Math.sign(edgeTurn))edgeSince=performance.now();edgeTurn=next;
-          hoveredPerson=pickPerson(e);host.style.cursor=hoveredPerson>=0?'pointer':'grab';
+          const candidate=pickPerson(e);if(candidate!==hoveredPerson){hoveredPerson=candidate;hoveredSince=performance.now();}host.style.cursor=hoveredPerson>=0?'pointer':'grab';
         }
       };
       // Keep one-finger page scrolling; prevent browser zoom only for a two-finger city gesture.
       const onTouchStart=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){pinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchZoom=settings.current.zoom;wasPinch=true;}};
       const onTouchMove=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){e.preventDefault();const distance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pinchDistance>0)setZoom(clampZoom(pinchZoom*distance/pinchDistance));}};
       host.addEventListener('touchstart',onTouchStart,{passive:true});host.addEventListener('touchmove',onTouchMove,{passive:false});
-      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
+      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();if(e.deltaY<0&&settings.current.zoom<=1)aimAt(e.clientX,e.clientY);setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
       host.addEventListener('wheel',onWheel,{passive:false});
-      const onLeave=()=>{edgeTurn=0;hoveredPerson=-1;};
-      const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;edgeTurn=0;};
-      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pinchDistance=0;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
+      const onLeave=()=>{hoveredPerson=-1;};
+      const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;};
+      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pinchDistance=0;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e,true);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
       host.addEventListener('pointerdown',onDown);host.addEventListener('pointermove',onMove);host.addEventListener('pointerup',onUp);host.addEventListener('pointercancel',onCancel);host.addEventListener('pointerleave',onLeave);
       const onLost=(e:Event)=>{e.preventDefault();rendering=false;setStatus('fallback');}; renderer.domElement.addEventListener('webglcontextlost',onLost);
       const onVisibility=()=>{
         visible=intersecting&&!document.hidden;
-        if(visible){last=0;requestFrame();}
+        if(visible){last=0;lastDraw=0;nextDraw=0;requestFrame();}
         else {cancelAnimationFrame(frame);frame=0;clearTimeout(timer);timer=undefined;}
       };
       document.addEventListener('visibilitychange',onVisibility);
@@ -167,37 +242,42 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       function animate(now:number) {
         frame=0;if(disposed||!visible||!rendering||document.hidden)return;
         const frameMs=now-last;last=now;
-        const movingCamera=pointer.down||touches.size>0||edgeTurn!==0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005||target.distanceToSquared(destination)>1e-5;
-        // The living scene can draw at 30 fps; camera gestures keep the full display rate.
-        const frameInterval=economy?1000/21:streetView||!movingCamera?1000/31:0;
-        if(now-lastDraw<frameInterval){requestFrame();return;}
-        const dt=Math.min((now-lastDraw)/1000,.05);lastDraw=now;
+        const movingCamera=pointer.down||touches.size>0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.tilt.value-settings.current.tilt)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005||target.distanceToSquared(destination)>1e-5;
+        // Let the main scene follow the display. Carry fractional frame time for paced views.
+        const interval=economy||streetView?1000/30:0;
+        if(interval&&now+.8<nextDraw){requestFrame();return;}
+        nextDraw=interval?now+interval-Math.max(0,now-nextDraw)%interval:now;
+        const dt=lastDraw?Math.min((now-lastDraw)/1000,.12):1/60;lastDraw=now;
         // A deliberately paced idle scene is not evidence that the GPU is struggling.
         if(!streetView&&movingCamera&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
         const config=settings.current, still=config.paused;
-        if(economy!==config.preferences.economy){economy=config.preferences.economy;resize();}
         if(!still)elapsed+=dt;
-        if(!still&&!pointer.down&&now-edgeSince>650)config.yaw+=edgeTurn*dt*.14;
-        const viewpoint=config.focus ? landmarks[config.focus] : null;
-        destination.fromArray(viewpoint?.position??openingCamera.target);
+        destination.fromArray(config.aim);
         target.set(dampCameraAxis(cameraAxes.x,destination.x,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.y,destination.y,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.z,destination.z,dt,3.8,reducedMotion.current));
         yaw=dampCameraAxis(cameraAxes.yaw,config.yaw,dt,pointer.down?9:4.5,reducedMotion.current);
-        const dolly=dampCameraAxis(cameraAxes.zoom,config.zoom*(viewpoint?.zoom??1),dt,4,reducedMotion.current);
+        const dolly=dampCameraAxis(cameraAxes.zoom,config.zoom,dt,4,reducedMotion.current);
         const lens=openingLens(width,height);
-        // A modest physical dolly adds depth while the remaining lens zoom avoids clipping the city.
-        const travel=Math.pow(dolly,.32);
-        offset.set(0,lens.elevation/Math.sqrt(travel),lens.distance/travel).applyAxisAngle(axis,yaw);camera.position.copy(target).add(offset);
-        const headroom=!config.focus&&width/height>1.8?Math.min(1.5,(width/height-1.8)*2.7):0;
+        // Move through the neighborhood as the lens closes in so nearby roofs do not hide distant storefronts.
+        const travel=Math.pow(dolly,.82);
+        const tilt=dampCameraAxis(cameraAxes.tilt,config.tilt,dt,pointer.down?9:4.5,reducedMotion.current);
+        const horizontal=lens.distance/travel, vertical=lens.elevation/travel;
+        const radius=Math.hypot(horizontal,vertical), angle=Math.atan2(vertical,horizontal)+tilt;
+        offset.set(0,Math.sin(angle)*radius,Math.cos(angle)*radius).applyAxisAngle(axis,yaw);camera.position.copy(target).add(offset);
+        const headroom=width/height>1.8?Math.min(1.5,(width/height-1.8)*2.7):0;
         camera.lookAt(target.x,target.y+headroom,target.z);
-        camera.zoom=dolly/travel;camera.updateProjectionMatrix();if(host.dataset.view!==(config.focus??'panorama'))host.dataset.view=config.focus??'panorama';
+        camera.zoom=dolly/travel;camera.updateProjectionMatrix();
         if(streetView){
           // Locked view across the promenade at Cupid's Span; movement belongs to the street.
           if(variant==='plaza'){camera.position.set(11,13,17);camera.lookAt(0,0,0);}else{camera.position.set(-24,17,13);camera.lookAt(width<650?-32:-35,0,-3);}camera.zoom=1;camera.updateProjectionMatrix();
         }
         stars.position.copy(camera.position);
-        const lightChanged=selectedLight!==config.preferences.light;
-        if(lightChanged||now-lastLightingCheck>30000||lastLightingCheck===0){selectedLight=config.preferences.light;lighting=sceneLighting(selectedLight);host.dataset.light=selectedLight;lastLightingCheck=now;skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);}
-        const lightEase=reducedMotion.current||lightChanged||!presented?1:1-Math.exp(-dt*2);
+        const lightChanged=lastLightingCheck===0;
+        if(lightChanged||now-lastLightingCheck>30000||lastLightingCheck===0){
+          const local=pacificLighting();
+          if(!streetView&&host.parentElement)host.parentElement.dataset.solar=local.night>.55?'night':'day';
+          lighting=nightPrint?{...local,sky:0x253b59,water:0x234854,sun:0x91b9dc,night:1,ambient:.87,sunIntensity:.83}:local;
+          host.dataset.light=nightPrint?'night-print':lighting.phase;lastLightingCheck=now;skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);}
+        const lightEase=reducedMotion.current||lightChanged||!presented?1:1-Math.exp(-dt*4.2);
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
         const shadows=!economy&&quality>0&&duskAmount<.85;
         if(renderer.shadowMap.enabled!==shadows){renderer.shadowMap.enabled=shadows;if(shadows)renderer.shadowMap.needsUpdate=true;host.dataset.shadows=String(shadows);}
@@ -207,14 +287,27 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.edgeFogColor.value.copy(scene.background as InstanceType<typeof THREE.Color>);
         if(sky)world.edgeFogColor.value.lerp(mistTint,(1-duskAmount)*.53);
         world.edgeFogColor.value.convertLinearToSRGB();
+        world.nightInk.value=duskAmount;world.lampGlow.opacity=duskAmount*.96;
         world.coffeeMaterial.emissiveIntensity=duskAmount*2.6;
         world.bridgeLightMaterial.opacity=duskAmount*.8;world.roadLightMaterial.opacity=duskAmount;world.streetcarGlazing.emissiveIntensity=duskAmount*.7;world.streetcarLamp.emissiveIntensity=.35+duskAmount*1.3;
-        world.waterMaterial.roughness=.38+duskAmount*.3;
-        world.waterMaterial.color.lerp(waterColor,lightEase);world.windowMaterial.emissiveIntensity=duskAmount*.8;
+        world.waterMaterial.roughness=.49+duskAmount*.18;
+        world.waterMaterial.color.lerp(waterColor,lightEase);world.windowMaterial.emissiveIntensity=duskAmount*2.15;
         ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,lighting.ambient*.78,lightEase);
         sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity,lightEase);sun.color.lerp(sunColor,lightEase);fill.intensity=.4+duskAmount*.25;
+        if(shadows&&!streetView){
+          // Fixed extents avoid shadow crawl during orbit. A closer investigation can use all
+          // shadow texels around the chosen address, without updating the map every frame.
+          const span=config.zoom>=10?9:config.zoom>=4?23:59;
+          const sx=span===59?-9:Math.round(destination.x), sz=span===59?-7:Math.round(destination.z);
+          const region=span+','+sx+','+sz;
+          if(region!==shadowRegion){
+            shadowRegion=region;sun.target.position.set(sx,0,sz);
+            Object.assign(sun.shadow.camera,{left:-span,right:span,top:span*.87,bottom:-span*.87});
+            sun.shadow.camera.updateProjectionMatrix();renderer.shadowMap.needsUpdate=true;
+          }
+        }
         const azimuth=lighting.azimuth*Math.PI/180;
-        sun.position.set(Math.sin(azimuth)*60,Math.max(5,Math.sin(lighting.altitude*Math.PI/180)*75),-Math.cos(azimuth)*60);
+        sun.position.set(Math.sin(azimuth)*60,Math.max(5,Math.sin(lighting.altitude*Math.PI/180)*75),-Math.cos(azimuth)*60).add(sun.target.position);
         if(sky){
           sky.dome.position.copy(camera.position);
           sky.uniforms.skyTint.value.copy(scene.background as InstanceType<typeof THREE.Color>);
@@ -223,7 +316,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           sky.uniforms.nightAmount.value=duskAmount;
           world.bayHorizon.value.copy(sky.uniforms.skyTint.value).lerp(mistTint,(1-duskAmount)*.53).convertLinearToSRGB();
         }
-        const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.parentElement?.style.setProperty('--world-ink',ink);host.parentElement?.style.setProperty('--world-halo',duskAmount>.55?'#132536':'#cddbdd');lastInk=ink;}
+        const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.closest('main')?.setAttribute('data-harbor-light',duskAmount>.55?'dark':'light');host.parentElement?.style.setProperty('--world-ink',ink);host.parentElement?.style.setProperty('--world-halo',duskAmount>.55?'#132536':'#cddbdd');lastInk=ink;}
         starMaterial.opacity=Math.max(0,(duskAmount-.55)*1.8);stars.visible=!streetView&&starMaterial.opacity>.001;
         world.clockHands.forEach(({minute,hour,angle})=>{
           for(const [hand,t,length] of [[minute,lighting.minutes/60*Math.PI*2,.47],[hour,(lighting.hours%12+lighting.minutes/60)/12*Math.PI*2,.36]] as const){
@@ -233,29 +326,50 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           }
         });
         const motionChanged=elapsed!==lastMotion;
+        const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
+        if(motionChanged||viewerChanged){
+          figureViewX=camera.position.x;figureViewZ=camera.position.z;
+          world.people.setViewer(figureViewX,figureViewZ);
+          for(let i=0;i<22;i++){
+            const region=streetView?variant:undefined;
+            const poseAt=(offset:number)=>waterfrontWalker(elapsed+offset,i,region);
+            const p=poseAt(0);
+            world.people.update(i,p.x,p.z,elapsed,1,p.y,hoveredPerson===i?1:0,false,p.heading,poseAt);
+          }
+          world.residentPositions.forEach((p,i)=>world.people.update(22+i,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===22+i?1:(i%7===0&&elapsed%18<3?.7:0),true));
+          world.people.flush();
+        }
         if(motionChanged){
+        world.updateApproach(elapsed);
         if(world.fireboat){const fireboatPose=world.fireboat.update(elapsed);host.dataset.fireboat=fireboatPose.phase;}
         world.sailboats.forEach((boat,i)=>{const p=sailingPose(elapsed,i);boat.position.set(p.x,p.y,p.z);boat.rotation.set(p.heel,p.heading,0,'YXZ');});
         world.ferries.forEach((boat,i)=>{const pose=ferryPose(elapsed,i);boat.position.set(pose.x,pose.y,pose.z);boat.rotation.set(0,pose.heading,Math.sin(elapsed*1.2+i)*.007);});
         world.cars.forEach((car,i)=>{car.position.z=((elapsed*(i%2?1.1:-1.1)+i*8+bridgeLayout.length*5)%bridgeLayout.length);});
         world.traffic.forEach((car,i)=>{const direction=i%2?1:-1,p=streetPose(streetView?((elapsed*(direction*1.2)+i*4+320)%32)-(variant==='plaza'?12:48):((elapsed*(direction*1.2)+i*16+640)%160)-80,direction);car.scale.setScalar(.5);car.position.set(p.x,.02,p.z);car.rotation.y=p.heading;});
-        for(let i=0;i<22;i++){
-          const walk=walkingTime(elapsed,i);
-          const x=streetView?((i*.83+walk*(i%2?.18:-.14)+180)%18)-(variant==='plaza'?10:42):((i*4.37+walk*(i%2?.18:-.14)+320)%80)-36,z=streetPose(x).z+.7+(i%3)*.12;
-          world.people.update(i,x,z,walk,i%2?1:-1,0,hoveredPerson===i?1:0);
-        }
-        world.residentPositions.forEach((p,i)=>world.people.update(22+i,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===22+i?1:(i%7===0&&elapsed%18<3?.7:0),true));
-        world.people.flush();
         const sealT=elapsed*.14;
         world.seaLion.position.set(24+Math.sin(sealT)*1.1,-.56+Math.sin(elapsed*2)*.045,8+Math.cos(sealT)*3);
         world.seaLion.rotation.set(Math.sin(elapsed*2)*.06,Math.atan2(Math.sin(sealT)*3,Math.cos(sealT)*1.1),Math.sin(elapsed*2)*.025);
         world.sealFlippers.forEach((flipper,i)=>{flipper.rotation.x=Math.sin(elapsed*2.5+i*Math.PI)*.38;});
-        world.cyclists.forEach((bike,i)=>{const p=streetPose(streetView?((elapsed*(i%2?-.55:.7)+i*7+220)%22)-43:((elapsed*(i%2?-.55:.7)+i*26+400)%100)-48);bike.scale.setScalar(.35);bike.position.set(p.x,.03,p.z+.65);bike.rotation.y=p.heading+(i%2?Math.PI:0);});
+        world.cyclists.forEach((bike,i)=>{
+          const p=waterfrontCyclist(elapsed,i);
+          bike.scale.setScalar(bicycleScale);
+          bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
+          bike.rotation.y=-p.heading;
+        });
         const tramPose=streetcarPose(streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,.05,tramPose.z);world.tram.rotation.y=tramPose.heading;
         world.birds.forEach((bird,i)=>{const pose=birdPose(elapsed,i);bird.group.position.set(pose.x,pose.y,pose.z);bird.group.rotation.set(0,pose.heading,Math.cos(elapsed*.1+i)*.12);bird.wings[0].rotation.x=pose.flap;bird.wings[1].rotation.x=-pose.flap;});
-        world.ripples.position.x=Math.sin(elapsed*.18)*.25;lastMotion=elapsed;
+        lastMotion=elapsed;
         }
         camera.updateMatrixWorld();
+        if(!still&&!reducedMotion.current&&!streetView&&!conversation&&!pointer.down&&linesRef.current.length){
+          if(hoveredPerson>=0&&hoveredSince>0&&now-hoveredSince>850){
+            hoveredSince=0;
+            if(seen(personScreen(hoveredPerson)))say(hoveredPerson);
+          }else if(dolly>1.6&&elapsed>=nextQuip&&now-lastInput>2200){
+            nextQuip=elapsed+20;
+            const listener=centralPasserby();if(listener>=0)say(listener);
+          }
+        }
         if(conversation){
           if(now>conversation.until){conversation=null;setSpeech(null);}
           else if(bubble.current){
@@ -266,41 +380,47 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             bubble.current.style.visibility=p.visible?'visible':'hidden';
           }
         }
+        if(!streetView)world.relief.update(elapsed,duskAmount,.58,world.bayHorizon.value);
         world.waterTime.value=elapsed;
-        const visual=[width,height,target.x.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),camera.zoom.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
+        if(!streetView)world.updateMarina();
+        world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,boat.rotation.y));
+        world.sailboats.forEach((boat,i)=>world.hullShadows[i+2].set(boat.position.x,boat.position.z,boat.rotation.y));
+        const visual=[width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),camera.zoom.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
+        const exploring=Math.abs(dolly-1)>.07||Math.abs(Math.sin((yaw-startYaw)/2))>.06||Math.abs(tilt)>.06||target.distanceToSquared(homeTarget)>1;
+        if(host.parentElement?.dataset.exploring!==String(exploring)&&host.parentElement)host.parentElement.dataset.exploring=String(exploring);
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
         const changed=visual!==lastVisual;
         if(!still||changed){
-          if(shadows&&(lightChanged||now-lastShadow>=220)){renderer.shadowMap.needsUpdate=true;lastShadow=now;}
+          // Rigid architecture casts the depth map. Moving hull shadows travel with the water shader.
+          const shadowSun=lighting.azimuth.toFixed(2)+','+lighting.altitude.toFixed(2);
+          if(shadows&&lastShadowSun!==shadowSun){renderer.shadowMap.needsUpdate=true;lastShadowSun=shadowSun;}
           renderer.info.reset();renderer.render(scene,camera);renderedFrames++;if(!presented){presented=true;setStatus('ready');}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
         if(now-lastFpsReport>=1000){host.dataset.fps=String(Math.round(renderedFrames*1000/(now-lastFpsReport)));renderedFrames=0;lastFpsReport=now;}
-        if(still&&!changed&&!conversation){timer=setTimeout(requestFrame,30000);}
+        if(still&&!movingCamera&&!changed&&!conversation&&Math.abs(duskAmount-lighting.night)<.0001){timer=setTimeout(requestFrame,30000);}
         else requestFrame();
       }
       requestFrame();
       teardown=()=>{
-        clearTimeout(timer);wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
-        host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
+        window.removeEventListener('portfolio-palette-change',refreshPalette);clearTimeout(timer);wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
+        host.removeEventListener('dblclick',zoomHere);host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
-        sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());renderer.dispose();renderer.domElement.remove();
+        sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
       };
-    }).catch(()=>{if(!disposed)setStatus('fallback');});
+    }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
   },[streetView,variant]);
-  const reset=()=>{wake.current();stopEdgeTurn.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
+  const reset=()=>{wake.current();settings.current.aim=[...openingCamera.target];settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
-  return <section className="world" aria-label="Explore the waterfront: drag to look around, click a landmark to move closer; click a person or press Enter to hear from a passerby" tabIndex={0} onKeyDown={e=>{if(e.target!==e.currentTarget&&e.target!==mount.current)return;wake.current();if(e.key==='+'||e.key==='='){changeZoom(.25);e.preventDefault();}if(e.key==='-'){changeZoom(-.25);e.preventDefault();}if(e.key==='ArrowLeft'){settings.current.yaw-=.18;e.preventDefault();}if(e.key==='ArrowRight'){settings.current.yaw+=.18;e.preventDefault();}if(e.key==='Escape'){reset();setSpeech(null);}if(e.key==='Enter'&&(e.target===e.currentTarget||e.target===mount.current)){speak.current();e.preventDefault();}}}>
-    <div className="world-poster" aria-hidden="true"/><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
-    {focus?<div className="world-place" role="status">{landmarks[focus].label}</div>:overlay}
+  return <section className="world" aria-label="Explore the Embarcadero. Drag or use the arrow keys to rotate. Double-click a spot to zoom in, or use plus and minus. Escape returns to the opening view. Press Enter to hear from a passerby." tabIndex={0} onKeyDown={e=>{if(e.target!==e.currentTarget&&e.target!==mount.current)return;wake.current();if(e.key==='+'||e.key==='='){changeZoom(.25);e.preventDefault();}if(e.key==='-'){changeZoom(-.25);e.preventDefault();}if(e.key==='ArrowLeft'){settings.current.yaw-=.18;e.preventDefault();}if(e.key==='ArrowRight'){settings.current.yaw+=.18;e.preventDefault();}if(e.key==='ArrowUp'||e.key==='ArrowDown'){settings.current.tilt=clampTilt(settings.current.tilt+(e.key==='ArrowUp'?.07:-.07));e.preventDefault();}if(e.key==='Escape')reset();if(e.key==='Enter'&&(e.target===e.currentTarget||e.target===mount.current)){speak.current();e.preventDefault();}}}>
+    <div className="world-poster" data-state={status} data-still={paused} aria-hidden="true"><div className="world-arrival-fog"/></div><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
+    {overlay}{focus&&<div className="world-place" role="status">{landmarks[focus].label}</div>}
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}
     {status==='loading'&&<div className="world-loading" role="status"><span className="sr-only">Loading the waterfront</span></div>}
     {status==='fallback'&&fallback}
-    {status==='ready'&&<SceneControls focus={focus} visit={key=>{if(!key){reset();return;}setFocus(key);visitRef.current?.(key);}}
-      paused={paused} toggleMotion={toggleMotion} zoom={zoom} changeZoom={changeZoom} reset={reset}
-      preferences={preferences} update={saveScenePreferences}/>}
+    {status==='ready'&&<SceneControls paused={paused} toggleMotion={toggleMotion} zoom={zoom} changeZoom={changeZoom} reset={reset}/>}
 
   </section>;
 }

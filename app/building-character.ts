@@ -1,13 +1,33 @@
 import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
-import {center,footprintGeometry} from './sf-map.ts';
+import {center,footprintGeometry,mappedBuildings} from './sf-map.ts';
 
 type Building={id:number;name:string;p:number[][];h:number;minH?:number;parent?:number};
 type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
 export const characterBuildings=new Set(['Hotel Griffon','Harbor Court Hotel','Army and Navy Y.M.C.A. Building','Steuart Place','1 Hotel San Francisco','Pier 5','Ferry Station Post Office Building','Fireboat Station 35']);
 export const characterColors:Record<string,string>={'Hotel Griffon':'#c5b699','Harbor Court Hotel':'#ad8066','Army and Navy Y.M.C.A. Building':'#b58a70','Steuart Place':'#d0bfa5','1 Hotel San Francisco':'#b78870','Pier 5':'#d9ceb9','Ferry Station Post Office Building':'#d9ccb4','Fireboat Station 35':'#a6b6b4'};
-export function insideBuilding(x:number,z:number,points:number[][]){let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
+// The mapped footprints are shared read-only by the architecture and gardens passes.
+const surveyedBounds = new WeakMap(mappedBuildings.map(({p}) => {
+  const xs = p.map(point => point[0]), zs = p.map(point => point[1]);
+  return [p, { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) }] as const;
+}));
+
+export function insideBuilding(x:number,z:number,points:number[][]){
+  // Most facade samples are well outside neighboring buildings. Keep the exact
+  // polygon test for points near a mapped footprint and for generated rings.
+  const bounds = surveyedBounds.get(points);
+  if (bounds && (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ)) return false;
+  if (points.length === 0) return false;
+  let [previousX, previousZ] = points[points.length - 1], inside = false;
+  for (const point of points) {
+    const px = point[0], pz = point[1];
+    if ((pz > z) !== (previousZ > z) && x < (previousX - px) * (z - pz) / (previousZ - pz) + px) inside = !inside;
+    previousX = px;
+    previousZ = pz;
+  }
+  return inside;
+}
 
 /** Selective detail on exposed faces only; adjoining mapped parts hide shared walls. */
 export function buildingCharacter(b:Building,neighbors:Building[],font:Font){

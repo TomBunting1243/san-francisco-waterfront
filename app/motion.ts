@@ -7,7 +7,10 @@ export const ferryRoutes = [
 export function ferryPose(elapsed: number, index: number) {
   const route=ferryRoutes[index % ferryRoutes.length];
   const x=((route.start+elapsed*route.speed*route.direction+80)%160+160)%160-80;
-  return {x,z:route.z,y:-.47+Math.sin(elapsed*1.4+index)*.035,heading:route.direction===1?0:Math.PI};
+  const phase=(x+index*11)*Math.PI/80;
+  const z=route.z+Math.sin(phase)*1.1;
+  const slope=Math.cos(phase)*1.1*Math.PI/80;
+  return {x,z,y:-.47+Math.sin(elapsed*1.4+index)*.035,heading:Math.atan2(-slope*route.direction,route.direction)};
 }
 export function birdPose(elapsed:number,index:number){
   const t=elapsed*(.085+(index%3)*.01)+index*1.7;
