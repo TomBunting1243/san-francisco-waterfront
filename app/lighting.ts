@@ -31,3 +31,10 @@ export function pacificLighting(date = new Date()) {
     phase:altitude>=10?'day':altitude>=0?'golden-hour':altitude>=-6?'twilight':'night',
   };
 }
+
+/** Fixed solar studies of the same waterfront. Live always follows the Pacific clock. */
+export function sceneLighting(light:'live'|'day'|'sunset'|'night', now=new Date()) {
+  if(light==='live')return pacificLighting(now);
+  const hour={day:'20:00',sunset:'02:07',night:'06:00'}[light];
+  return pacificLighting(new Date('2026-09-10T'+hour+':00Z'));
+}

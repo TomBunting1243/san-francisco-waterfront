@@ -1,8 +1,12 @@
 /** Device-local motion preference shared by every city view. */
 export const motionKey='tom-city-motion-paused';
 export const motionEvent='tom-city-motion-change';
-export function readMotionPreference(){try{return localStorage.getItem(motionKey)==='true';}catch{return false;}}
-export function writeMotionPreference(paused:boolean){try{localStorage.setItem(motionKey,String(paused));}catch{/* Storage can be unavailable in private contexts. */}window.dispatchEvent(new Event(motionEvent));}
+let sessionPaused:boolean|undefined;
+export function readMotionPreference(){
+  try{const stored=localStorage.getItem(motionKey);if(stored!==null)return stored==='true';}catch{/* Use the session override below. */}
+  return sessionPaused??(typeof window!=='undefined'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+export function writeMotionPreference(paused:boolean){sessionPaused=paused;try{localStorage.setItem(motionKey,String(paused));}catch{/* Storage can be unavailable in private contexts. */}window.dispatchEvent(new Event(motionEvent));}
 export const clampZoom=(zoom:number)=>Math.max(.75,Math.min(2.75,zoom));
 /** A slow dwell activates edge orbit; controls and the title are outside its vertical band. */
 export function edgeOrbit(x:number,y:number){if(y<.22||y>.78)return 0;return x<.035?x/.035-1:x>.965?(x-.965)/.035:0;}

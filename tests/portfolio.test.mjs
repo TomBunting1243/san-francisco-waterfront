@@ -329,3 +329,28 @@ test('Ferry Plaza roof glazing remains visible after merging into front-sided ba
     assert.ok(mergeGeometries([new THREE.BoxGeometry().toNonIndexed(),roof]),'Roof cannot merge with the static architecture');
   }
 });
+
+test('sailboats remain afloat, clear the piers and keep to their own water',async()=>{
+  const {sailingPose}=await import('../app/motion.ts');
+  const {waterHeight}=await import('../app/water-surface.ts');
+  const piers=sfMap.piers.filter(p=>p.closed).map(p=>new THREE.Box2().setFromPoints(p.p.map(v=>new THREE.Vector2(...v))));
+  for(let t=0;t<360;t++){
+    const boats=[sailingPose(t,0),sailingPose(t,1)];
+    for(const boat of boats){
+      assert.equal(boat.y,waterHeight(boat.x,boat.z,t));
+      assert.ok(boat.z+1.4<27);
+      assert.ok(piers.every(pier=>pier.distanceToPoint(new THREE.Vector2(boat.x,boat.z))>1.4));
+    }
+    assert.ok(Math.hypot(boats[0].x-boats[1].x,boats[0].z-boats[1].z)>2.8);
+  }
+});
+
+test('light studies are deterministic and local time still tracks the Pacific sun',async()=>{
+  const {sceneLighting}=await import('../app/lighting.ts');
+  const date=new Date('2026-12-16T06:25Z');
+  assert.deepEqual(sceneLighting('live',date),pacificLighting(date));
+  for(const [preset,phase] of [['day','day'],['sunset','golden-hour'],['night','night']]){
+    assert.equal(sceneLighting(preset,date).phase,phase);
+    assert.deepEqual(sceneLighting(preset,date),sceneLighting(preset,new Date(0)));
+  }
+});

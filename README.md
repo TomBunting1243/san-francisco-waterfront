@@ -20,6 +20,7 @@ Build static files with `npm run build`; review that build with `npm run preview
 ## Explore
 
 - Drag to orbit; select a landmark to move closer.
+- Open **Scene** to choose local light, daylight, sunset or night, visit a landmark, or save graphics power. Light, motion and power preferences are remembered in this browser.
 - Use the zoom, reset and pause controls at the bottom right.
 - Focus the city and use the arrow keys to orbit, `+`/`−` to zoom, Escape to reset, and Enter to hear from a passerby.
 - On touch screens, use two fingers to zoom. Motion pauses when the tab is hidden and respects reduced-motion preferences.
