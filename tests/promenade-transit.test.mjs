@@ -35,3 +35,48 @@ test('passengers pass through actual open coach doors at the curb and travel bet
   const sheltered=scene.poses.getObjectByName('Steuart and Mission sheltered terminal'),bare=scene.poses.getObjectByName('2 Sutter terminal at Steuart and Don Chee');
   assert.equal(sheltered.children.length,2);assert.equal(bare.children.length,1);assert.equal(bare.position.y,.045);
 });
+
+test('Market terminal rider reads the timetable, returns to the bench and sits with planted feet',()=>{
+  const scene=createPromenadeTransit(),actor=scene.poses.getObjectByName('Market terminal timetable reader');
+  const market=scene.poses.getObjectByName('Steuart and Market sheltered terminal');
+  const canopy=market.getObjectByName('Muni shelter with wave roof, bench and information case');
+  const pad=market.getObjectByName('Terminal sidewalk beneath the surveyed shelter');
+  const shoes=[];actor.traverse(o=>{if(o.name==='Timetable reader shoe')shoes.push(o);});
+  assert.equal(shoes.length,2);
+  const at=t=>{scene.update(t);return actor.getWorldPosition(new THREE.Vector3());};
+  const local=(point)=>canopy.worldToLocal(point.clone());
+  const feet=()=>shoes.map(s=>s.getWorldPosition(new THREE.Vector3()));
+  const read=at(5);
+  assert.ok(local(read).distanceTo(new THREE.Vector3(1.58,0,.23))<.002);
+  assert.deepEqual(at(10).toArray(),read.toArray());
+  // At eye height the actual front of the information case is 0.72 m ahead.
+  const forward=actor.getWorldDirection(new THREE.Vector3());
+  const eye=read.clone().add(new THREE.Vector3(0,1.60*.06,0));
+  const sight=new THREE.Raycaster(eye,forward,0,.05).intersectObject(canopy)[0];
+  assert.ok(sight&&sight.distance/.06>.62&&sight.distance/.06<.80);
+  assert.ok(at(14).distanceTo(read)>.065);
+  at(17.1);const planted=feet();
+  for(const t of [17.4,18.1,18.75,28,58,60.5,61.55]){
+    at(t);feet().forEach((p,i)=>assert.ok(p.distanceTo(planted[i])<.0001));
+  }
+  at(30);
+  const hip=actor.getObjectByName('Timetable reader thigh').getWorldPosition(new THREE.Vector3());
+  const seat=new THREE.Raycaster(hip,new THREE.Vector3(0,-1,0),0,.012).intersectObject(canopy)[0];
+  assert.ok(seat&&Math.abs(local(seat.point).y-.5875)<.001);
+  assert.ok(hip.y-seat.point.y<.003);
+  const parts=[];scene.poses.traverse(o=>{if(o.isMesh)parts.push(o);});
+  const body=actor.getObjectByName('Painted passenger'),instance=parts.indexOf(body);
+  const drawn=new THREE.Matrix4();scene.batch.getMatrixAt(instance,drawn);
+  assert.ok(scene.batch.getVisibleAt(instance));
+  assert.ok(drawn.elements.every((v,i)=>Math.abs(v-body.matrixWorld.elements[i])<.00001));
+  at(30);const paused=new THREE.Matrix4();scene.batch.getMatrixAt(instance,paused);
+  assert.deepEqual(paused.elements,drawn.elements);
+  for(let t=0;t<=62;t+=.18){
+    const p=at(t),floor=new THREE.Raycaster(p.clone().add(new THREE.Vector3(0,.014,0)),new THREE.Vector3(0,-1,0),0,.02).intersectObject(pad)[0];
+    assert.ok(floor&&Math.abs(floor.point.y-p.y)<.0002);
+    const q=local(p);assert.ok(q.x> -1.6&&q.x<1.64&&q.z<=.91);
+    const r=at(t+.01);assert.ok(p.distanceTo(r)<.0015);
+  }
+  const fixed=at(33).toArray();assert.deepEqual(at(95).toArray(),fixed);
+  assert.ok(at(61.999).distanceTo(at(.001))<.0001);
+});

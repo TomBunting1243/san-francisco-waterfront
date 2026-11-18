@@ -1,7 +1,7 @@
 """Rebuild waterfront curb faces from cached SFMTA curbs/ROW and SF Public Works ramp inventory.
 Run: survey-env/bin/python scripts/import-curb-survey.py <reference-survey>
 """
-import json, math, sys
+import json, math, runpy, sys
 from pathlib import Path
 from shapely import STRtree, set_precision
 from shapely.affinity import affine_transform
@@ -36,8 +36,16 @@ def tangent(line,t):
 market=read(D/'market-street.json'); landscape=read(D/'waterfront-landscape.json')
 roadlines=[LineString(r['p']) for r in sf['roads'] if len(r['p'])>1 and r['kind'] not in ('pedestrian','platform','street_lamp')]
 roadIndex=STRtree(roadlines)
-focus=unary_union([box(-101,-15,26,2),LineString([(-1.5,-9),(-8.2,-54)]).buffer(2.1)])
-row=unary_union([p for v,p in projected('row.geojson') if p.intersects(focus) and v['LAYER'] in ('STREETS','PRIVATE','Streets_Pedestri')]).buffer(.04)
+# The Transbay grid is rotated relative to the Embarcadero. Carry each public
+# block face through the last junction (Harrison to Market, Beale to Spear).
+# Existing curbs, rights of way and crossings still control the final shape.
+transbay=Polygon([(-52.8,-8.4),(-2.6,-16.2),(-4.9,-31.4),(-55.1,-23.5)]).buffer(1.45)
+focus=unary_union([box(-101,-15,26,2),LineString([(-1.5,-9),(-8.2,-54)]).buffer(2.1),transbay])
+# SFMTA stores intersection polygons separately from street approaches. Their
+# layer is blank, even at large public junctions with painted crosswalks.
+row=unary_union([p for v,p in projected('row.geojson') if p.intersects(focus)
+                and v['LAYER'].strip() in ('STREETS','PRIVATE','Streets_Pedestri','')
+                and v['ST_TYPE'].strip() not in ('PLZ','TUNL')]).buffer(.04)
 motor=unary_union([r.buffer(1.26) for r in roadlines if r.intersects(focus.buffer(2))])
 buildings=unary_union([Polygon(b['p']).buffer(.025) for b in sf['buildings'] if len(b['p'])>2])
 parks=unary_union([Polygon(p['p']).buffer(-.035) for p in sf['parks'] if len(p['p'])>2])
@@ -45,7 +53,23 @@ rails=[LineString(p) for p in read(D/'embarcadero-tracks.json')['tracks']]+[Line
 trackCut=unary_union([l.buffer(.088) for l in rails])
 platforms=unary_union([Polygon(p).buffer(.025) for _,_,p in market['platforms']])
 allowed=focus.intersection(row).intersection(motor).difference(unary_union([buildings,parks,trackCut,platforms]))
+trace=runpy.run_path(str(Path(__file__).with_name('import-transbay-crossings.py')))
+bulb=trace['howard_beale_bulb']()
+addedPaving=Polygon(bulb['addedPaving'])
+oldEdge=LineString(bulb['oldEdge']).buffer(.014)
+beds=[Polygon(r) for r in bulb['beds']]
+# Two yellow detectable-warning panels visible on the orthophoto. Cut them
+# into the sloping concrete below, so the paint never floats or fights it.
+beale_center=next(center for name,center,_ in trace['sites'] if name=='Howard / Beale')
+def plate_ring(pixels):
+    return Polygon([trace['world'](beale_center,p) for p in pixels])
+tactile=unary_union([plate_ring([(438,345),(453,345),(454,360),(439,360)]),
+                     plate_ring([(407,407),(420,407),(420,423),(407,423)])])
 source=[(pr,set_precision(g,.001)) for pr,g in projected('curbs.geojson') if not pr['INT_Z'] and pr['STATUS']=='Active' and pr['CBB_TYPE'] in ('BLK','ISL') and g.intersects(focus.buffer(4))]
+source=[(pr,g.difference(oldEdge) if pr['OBJECTID'] in bulb['sourceIds'] else g) for pr,g in source]
+# Negative source ID denotes the curb independently traced on the aerial.
+# Its terminal driveway seam stays open. The old face gets no second cap.
+source.append(({'OBJECTID':-202401,'CBB_TYPE':'BLK'},LineString(bulb['edge'])))
 islands=list(polygonize(unary_union([g for pr,g in source if pr['CBB_TYPE']=='ISL'])))
 median=next(p for p in islands if p.covers(Point(0,-4.46)))
 plantingIsland=next(p for p in islands if p.covers(Point(4.0556,-3.2556)))
@@ -53,11 +77,15 @@ plazaIslands=unary_union([median,plantingIsland])
 allIslands=unary_union(islands)
 # Marked crossing centerlines sometimes stop short of the independent curb
 # trace. Extend the observed approach tangent by 2.5 m to find its curb cut.
-def crosswalk(points):
+def crosswalk(points,extension=.15):
     line=LineString(points);ax,az=tangent(line,0);bx,bz=tangent(line,line.length)
     a,b=points[0],points[-1]
-    return LineString([(a[0]-ax*.15,a[1]-az*.15),*points,(b[0]+bx*.15,b[1]+bz*.15)])
+    return LineString([(a[0]-ax*extension,a[1]-az*extension),*points,(b[0]+bx*extension,b[1]+bz*extension)])
 paths=[crosswalk(p) for _,p in market['crossings']]
+# Paint can end up to five metres short of the gutter at a Transbay bulb-out.
+# Use the same rectified orthophoto trace used to draw the crossing itself.
+transbay_axes=trace['crossing_axes']()
+paths.extend(crosswalk(leg['axis'],extension=.30) for legs in transbay_axes.values() for leg in legs)
 # Extend the independently traced 2024 paint bar lines to the gutter.
 for stripes in read(D/'promenade-crossings.json')['crossings']:
     def middle(bar):return tuple(sum(p[k] for p in bar)/len(bar) for k in (0,1))
@@ -73,10 +101,11 @@ for pr,pt in projected('waterfront-curb-ramps.geojson'):
 unique=[entries[0][1] for entries in ramps.values() if len(entries)==1]
 rampIndex=STRtree(unique)
 slabs=read(D/'survey-blocks.json')['streets']
-walks=unary_union([Polygon(v[0],v[1:]) for v in slabs['sidewalk']])
+walks=unary_union([addedPaving,*[Polygon(v[0],v[1:]) for v in slabs['sidewalk']]])
 out=[]; cutWalk=[]; lipCuts=[]; mapped=[]
 for props,src in source:
-    for line in pieces(src.intersection(allowed),'LineString'):
+    clipped=src if props['OBJECTID']==-202401 else src.intersection(allowed)
+    for line in pieces(clipped,'LineString'):
         line=line.simplify(.002)
         if line.length<.035:continue
         mid=line.interpolate(.5,normalized=True); road=roadlines[roadIndex.nearest(mid)]
@@ -126,9 +155,13 @@ def overrides(arr,mask):
             out[str(i)]=[plan(q) for q in pieces(set_precision(result,.001),'Polygon') if q.area>.00015]
     return out
 walkCut=unary_union(cutWalk+[plazaIslands.buffer(.001)])
-curbCut=unary_union(lipCuts+[plazaIslands.buffer(.025),trackCut.intersection(focus)])
+oldWalk=unary_union([Polygon(v[0],v[1:]) for v in slabs['sidewalk']])
+bealeWalk=addedPaving.difference(unary_union([walkCut,oldWalk,*beds]))
+curbCut=unary_union([oldEdge.buffer(.030)]+lipCuts+[plazaIslands.buffer(.025),trackCut.intersection(focus)])
 data={'sources':['https://services.sfmta.com/arcgis/rest/services/ROW/rightofway/MapServer/1','https://data.sf.gov/d/ch9w-7kih','https://sfpublicworks.org/services/permits/street-improvement'],
       'median':ring(median.exterior),'plantingIsland':ring(plantingIsland.exterior),'lines':out,'ramps':sorted(set(map(tuple,mapped))),
+      'bealeWalk':[plan(p) for p in pieces(set_precision(bealeWalk,.001),'Polygon') if p.area>.00015],
+      'bealeBeds':[plan(p) for p in beds],
       'overrides':{'curb':overrides(slabs['curb'],curbCut),'sidewalk':overrides(slabs['sidewalk'],walkCut)}}
 # Split the surveyed island at its actual outline, the pedestrian band and
 # ramp grade breaks. No paving triangle can bridge a street or rail opening.
@@ -138,6 +171,35 @@ def strip(near,far,w):
     return Polygon([(axis(near)-w,near),(axis(near)+w,near),(axis(far)+w,far),(axis(far)-w,far)])
 def tris(p):
     return [ring(t.exterior) for t in triangulate(p) if p.covers(t)]
+# Split only the apron triangles touched by the two warnings. Interpolate
+# within the original triangle to retain the measured drain-to-footway grade.
+beale_aprons={}
+for id,_,stations in out:
+    if id!=-202401:continue
+    for index,(a,b) in enumerate(zip(stations,stations[1:])):
+        back=.157 if min(a[4],b[4])<1 else .031
+        def profile(p,offset,y):return (p[0]+p[2]*offset,p[1]+p[3]*offset,y)
+        def inner(p):return profile(p,-.011,.0315+p[4]*.1524*.06)
+        corners=[inner(a),inner(b),profile(b,-back,.0451),profile(a,-back,.0451)]
+        if not Polygon([pt[:2] for pt in corners]).intersects(tactile):continue
+        surfaces=[]
+        for i,j,k in [(0,1,2),(0,2,3)]:
+            a0,b0,c0=[corners[h] for h in (i,j,k)]
+            tri=Polygon([pt[:2] for pt in (a0,b0,c0)])
+            if tri.area<1e-10:continue
+            dx,dz,dy=[b0[h]-a0[h] for h in range(3)]
+            ex,ez,ey=[c0[h]-a0[h] for h in range(3)]
+            def vertex(x,z):
+                t=((x-a0[0])*ez-(z-a0[1])*ex)/(dx*ez-dz*ex)
+                u=(dx*(z-a0[1])-dz*(x-a0[0]))/(dx*ez-dz*ex)
+                return [round(x,5),round(a0[2]+t*dy+u*ey,6),round(z,5)]
+            for yellow,region in [(0,tri.difference(tactile)),(1,tri.intersection(tactile))]:
+                for polygon in pieces(region,'Polygon'):
+                    for facet in triangulate(polygon):
+                        if polygon.covers(facet) and facet.area>1e-10:
+                            surfaces.append({'warning':bool(yellow),'points':[vertex(x,z) for x,z in list(facet.exterior.coords)[:3]]})
+        beale_aprons[index]=surfaces
+data['bealeAprons']=beale_aprons
 def grid(region):
     out=[]
     x0,y0,x1,y1=region.bounds

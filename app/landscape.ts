@@ -40,7 +40,7 @@ import {createFireboat} from './fireboat.ts';
 import {createDoradoFerry} from './dorado-ferry.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
-import {bakeBlocks} from './city-blocks.ts';
+import {bakeBlocks,freezeBakedArchitecture} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
@@ -77,6 +77,13 @@ import {addAppraisersBuilding} from './appraisers-building.ts';
 import {add101Mission} from './101-mission.ts';
 import {addBridgeview} from './bridgeview.ts';
 import {add221Main} from './221-main.ts';
+import {add360Spear} from './360-spear.ts';
+import {add160Spear} from './160-spear.ts';
+import {add211Main} from './211-main.ts';
+import {add300Mission} from './300-mission.ts';
+import {addParkTower} from './park-tower.ts';
+import {surveyedShopfrontFactory} from './surveyed-shopfronts.ts';
+import {addBechtelPlaza} from './bechtel-plaza.ts';
 import {add201Spear} from './201-spear.ts';
 import {addFortyFiveFremont} from './forty-five-fremont.ts';
 import {addMarketFlatiron} from './market-flatiron.ts';
@@ -141,6 +148,7 @@ export function createLandscape() {
     if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
   });
   sfMap.parks.forEach(park=>{
+    if(addBechtelPlaza(park,root))return;
     if(park.p.length>3&&park.name!=='Rincon Park'&&park.name!=='Embarcadero Plaza')mesh(footprintGeometry(park.p,.07),'#89a66c',0,.04,0);
   });
   sfMap.piers.filter(p=>p.closed&&p!==pierThreeFloat&&p!==fixedFerryApron&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,harborDatum.pierSlabThickness),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,harborDatum.pierDeck-harborDatum.pierSlabThickness,0));
@@ -205,6 +213,9 @@ export function createLandscape() {
     if(add388Beale(b,root,windowPositions))return;
     if(add101Mission(b,root,windowPositions)||addBridgeview(b,root,windowPositions,font))return;
     if(add221Main(b,root,windowPositions,font)||addAppraisersBuilding(b,root,windowPositions,font))return;
+    if(add360Spear(b,root,windowPositions)||add160Spear(b,root,windowPositions,font))return;
+    if(add211Main(b,root,windowPositions)||add300Mission(b,root,windowPositions))return;
+    if(addParkTower(b,root,windowPositions))return;
     if(addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
     if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
@@ -231,7 +242,7 @@ export function createLandscape() {
       const detail=shorelineFacade(b,detailedBuildings,color);root.add(detail.root);windowPositions.push(...detail.windows);return;
     }
     if(!reference&&!ribbed&&!hotel&&!historic&&!hasNeighborhoodDetail(b)&&!detailedWaterfrontNames.has(b.name)&&!characterBuildings.has(b.name)){
-      downtownBuilding(mesh,b,h,buildingParents.has(b.id));return;
+      downtownBuilding(surveyedShopfrontFactory(b,mesh),b,h,buildingParents.has(b.id));return;
     }
     if((ribbed||hotel)&&!reference)
       downtownBuilding(mesh,b,h,buildingParents.has(b.id),color);
@@ -743,6 +754,7 @@ export function createLandscape() {
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);
   ferries.forEach((_,i)=>boardingBrows.update(i,ferryPose(0,i)));
+  freezeBakedArchitecture(root,architectureChunks,moving);
   const result={ root, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bridgeLightMaterial, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   cityTemplate=result;
   return result;

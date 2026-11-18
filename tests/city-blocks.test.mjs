@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
-import {bakeBlocks} from '../app/city-blocks.ts';
+import {bakeBlocks,freezeBakedArchitecture} from '../app/city-blocks.ts';
 
 test('baking preserves native material vertex paint while unpainted materials keep their own tint',()=>{
   const panel=new THREE.PlaneGeometry(1,1);
@@ -71,4 +71,37 @@ test('billboard light packs beside daylight pigment only in batches that contain
   assert.deepEqual(Array.from(attribute.array.slice(vertices*3,vertices*3+3)),[230,128,64]);
   assert.equal(neighbor.name,unmarked.name);
   assert.ok(!neighbor.geometry.hasAttribute('signLight'));
+});
+
+test('baked references skip per-frame matrix work while attached scenery, live roots and coordinate queries stay valid',()=>{
+  const outer=new THREE.Group(),root=new THREE.Group(),arch=new THREE.Group(),empty=new THREE.Group(),marker=new THREE.Group();
+  outer.add(root);root.add(arch);arch.add(empty);empty.add(marker);
+  marker.name='Authoring reference';marker.position.set(2,3,4);empty.position.set(1,0,0);arch.position.x=4;
+  const chunk=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshBasicMaterial());
+  chunk.position.z=5;arch.add(chunk);
+  const animated=new THREE.Group(),joint=new THREE.Group(),light=new THREE.PointLight();
+  arch.add(animated,light);animated.add(joint);joint.name='Moving socket';
+  const nameBefore=root.getObjectByName(marker.name),ray=new THREE.Raycaster(new THREE.Vector3(4,0,9),new THREE.Vector3(0,0,-1));
+  root.updateMatrixWorld(true);const before=ray.intersectObject(chunk)[0].distance;
+  freezeBakedArchitecture(root,[chunk],new Set([animated]));
+  assert.equal(root.getObjectByName(marker.name),nameBefore);assert.equal(marker.parent,empty);
+  assert.equal(light.visible,true);assert.equal(animated.visible,true);assert.equal(joint.visible,true);
+  assert.equal(arch.visible,true);assert.equal(empty.visible,false);
+  let compose=0;
+  const update=marker.updateMatrix;
+  marker.updateMatrix=function(){compose++;return update.call(this);};
+  for(let i=0;i<12;i++)outer.updateMatrixWorld(true);
+  assert.equal(compose,0);
+  assert.equal(ray.intersectObject(chunk)[0].distance,before);
+  const copy=chunk.clone();const vignette=new THREE.Group();vignette.position.z=-2;vignette.add(copy);vignette.updateMatrixWorld(true);
+  assert.equal(copy.matrixWorld.elements[14],3);
+  outer.position.x=2;animated.position.z=3;joint.position.y=1.5;outer.updateMatrixWorld();
+  assert.equal(compose,1);assert.deepEqual(marker.matrixWorld.elements.slice(12,15),[9,3,4]);
+  assert.deepEqual(joint.matrixWorld.elements.slice(12,15),[6,1.5,3]);
+  marker.position.y+=1;
+  assert.deepEqual(marker.localToWorld(new THREE.Vector3()).toArray(),[9,4,4]);
+  assert.deepEqual(marker.worldToLocal(new THREE.Vector3(9,4,4)).toArray(),[0,0,0]);
+  ray.ray.origin.x+=2;assert.equal(ray.intersectObject(chunk)[0].distance,before);
+  empty.visible=true;marker.position.x++;outer.updateMatrixWorld(true);
+  assert.deepEqual(marker.matrixWorld.elements.slice(12,15),[10,4,4]);
 });

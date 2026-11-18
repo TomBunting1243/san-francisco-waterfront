@@ -2,20 +2,21 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { landmarks, type Landmark } from './landmarks';
 import { directSunVisibility, harborSunDirection, pacificLighting } from './lighting';
-import { harborChristmasSnow,readWaterfrontWeather } from './waterfront-weather';
+import { cityDate,cityWeather,type CityConditions } from './city-conditions';
+import { harborChristmasSnow,readWaterfrontWeather,type WaterfrontWeather } from './waterfront-weather';
 import SceneControls from './SceneControls';
 import { ferryPose, birdPose, sailingPose } from './motion';
 import {waterHeight} from './water-surface';
 import { streetcarPose } from './streets';
 import {updateTreeBatches} from './tree-batches';
-import { openingCamera, openingLens, openingYaw, orbitPitch, dampCameraAxis, moveWaterfrontFocus, harborLookHeight } from './camera';
+import { openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { starfieldData } from './sky';
 import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,createQualityMonitor,drawingPixelRatio} from './city-runtime';
 
 const clampTilt=(angle:number)=>Math.min(.72,Math.max(-.095,angle));
 
-export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[], overlay, fallback }: { onVisit?: (landmark: Landmark) => void; variant?: 'harbor'|'street'|'plaza'; passerbyLines?: readonly string[]; overlay?: ReactNode; fallback?: ReactNode }) {
+export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[], overlay, fallback, conditions }: { onVisit?: (landmark: Landmark) => void; variant?: 'harbor'|'street'|'plaza'; passerbyLines?: readonly string[]; overlay?: ReactNode; fallback?: ReactNode; conditions?: CityConditions }) {
   const streetView=variant!=='harbor';
   const mount = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
@@ -39,10 +40,17 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   const resetTravel=useRef(()=>{});
   const wake = useRef<()=>void>(()=>{});
   const reducedMotion = useRef(false);
+  const minutes=conditions?.minutes, weather=conditions?.weather;
+  const conditionsRef=useRef<CityConditions>({minutes,weather});
+  const applyConditions=useRef<()=>void>(()=>{});
+  useEffect(()=>{
+    conditionsRef.current={minutes,weather};
+    applyConditions.current();
+  },[minutes,weather]);
   useEffect(()=>{settings.current.paused=paused;settings.current.zoom=zoom;wake.current();},[paused,zoom]);
   useEffect(() => {
     const host = mount.current!;
-    const localLight=pacificLighting();
+    const localLight=pacificLighting(cityDate(new Date(),conditionsRef.current.minutes));
     if(!streetView&&host.parentElement){
       host.parentElement.dataset.solar=localLight.night>.55?'night':'day';
       if(localLight.night>.55)host.closest('main')?.setAttribute('data-harbor-light','dark');
@@ -90,8 +98,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const cameraAxes={yaw:{value:startYaw,velocity:0},tilt:{value:0,velocity:0},zoom:{value:1,velocity:0}};
       const economy=window.matchMedia('(prefers-reduced-data: reduce)').matches;
       let lighting=localLight;
-      let nightPrint=document.documentElement.dataset.palette==='ink';
-      const refreshPalette=()=>{nightPrint=document.documentElement.dataset.palette==='ink';lastLightingCheck=-Infinity;requestFrame();};
+      const shouldUseNightPrint=()=>conditionsRef.current.minutes===undefined&&document.documentElement.dataset.palette==='ink';
+      let nightPrint=shouldUseNightPrint();
+      const refreshPalette=()=>{nightPrint=shouldUseNightPrint();lastLightingCheck=-Infinity;requestFrame();};
       window.addEventListener('portfolio-palette-change',refreshPalette);
       let appliedFocalLength=0;
       let shadowRegion='',lastShadowSun='', nextDraw=0, timer:ReturnType<typeof setTimeout>|undefined;
@@ -103,7 +112,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const refreshPrint=()=>{lastVisual='';requestFrame();};
       window.addEventListener('waterfront-print-loaded',refreshPrint);
       let figureViewX=NaN,figureViewZ=NaN;
-      let holidaySnow=harborChristmasSnow(new Date());
+      let snowfall=false,customEpoch:number|undefined;
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
       const mistTint=new THREE.Color(.93,.85,.70);
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
@@ -115,24 +124,39 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let flagHeading=Math.atan2(flagDownwind.y,flagDownwind.x),targetFlagHeading=flagHeading;
       let flagWindKph=16,targetFlagWindKph=16,flagPhase=0,cloudClock=0;
       let chopTarget=.5,nextWeatherCheck=0,weatherSettling=false;
+      let latestObservation:WaterfrontWeather|null=null;
+      function applyWeather(){
+        const choice=conditionsRef.current.weather;
+        const reading=cityWeather(latestObservation,choice);
+        weatherTarget.set(reading?.cloudCover??0,reading?.rain??0,reading?.fog??0,
+          reading?.visibilityKm!=null?THREE.MathUtils.clamp(90+reading.visibilityKm*35,90,465):465);
+        const bearing=reading?.windFromDegrees;
+        if(bearing!=null){const [x,,z]=harborSunDirection(bearing,0);windTarget.set(x,z);}
+        else windTarget.set(.188,.982);
+        targetFlagWindKph=reading?.windKph??16;
+        if(bearing!=null||reading?.windKph==null)targetFlagHeading=Math.atan2(-windTarget.y,-windTarget.x);
+        chopTarget=reading?.windKph!=null?THREE.MathUtils.clamp(reading.windKph/32,.04,1):.5;
+        host.dataset.weather=choice?'custom':latestObservation?'local':'unavailable';
+        host.dataset.rain=String(reading?.rain??0);host.dataset.rainSource=choice?'custom':latestObservation?.rainSource??'unavailable';
+        if(choice)host.dataset.weatherChoice=choice;else delete host.dataset.weatherChoice;
+        if(!choice&&latestObservation){host.dataset.weatherAt=latestObservation.observedAt;host.dataset.weatherSource=latestObservation.station;}
+        else {delete host.dataset.weatherAt;delete host.dataset.weatherSource;}
+        host.dataset.precipitation=(choice==='snow'||(!choice&&snowfall))?'snow':weatherTarget.y>.004?'rain':'dry';
+        weatherSettling=true;lastVisual='';requestFrame();
+      }
       function refreshWeather(){
         void readWaterfrontWeather().then(observation=>{
           if(disposed)return;
-          weatherTarget.set(observation?.cloudCover??0,observation?.rain??0,observation?.fog??0,
-            observation?.visibilityKm!=null?THREE.MathUtils.clamp(90+observation.visibilityKm*35,90,465):465);
-          const bearing=observation?.windFromDegrees;
-          if(bearing!=null){const [x,,z]=harborSunDirection(bearing,0);windTarget.set(x,z);}
-          else windTarget.set(.188,.982);
-          targetFlagWindKph=observation?.windKph??16;
-          if(bearing!=null||observation?.windKph==null)targetFlagHeading=Math.atan2(-windTarget.y,-windTarget.x);
-          chopTarget=observation?.windKph!=null?THREE.MathUtils.clamp(observation.windKph/32,.04,1):.5;
-          host.dataset.weather=observation?'local':'unavailable';
-          host.dataset.rain=String(observation?.rain??0);host.dataset.rainSource=observation?.rainSource??'unavailable';
-          if(observation){host.dataset.weatherAt=observation.observedAt;host.dataset.weatherSource=observation.station;}
-          else {delete host.dataset.weatherAt;delete host.dataset.weatherSource;}
-          weatherSettling=true;lastVisual='';requestFrame();
+          latestObservation=observation;
+          if(!conditionsRef.current.weather)applyWeather();
         });
       }
+      applyConditions.current=()=>{
+        nightPrint=shouldUseNightPrint();
+        lastLightingCheck=presented?-Infinity:0;
+        applyWeather();
+      };
+      if(conditionsRef.current.weather)applyWeather();
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
       const starData=starfieldData();
       const starGeometry=new THREE.BufferGeometry();starGeometry.setAttribute('position',new THREE.BufferAttribute(starData.positions,3));starGeometry.setAttribute('color',new THREE.BufferAttribute(starData.colors,3));
@@ -290,7 +314,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       };
       document.addEventListener('visibilitychange',onVisibility);
       const observer=new IntersectionObserver(([entry])=>{intersecting=entry.isIntersecting;onVisibility();}); observer.observe(host);
-      const offset=new THREE.Vector3(), axis=new THREE.Vector3(0,1,0);
+      const offset=new THREE.Vector3();
       function animate(now:number) {
         frame=0;if(disposed||!visible||!rendering||document.hidden)return;
         const usingKeys=travelKeys.current.size>0||tapKeys.current.size>0;
@@ -329,11 +353,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const magnification=dampCameraAxis(cameraAxes.zoom,config.zoom,dt,4,reducedMotion.current);
         const lens=openingLens(width,height);
         const tilt=dampCameraAxis(cameraAxes.tilt,config.tilt,dt,pointer.down?9:4.5,reducedMotion.current);
-        const horizontal=lens.distance, vertical=lens.elevation;
-        const radius=Math.hypot(horizontal,vertical), angle=orbitPitch(yaw,tilt,Math.atan2(vertical,horizontal));
-        offset.set(0,Math.sin(angle)*radius,Math.cos(angle)*radius).applyAxisAngle(axis,yaw);camera.position.copy(target).add(offset);
+        orbitOffset(lens,yaw,tilt,offset);camera.position.copy(target).add(offset);
         const headroom=width/height>1.8?Math.min(1.5,(width/height-1.8)*2.7):0;
-        camera.lookAt(target.x,target.y+harborLookHeight(yaw,tilt,offset.y,Math.hypot(offset.x,offset.z),headroom),target.z);
+        camera.lookAt(target.x,target.y+headroom,target.z);
         // A lens change crops the same sightline and preserves foreground/background alignment.
         const focalLength=streetView?42:lens.focalLength*magnification;
         if(focalLength!==appliedFocalLength){
@@ -347,12 +369,17 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         stars.position.copy(camera.position);
         const lightChanged=lastLightingCheck===0;
         if(lightChanged||now-lastLightingCheck>30000||lastLightingCheck===0){
-          const localNow=new Date();holidaySnow=harborChristmasSnow(localNow);
+          const selection=conditionsRef.current;
+          const localNow=cityDate(new Date(),selection.minutes);
+          customEpoch=selection.minutes===undefined?undefined:localNow.getTime();
+          snowfall=selection.weather?selection.weather==='snow':harborChristmasSnow(localNow);
           const local=pacificLighting(localNow);
+          host.dataset.clock=String(local.hours).padStart(2,'0')+':'+String(local.minutes).padStart(2,'0');
+          host.dataset.precipitation=snowfall?'snow':weatherTarget.y>.004?'rain':'dry';
           if(!streetView&&host.parentElement)host.parentElement.dataset.solar=local.night>.55?'night':'day';
           lighting=nightPrint?{...local,sky:0x253b59,water:0x234854,sun:0x91b9dc,night:1,ambient:.87,sunIntensity:.83}:local;
           host.dataset.light=nightPrint?'night-print':lighting.phase;lastLightingCheck=now;skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);}
-        const lightEase=reducedMotion.current||lightChanged||!presented?1:1-Math.exp(-dt*4.2);
+        const lightEase=still||reducedMotion.current||lightChanged||!presented?1:1-Math.exp(-dt*4.2);
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
         const directSun=nightPrint?0:directSunVisibility(lighting.altitude,cloud,fog);
         sun.shadow.intensity=directSun;
@@ -368,7 +395,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.baySunset.value.set(lighting.direction[0],lighting.direction[2],0).normalize().z=glow;
           world.baySun.value.set(...lighting.direction,directSun);
         }
-        world.rainOnStone.value=holidaySnow?0:rain;
+        world.rainOnStone.value=snowfall?0:rain;
         const skyBackground=scene.background as InstanceType<typeof THREE.Color>;
         skyBackground.lerp(weatherTint.copy(skyColor).lerp(marineGray,Math.max(cloud*.63,fog*.82)*(1-duskAmount)),lightEase);
         const marineFog=scene.fog as InstanceType<typeof THREE.Fog>;
@@ -483,9 +510,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(!streetView)world.updateMarina();
         world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,boat.rotation.y));
         world.sailboats.forEach((boat,i)=>world.hullShadows[i+world.ferries.length].set(boat.position.x,boat.position.z,boat.rotation.y));
-        precipitation.update(camera,width,height,rain,windTarget,chopTarget,duskAmount,still||reducedMotion.current?0:frameMs/1000,holidaySnow?'snow':'rain',quality);
-        const marketRevision=variant==='street'?0:world.ferryMarket.update(Date.now(),still||reducedMotion.current);
-        const visual=[marketRevision,holidaySnow,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
+        precipitation.update(camera,width,height,rain,windTarget,chopTarget,duskAmount,still||reducedMotion.current?0:frameMs/1000,snowfall?'snow':'rain',quality);
+        const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
+        const visual=[marketRevision,snowfall,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
         const exploring=Math.hypot(target.x,target.z)>.03||Math.abs(magnification-1)>.07||Math.abs(Math.sin((yaw-startYaw)/2))>.06||Math.abs(tilt)>.06;
         if(host.parentElement?.dataset.exploring!==String(exploring)&&host.parentElement)host.parentElement.dataset.exploring=String(exploring);
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
@@ -497,7 +524,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             flagHeading+=Math.atan2(Math.sin(turn),Math.cos(turn))*settle;
             flagWindKph=THREE.MathUtils.lerp(flagWindKph,targetFlagWindKph,settle);
             flagDownwind.set(Math.cos(flagHeading),Math.sin(flagHeading));
-            const wet=holidaySnow?0:rain;
+            const wet=snowfall?0:rain;
             if(!still&&!reducedMotion.current)flagPhase+=dt*ferryFlagFlutterRate(flagWindKph,wet);
             updateFerryFlag(world.ferryFlag,flagPhase,flagDownwind,flagWindKph,wet);
           }
@@ -513,7 +540,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       requestFrame();
       teardown=()=>{
         window.removeEventListener('waterfront-print-loaded',refreshPrint);window.removeEventListener('keyup',releaseKey);window.removeEventListener('blur',clearKeys);clearKeys();resetTravel.current=()=>{};
-        window.removeEventListener('portfolio-palette-change',refreshPalette);clearTimeout(timer);wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
+        window.removeEventListener('portfolio-palette-change',refreshPalette);clearTimeout(timer);applyConditions.current=()=>{};wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
         host.removeEventListener('dblclick',zoomHere);host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('touchend',onTouchEnd);host.removeEventListener('touchcancel',onTouchEnd);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});

@@ -1,0 +1,54 @@
+import {useEffect,useId,useRef,useState} from 'react';
+import {sanFranciscoTime,timeMinutes,timeText,weatherLabels,type Conditions,type Weather} from './conditions.ts';
+
+export default function CustomConditions({value,change}:{value:Conditions;change:(value:Conditions)=>void}){
+  const [open,setOpen]=useState(false),[liveTime,setLiveTime]=useState(sanFranciscoTime);
+  const anchor=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),liveSwitch=useRef<HTMLInputElement>(null),panel=useId();
+  const live=value.minutes===undefined,custom=!live||value.weather!==undefined;
+  useEffect(()=>{
+    if(!open)return;
+    function dismiss(e:PointerEvent){
+      if(!anchor.current?.contains(e.target as Node))setOpen(false);
+    }
+    document.addEventListener('pointerdown',dismiss,true);
+    return()=>document.removeEventListener('pointerdown',dismiss,true);
+  },[open]);
+  useEffect(()=>{
+    if(!open||!live)return;
+    const timer=window.setInterval(()=>setLiveTime(sanFranciscoTime()),1000);
+    return()=>window.clearInterval(timer);
+  },[open,live]);
+  return <div className="standalone-custom" ref={anchor} onKeyDown={e=>{
+    if(open&&e.key==='Escape'){e.preventDefault();e.stopPropagation();setOpen(false);button.current?.focus();}
+  }} onBlur={e=>{
+    if(e.relatedTarget&&!e.currentTarget.contains(e.relatedTarget))setOpen(false);
+  }}>
+    <button type="button" ref={button} className="standalone-custom-trigger" aria-expanded={open} aria-controls={panel}
+      data-custom={custom} onClick={()=>{setLiveTime(sanFranciscoTime());setOpen(!open);}}>
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <path d="M2 6h4m4 0h8M2 14h8m4 0h4"/><circle cx="8" cy="6" r="2"/><circle cx="12" cy="14" r="2"/>
+      </svg>
+      Custom
+    </button>
+    <div id={panel} className="standalone-custom-panel" hidden={!open} role="group" aria-label="Custom conditions">
+      <div className="standalone-custom-time">
+        <label htmlFor={panel+'-time'}>San Francisco time</label>
+        <label className="standalone-custom-live">
+          <input ref={liveSwitch} type="checkbox" aria-label="Use live San Francisco time" checked={live} onChange={e=>{
+            setLiveTime(sanFranciscoTime());
+            change({...value,minutes:e.target.checked?undefined:timeMinutes(sanFranciscoTime())});
+          }}/> Live
+        </label>
+      </div>
+      <input id={panel+'-time'} type="time" disabled={live} value={value.minutes===undefined?liveTime:timeText(value.minutes)}
+        onChange={e=>{const minutes=timeMinutes(e.target.value);if(minutes!==undefined)change({...value,minutes});}}/>
+      <label className="standalone-custom-weather" htmlFor={panel+'-weather'}>Weather</label>
+      <select id={panel+'-weather'} value={value.weather??''} onChange={e=>change({...value,weather:(e.target.value||undefined) as Weather|undefined})}>
+        <option value="">Live San Francisco</option>
+        {Object.entries(weatherLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}
+      </select>
+      <button className="standalone-custom-reset" type="button" disabled={!custom}
+        onClick={()=>{setLiveTime(sanFranciscoTime());change({});liveSwitch.current?.focus();}}>Reset to live</button>
+    </div>
+  </div>;
+}

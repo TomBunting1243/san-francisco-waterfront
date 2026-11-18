@@ -60,3 +60,23 @@ test('production paving descends to the actual roadway at each end, without a co
     assert.ok(Math.abs(down(all,x,z)-ground)<.001,`surface at (${x}, ${z})`);
   }
 });
+
+test('Howard and Beale meets the actual painted landing, then widens past six planted beds to the driveway',async()=>{
+  const {addSurveyBlocks}=await import('../app/survey-blocks.ts');
+  const surface=new THREE.Group();
+  addSurveyBlocks(g=>{const mesh=new THREE.Mesh(g,material);surface.add(mesh);return mesh;});
+  function at(px,py){
+    const x=(px-300)/200,z=(py-300)/200;
+    const ray=new THREE.Raycaster(new THREE.Vector3(-27.825250+.988686*x+.150004*z,.16,-25.574915-.150004*x+.988686*z),new THREE.Vector3(0,-1,0));
+    return ray.intersectObjects(surface.children);
+  }
+  assert.equal(curb.bealeBeds.length,6);
+  for(const [x,z] of [[446,353],[414,415]]){
+    const [pad,next]=at(x,z);
+    assert.equal(new THREE.Color().fromBufferAttribute(pad.object.geometry.attributes.color,pad.face.a).getHexString(),'bd9c55');
+    assert.ok(pad.point.y>.0315&&pad.point.y<.045&&pad.point.y-next.point.y>.004);
+  }
+  assert.ok(Math.abs(at(446,335)[0].point.y-gutterTop)<.001);
+  assert.ok(Math.abs(at(690,419)[0].point.y-.045)<.0001,'no old curb running through the widened footway');
+  assert.ok(Math.abs(at(990,400)[0].point.y-.061)<.0001,'low planting occupies the widening');
+});

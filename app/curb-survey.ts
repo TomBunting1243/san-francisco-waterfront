@@ -17,6 +17,8 @@ type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number
 type Run=[number,number,number[][]];
 export const curbRuns=data.lines as Run[];
 export const medianPaving=data.medianPaving;
+export const bealeSidewalk=data.bealeWalk;
+export const bealeBeds=data.bealeBeds;
 export const westGradeCut=data.westCut, westParkPlans=data.westPark;
 export const marketAxis=(z:number)=>-.13+(z+1.813)*.177;
 export function westMarketGround(x:number,z:number){
@@ -47,7 +49,7 @@ type Vec=[number,number,number];
 export function addSurveyCurbs(mesh:MeshFactory){
   type Tile={p:number[];c:number[]};
   const tiles=new Map<string,Tile>(),palette=new Map<string,THREE.Color>();
-  function triangle(a:Vec,b:Vec,c:Vec,color:string,nx=0,ny=1,nz=0){
+  function triangle(a:number[],b:number[],c:number[],color:string,nx=0,ny=1,nz=0){
     const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
     const dot=nx*(uy*vz-uz*vy)+ny*(uz*vx-ux*vz)+nz*(ux*vy-uy*vx);
     if(Math.abs(dot)<1e-10)return;
@@ -57,7 +59,8 @@ export function addSurveyCurbs(mesh:MeshFactory){
     tile.p.push(...a,...(dot<0?c:b),...(dot<0?b:c));
     for(let k=0;k<3;k++)tile.c.push(pigment.r,pigment.g,pigment.b);
   }
-  for(const [,median,path] of curbRuns){
+  const apronCuts:Record<string,{warning:boolean;points:number[][]}[]>=data.bealeAprons;
+  for(const [source,median,path] of curbRuns){
     for(let i=1;i<path.length;i++){
       const start=path[i-1],end=path[i];
       const back=Math.min(start[4],end[4])<1?.157:.031;
@@ -69,6 +72,11 @@ export function addSurveyCurbs(mesh:MeshFactory){
       }
       const a=profile(start),b=profile(end);
       for(let j=0;j<4;j++){
+        const cut=source===-202401&&j===3?apronCuts[i-1]:undefined;
+        if(cut){
+          for(const {warning,points:[p,q,r]} of cut)triangle(p,q,r,warning?'#bd9c55':'#c9c5b3');
+          continue;
+        }
         const face=j===1,color=['#92928a','#a39f90','#d1cbb9',median?'#c4b8a3':'#c9c5b3'][j];
         const nx=face?start[2]:0,ny=face?.02:1,nz=face?start[3]:0;
         triangle(a[j],b[j],b[j+1],color,nx,ny,nz);triangle(a[j],b[j+1],a[j+1],color,nx,ny,nz);

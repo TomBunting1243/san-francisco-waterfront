@@ -116,3 +116,37 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   chunk.castShadow = chunk.receiveShadow = true;
   return chunk;
 }
+
+/** Finished block meshes have fixed local transforms. The emptied authoring
+ * groups keep their names, hierarchy and coordinate spaces for lookup. */
+export function freezeBakedArchitecture(root:THREE.Object3D,chunks:THREE.Mesh[],moving:ReadonlySet<THREE.Object3D>){
+  root.updateMatrixWorld(true);
+  for(const chunk of chunks)chunk.matrixAutoUpdate=false;
+
+  // Only ordinary groups or bare transform nodes containing more of the same
+  // can be skipped. A light, bone, LOD, camera, drawable or animation root
+  // makes its ancestor chain live regardless of its current visibility.
+  const empty=new Set<THREE.Object3D>();
+  function findEmpty(node:THREE.Object3D){
+    if(moving.has(node))return;
+    for(const child of node.children)findEmpty(child);
+    if(node!==root&&(node.constructor===THREE.Group||node.constructor===THREE.Object3D)
+      &&node.children.every(child=>empty.has(child)))empty.add(node);
+  }
+  findEmpty(root);
+  for(const branch of empty){
+    if(!branch.parent||empty.has(branch.parent))continue;
+    branch.visible=false;
+    const parentWorld=branch.parent.matrixWorld.clone();
+    // Three passes force=true down the entire graph even when the scene's
+    // recomposed transform is unchanged. Refresh the baked reference branch
+    // only when it actually inherits a different world transform. Explicit
+    // localToWorld/getWorldPosition still update their ancestry normally.
+    branch.updateMatrixWorld=function(){
+      const parent=this.parent;
+      if(!this.visible&&parent&&parentWorld.equals(parent.matrixWorld))return;
+      if(parent)parentWorld.copy(parent.matrixWorld);
+      THREE.Object3D.prototype.updateMatrixWorld.call(this,true);
+    };
+  }
+}

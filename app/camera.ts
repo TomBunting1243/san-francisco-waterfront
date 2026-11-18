@@ -19,16 +19,11 @@ export function openingYaw(width: number, height: number) {
   return width < 950 && height > width * 1.2 ? 1.4 : openingCamera.yaw;
 }
 
-/** Inland towers cross the low bay-side orbit. A continuous arc rises over their
- * roofline on the city side while preserving the same central subject. */
-export function orbitPitch(yaw:number, tilt:number, basePitch:number){
-  const inland=-Math.cos(yaw);
-  const u=Math.max(0,Math.min(1,(inland-.08)/.69));
-  const clearance=u*u*(3-2*u);
-  // Looking north from the south end, the low arc crosses the Bay Bridge deck.
-  const bridgePhase=(1-Math.cos(yaw-4.975))/(1-Math.cos(.29));
-  const aboveApproach=Math.max(0,1-bridgePhase);
-  return basePitch+.66*clearance+.19*aboveApproach*aboveApproach+tilt*(1-.60*clearance);
+/** Rotate about the visitor's focus with a fixed radius and the chosen pitch. */
+export function orbitOffset(lens:{elevation:number;distance:number},yaw:number,tilt:number,out:{set(x:number,y:number,z:number):unknown}){
+  const pitch=Math.atan2(lens.elevation,lens.distance)+tilt;
+  const radius=Math.hypot(lens.elevation,lens.distance),run=radius*Math.cos(pitch);
+  out.set(Math.sin(yaw)*run,Math.sin(pitch)*radius,Math.cos(yaw)*run);
 }
 
 export type CameraAxis = { value: number; velocity: number };
@@ -65,11 +60,4 @@ export function moveWaterfrontFocus(x:number,z:number,yaw:number,forward:number,
   const distance=5.2*dt/Math.max(1,Math.hypot(forward,strafe));
   return boundWaterfrontFocus(x+distance*(strafe*Math.cos(yaw)-forward*Math.sin(yaw)),
     z-distance*(forward*Math.cos(yaw)+strafe*Math.sin(yaw)));
-}
-
-/** As the orbit comes inland it clears the roofs. Lift the sightline so the
- * islands stay in the frame; a deliberate downward tilt can still study the quay. */
-export function harborLookHeight(yaw:number,tilt:number,eyeRise:number,run:number,headroom:number){
-  const u=clampTo((-Math.cos(yaw)-.04)/.76,0,1),ease=u*u*(3-2*u);
-  return headroom+(eyeRise-run*Math.tan(.11+Math.max(0,tilt)*.89)-headroom)*ease;
 }

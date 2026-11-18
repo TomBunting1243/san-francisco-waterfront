@@ -5,7 +5,7 @@ import { createLandscape } from '../app/landscape.ts';
 import { pacificLighting } from '../app/lighting.ts';
 import { sfMap, mappedBuildings, center } from '../app/sf-map.ts';
 import { streetPose } from '../app/streets.ts';
-import {openingCamera,orbitPitch} from '../app/camera.ts';
+import {openingCamera,orbitOffset} from '../app/camera.ts';
 import { bridgeLayout, bridgePoint } from '../app/bridge-layout.ts';
 
 test('detailed geometry stays finite and uses batched rendering',()=>{
@@ -16,22 +16,26 @@ test('detailed geometry stays finite and uses batched rendering',()=>{
   assert.ok(meshes-reliefMeshes<240,`Too many separately culled waterfront batches: ${meshes-reliefMeshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
   assert.equal(scene.hitTargets.length,3);assert.equal(scene.clockHands.length,4);
   for(const name of ['Hi Dive',"Red's Java House",'Pier 24','Pier 26','Pier 28','Ferry Building hall',...['1181064591','1181064592','1181064594'].map(id=>'Pier 3 boarding shelter '+id)])assert.ok(scene.root.getObjectByName(name),name);
-  // The inland offices and Bay Bridge approach used to cut through the user's
-  // orbit. Cast the sightline against actual batched architecture at the lowest tilt.
+  // A low orbit now passes behind the bridge and offices at a visitor's
+  // chosen pitch. The camera is free to pass through their geometry.
   scene.root.updateMatrixWorld(true);
-  const chunks=scene.architectureChunks.map(mesh=>({mesh,box:new THREE.Box3().setFromObject(mesh)}));
-  const target=new THREE.Vector3(...openingCamera.target),ray=new THREE.Raycaster();
+  const target=new THREE.Vector3(...openingCamera.target),ray=new THREE.Raycaster(),offset=new THREE.Vector3();
+  const chunks=scene.architectureChunks.map(mesh=>({mesh,box:mesh.geometry.boundingBox}));
   for(const lens of [openingCamera.desktop,openingCamera.mobile]){
-    const radius=Math.hypot(lens.distance,lens.elevation),base=Math.atan2(lens.elevation,lens.distance);
+    const radius=Math.hypot(lens.distance,lens.elevation);
+    const pitch=Math.atan2(lens.elevation,lens.distance)-.095;
+    let obstructed=false;
     for(let degrees=0;degrees<360;degrees+=3){
-      const yaw=degrees*Math.PI/180,pitch=orbitPitch(yaw,-.095,base);
-      const eye=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(radius).add(target);
-      ray.set(eye,target.clone().sub(eye).normalize());ray.far=radius-4.5;
-      const candidates=chunks.filter(c=>ray.ray.intersectsBox(c.box)).map(c=>c.mesh);
-      assert.equal(ray.intersectObjects(candidates,false).length,0,`Sightline at ${degrees}° on a ${lens.distance}-unit orbit`);
+      orbitOffset(lens,degrees*Math.PI/180,-.095,offset);
+      assert.ok(Math.abs(offset.y-radius*Math.sin(pitch))<1e-8);
+      assert.ok(Math.abs(offset.length()-radius)<1e-8);
+      if(!obstructed){
+        const eye=target.clone().add(offset);ray.set(eye,offset.clone().normalize().negate());ray.far=radius-4.5;
+        obstructed=ray.intersectObjects(chunks.filter(c=>ray.ray.intersectsBox(c.box)).map(c=>c.mesh),false).length>0;
+      }
     }
+    assert.ok(obstructed,'A building can pass through the sightline during a level orbit');
   }
-
 });
 test('Pacific daylight and standard time are independent of the visitor timezone',()=>{
   for(const [date,hour,phase] of [['2026-09-09T19:00:00Z',12,'day'],['2026-09-10T07:00:00Z',0,'night'],['2026-12-09T20:00:00Z',12,'day'],['2026-12-10T08:00:00Z',0,'night']]){

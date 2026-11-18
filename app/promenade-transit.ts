@@ -75,6 +75,57 @@ function stop(name:string,x:number,z:number,yaw:number,covered:boolean,route2:bo
   if(covered){const canopy=shelter();canopy.position.set(-2.45,0,-.62);root.add(canopy);}
   return root;
 }
+// Local metres on the raised pad of the Steuart/Market shelter. The same
+// rider checks its timetable and returns to the bench while waiting.
+function shelterRider(){
+  const {root}=streetPassenger('#987958','#ba947a');
+  root.name='Market terminal timetable reader';
+  const [torso,oldLeft,oldRight]=root.children;
+  root.remove(oldLeft,oldRight);
+  (oldLeft as THREE.Mesh).geometry.dispose();
+  const upperLength=.405,lowerLength=.382;
+  const legs=[-1,1].map(side=>{
+    const thigh=new StreetAssembly(),shin=new StreetAssembly(),shoe=new StreetAssembly();
+    thigh.box(0,-upperLength/2,0,.13,upperLength,.15,'#525d65');
+    shin.box(0,-lowerLength/2,0,.113,lowerLength,.135,'#56636a');
+    shoe.box(0,-.038,.045,.14,.076,.24,'#514d49');
+    const hip=thigh.bake('Timetable reader thigh'),knee=shin.bake('Timetable reader shin'),foot=shoe.bake('Timetable reader shoe');
+    hip.position.x=side*.087;knee.position.y=-upperLength;foot.position.y=-lowerLength;
+    root.add(hip);hip.add(knee);knee.add(foot);
+    return {side,hip,knee,foot};
+  });
+  // East end of the bench to the case, around the seat's front edge. Both
+  // ends lie between the shelter's side screens; the path stays on the pad.
+  const path=route([[-.52,.23],[-.52,.75],[-.28,.89],[1.28,.89],[1.58,.72],[1.58,.23]]);
+  const ease=(x:number)=>{const t=clamp(x);return t*t*(3-2*t);};
+  function update(elapsed:number){
+    const t=THREE.MathUtils.euclideanModulo(elapsed,62);
+    // 0–4 approach the timetable, 4–12 study it, 12–16 walk back.
+    // At the bench the rider turns, backs onto the seat, and plants both feet.
+    const go=t<4,back=t>=12&&t<16,walking=go||back;
+    const u=go?ease(t/4):t<12?1:back?1-ease((t-12)/4):0;
+    const p=path.pose(u*path.length);
+    let yaw=p.yaw+(back? -Math.PI/2:Math.PI/2);
+    const turn=(from:number,to:number,w:number)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*w;
+    if(t>=4&&t<12)yaw=turn(Math.PI,0,ease((t-10.9)/1.1));
+    if(t>=16)yaw=turn(Math.PI,0,ease((t-16)/1.1));
+    const seated=t<17.1?0:t<18.75?ease((t-17.1)/1.65):t<59.9?1:1-ease((t-59.9)/1.65);
+    const gait=walking?Math.sin(Math.PI*(go?t:t-12)/4):0;
+    root.position.set(p.x,0,p.z-.47*seated);root.rotation.y=yaw;
+    const hips=.817-.192*seated,bob=.013*gait*Math.sin(5.6*t)**2;
+    torso.position.y=hips-.817+bob;
+    for(const {side,hip,knee,foot} of legs){
+      const step=side*Math.sin(5.6*t)*gait;
+      const ankleHeight=.076+.085*Math.max(0,step)*gait;
+      const forward=.47*seated+.23*step,down=hips+bob-ankleHeight;
+      const reach=Math.min(upperLength+lowerLength-.00001,Math.hypot(forward,down));
+      const bend=Math.acos(THREE.MathUtils.clamp((reach**2-upperLength**2-lowerLength**2)/(2*upperLength*lowerLength),-1,1));
+      const thigh=Math.atan2(forward,down)+Math.atan2(lowerLength*Math.sin(bend),upperLength+lowerLength*Math.cos(bend));
+      hip.position.y=hips+bob;hip.rotation.x=-thigh;knee.rotation.x=bend;foot.rotation.x=thigh-bend;
+    }
+  }
+  return {root,update};
+}
 function coach(){
   const a=new StreetAssembly(),ink='#45565a',redBand='#ad504b';
   a.box(0,.45,0,11.98,.31,2.49,'#838c88');a.box(0,2.85,0,12.12,.29,2.51,cream);
@@ -118,6 +169,9 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
   const market=stop('Steuart and Market sheltered terminal',-3.0284,-8.8519,Math.PI+steuartYaw,true,false);
   market.children[1].position.set(.98,0,-1.30);
+  const reader=shelterRider();
+  const readerAnchor=new THREE.Group();readerAnchor.position.copy(market.children[1].position);
+  readerAnchor.add(reader.root);market.add(readerAnchor);
   const pad=new StreetAssembly();pad.box(.98,-.115,-1.2,5.9,.23,2.08,'#b8b5a2');
   market.add(pad.bake('Terminal sidewalk beneath the surveyed shelter'));poses.add(market);
   poses.add(stop('Steuart and Mission sheltered terminal',-12.2754,-8.6167,steuartYaw,true,false));
@@ -145,7 +199,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const {batch,sync}=batchTraffic(poses,material??model.body.material.clone(),'Batched Muni vehicles, passengers and street furniture');
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
   function update(elapsed:number){
-    conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
+    reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
     for(const [i,{group,leaves}] of coaches.entries()){
       const pose=busPose(elapsed+7+i*period/coaches.length),t=pose.t;
       // Only the waterfront segment has modeled transit and road grades. Vehicles outside it retain their route phase.

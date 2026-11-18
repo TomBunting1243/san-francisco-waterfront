@@ -4,7 +4,7 @@ I wanted a fun, little, interactive cityscape of the Embarcadero as the header i
 
 ![The San Francisco waterfront](public/city-poster.webp)
 
-Detailed representations of the the Ferry Building, Bay Bridge, surrounding architecture, people, parks, streetcars, ferries and a departing fireboat with a rotating water salute. Time of day, building lights and the clock follow the real time in San Francisco.
+Detailed representations of the Ferry Building, Bay Bridge, surrounding architecture, people, parks, streetcars, ferries and a departing fireboat with a rotating water salute. Time of day, building lights and the clock follow San Francisco time. Open **Custom** to choose a local time, weather, or both. Your choices are saved in this browser. **Reset to live** returns both controls to the waterfront clock and weather.
 
 ## Run locally
 

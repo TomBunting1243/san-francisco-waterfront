@@ -74,9 +74,13 @@ for _,median,line in curbs['lines']:
  for a,b in zip(line,line[1:]):
   back=.157 if min(a[4],b[4])<1 else .031
   qa,qb=edge(a,.0023),edge(b,.0023)
-  face=Polygon([qa,qb,edge(b,-back),edge(a,-back)]).buffer(0)
-  if not face.intersects(bounds):continue
-  faces.append(face)
+  if not Polygon([qa,qb,edge(b,-back),edge(a,-back)]).envelope.intersects(bounds):continue
+  # A very tight curb can fold over itself in plan. Mask the projections
+  # of the same triangles rendered by addSurveyCurbs, including its ramp.
+  for outer,inner in zip([.0023,0,-.011],[0,-.011,-back]):
+   for corners in [[edge(a,outer),edge(b,outer),edge(b,inner)],[edge(a,outer),edge(b,inner),edge(a,inner)]]:
+    face=Polygon(corners)
+    if face.area>0:faces.append(face)
   # Match the renderer's diagonal as each gutter quad can bend around a corner.
   for coords,heights in [([edge(a,.037),edge(b,.037),qb],[.032,.032,.0315]),([edge(a,.037),qb,qa],[.032,.0315,.0315])]:
    tri=Polygon(coords)
@@ -91,15 +95,43 @@ def triangles(region,plane):
   if tri.area<.00000008:continue
   result.append([[round(x,6),round(z,6),round(plane[0]*x+plane[1]*z+plane[2]+.00024,7)] for x,z in pts])
  return result
+def exposed_gutter(band,k,candidates):
+ # Consecutive gully triangles can overlap around a tight turn. The physical
+ # contact surface is the upper envelope, independent of STRtree query order.
+ for j in candidates:
+  if j==k or not band.intersects(gutters[j]):continue
+  delta=levels[j]-levels[k]
+  dx,dz,offset=delta
+  length=np.hypot(dx,dz)
+  if length<1.e-12:
+   if offset>1.e-12 or abs(offset)<=1.e-12 and j<k:band=band.difference(gutters[j])
+   continue
+  overlap=band.intersection(gutters[j])
+  if overlap.area<=0:continue
+  x0,z0,x1,z1=overlap.bounds
+  corners=[np.array([x0,z0]),np.array([x1,z0]),np.array([x1,z1]),np.array([x0,z1])]
+  heights=[dx*x+dz*z+offset for x,z in corners]
+  if max(heights)<=0:continue
+  if min(heights)>=0:
+   band=band.difference(gutters[j]);continue
+  above=[]
+  for i,a in enumerate(corners):
+   b=corners[(i+1)%4];ha,hb=heights[i],heights[(i+1)%4]
+   if ha>=0:above.append(a)
+   if ha*hb<0:above.append(a+(b-a)*ha/(ha-hb))
+  if len(above)>=3:band=band.difference(overlap.intersection(Polygon(above)))
+ return band
 paint=[]
 for bars in records:
  leg=[]
  for corners in bars:
   footprint=Polygon(corners).intersection(road)
   faces=[]
-  for k in tree.query(footprint,predicate='intersects'):
-   band=footprint.intersection(gutters[k])
-   faces+=triangles(band,levels[k]);footprint=footprint.difference(gutters[k])
+  candidates=tree.query(footprint,predicate='intersects')
+  for k in candidates:
+   band=exposed_gutter(footprint.intersection(gutters[k]),k,candidates)
+   faces+=triangles(band,levels[k])
+  footprint=footprint.difference(union_all([gutters[k] for k in candidates]))
   faces+=triangles(footprint,(0,0,.031))
   if faces:leg.extend(faces)
  paint.append(leg)

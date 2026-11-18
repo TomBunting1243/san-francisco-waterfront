@@ -70,15 +70,14 @@ test('native multi-draw keeps spatial culling, independent camera LOD and shadow
 
 test('production renderer submits a bounded subset on the fixed desktop and phone orbits',async(t)=>{
   const {createLandscape}=await import('../app/landscape.ts');
-  const {openingLens,openingYaw,openingCamera,orbitPitch}=await import('../app/camera.ts');
+  const {openingLens,openingYaw,openingCamera,orbitOffset}=await import('../app/camera.ts');
   const world=createLandscape(),draw=world.treeDraw;
   assert.ok(draw.isBatchedMesh&&world.treeBatches.length>30);
   const full=world.treeBatches.reduce((s,t)=>s+t.high.index.count/3,0);
   for(const [width,height] of [[1440,900],[390,844]]){
     const lens=openingLens(width,height),yaw=openingYaw(width,height),target=new THREE.Vector3(...openingCamera.target);
-    const angle=orbitPitch(yaw,0,Math.atan2(lens.elevation,lens.distance)),radius=Math.hypot(lens.elevation,lens.distance);
     const camera=new THREE.PerspectiveCamera(20,width/height,.35,1800);
-    camera.position.copy(target).add(new THREE.Vector3(Math.sin(yaw)*Math.cos(angle)*radius,Math.sin(angle)*radius,Math.cos(yaw)*Math.cos(angle)*radius));camera.lookAt(target);
+    orbitOffset(lens,yaw,0,camera.position);camera.position.add(target);camera.lookAt(target);
     for(const zoom of [1,20]){
       camera.setFocalLength(lens.focalLength*zoom);
       updateTreeBatches(world.treeBatches,camera,height);

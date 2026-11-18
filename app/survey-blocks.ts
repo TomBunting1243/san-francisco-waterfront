@@ -1,5 +1,6 @@
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
-import {addSurveyCurbs,replacementPavement} from './curb-survey.ts';
+import {addTransbayCrossings} from './transbay-crossings.ts';
+import {addSurveyCurbs,bealeBeds,bealeSidewalk,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
 
@@ -117,8 +118,22 @@ export function addSurveyBlocks(mesh:Surface){
     if(!tile)tiles.set(key,tile=new Tile());
     return tile;
   }
+  for(const plan of bealeSidewalk)at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
+  // Broad planted beds visible in the registered Beale transit-block aerial.
+  // A shallow raised crown darkens their edges without adding leaf cutouts.
+  for(const [index,bed] of bealeBeds.entries()){
+    const tile=at(bed),ring=bed[0],count=ring.length;
+    const cx=ring.reduce((sum,p)=>sum+p[0],0)/count,cz=ring.reduce((sum,p)=>sum+p[1],0)/count;
+    const inner=ring.map(([x,z])=>[cx+(x-cx)*.80,cz+(z-cz)*.74]);
+    const leaf=['#718062','#788569','#64775e'][index%3];
+    for(let i=0;i<count;i++){
+      const j=(i+1)%count,a=ring[i],b=ring[j],c=inner[i],d=inner[j];
+      tile.quad([a[0],.043,a[1]],[c[0],.061,c[1]],[d[0],.061,d[1]],[b[0],.043,b[1]],'#586c55');
+    }
+    tile.top([inner],.061,leaf);
+  }
   const walkTiles=new Map<number,Tile>();
-  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);
+  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
     for(const [i,polygon] of polygons.entries())for(const piece of replacementPavement(kind,i,polygon)){

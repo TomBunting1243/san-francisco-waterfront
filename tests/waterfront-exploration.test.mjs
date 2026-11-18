@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import {boundWaterfrontFocus,moveWaterfrontFocus,harborLookHeight,openingLens,orbitPitch} from '../app/camera.ts';
+import {boundWaterfrontFocus,moveWaterfrontFocus,openingLens,orbitOffset} from '../app/camera.ts';
 import {ferryPose,ferryCycle,ferryFleet} from '../app/motion.ts';
 import {boardingStops,buildFerryTerminal,createBoardingBrows} from '../app/ferry-terminal.ts';
 import {bayReliefPosition} from '../app/bay-relief.ts';
@@ -34,12 +34,10 @@ test('outward orbit frames the actual Bay islands and East Bay on desktop and ph
   for(const [width,height] of [[1440,900],[390,844]]){
     for(const [lon,lat,h] of [[-122.363,37.81,4],[-122.370,37.824,.3],[-122.27,37.81,4]]){
       const [x,z]=bayReliefPosition(lon,lat),yaw=Math.atan2(-x,-z);
-      const lens=openingLens(width,height),r=Math.hypot(lens.distance,lens.elevation);
-      const tilt=orbitPitch(yaw,0,Math.atan2(lens.elevation,lens.distance));
-      const run=r*Math.cos(tilt),rise=r*Math.sin(tilt);
+      const lens=openingLens(width,height);
       const c=new THREE.PerspectiveCamera(35,width/height,.35,1800);c.setFocalLength(lens.focalLength);
-      c.position.set(Math.sin(yaw)*run,2.4+rise,Math.cos(yaw)*run);
-      c.lookAt(0,2.4+harborLookHeight(yaw,0,rise,run,0),0);c.updateMatrixWorld();
+      orbitOffset(lens,yaw,0,c.position);c.position.y+=2.4;
+      c.lookAt(0,2.4,0);c.updateMatrixWorld();
       const image=new THREE.Vector3(x,h,z).project(c);
       assert.ok(Math.abs(image.x)<.99&&Math.abs(image.y)<.99&&image.z<1);
     }
