@@ -56,6 +56,9 @@ import {addOneMarketTower} from './one-market-towers.ts';
 import {installOrderedArchitecture} from './ordered-architecture.ts';
 import {addFiftyFremont} from './fifty-fremont.ts';
 import {addProvidianBuilding} from './providian-building.ts';
+import {addAveryBuilding} from './avery-building.ts';
+import {addPgeBuilding} from './pge-building.ts';
+import {addMarketFlatiron} from './market-flatiron.ts';
 import {addFolgerBuilding} from './folger-building.ts';
 import {addMarketHistoricFrontage} from './market-historic-frontages.ts';
 import {addBridgeDeck,bridgeLaneCenters} from './bridge-deck.ts';
@@ -178,6 +181,8 @@ export function createLandscape() {
       return;
     }
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
+    if(addMarketFlatiron(b,root,windowPositions))return;
+    if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
     if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
     if(addFolgerBuilding(b,root,windowPositions)||addHyattRegency(b,root,windowPositions))return;
     if(addFinancialDistrictBuilding(b,root,windowPositions))return;
