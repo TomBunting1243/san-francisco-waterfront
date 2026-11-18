@@ -51,6 +51,9 @@ import {buildApproachBlocks} from './approach-blocks.ts';
 import {hillsCoffeeTubes} from './coffee-neon.ts';
 import {buildApproachBillboards} from './approach-billboards.ts';
 import {addOneMarketTower} from './one-market-towers.ts';
+import {installOrderedArchitecture} from './ordered-architecture.ts';
+import {addFiftyFremont} from './fifty-fremont.ts';
+import {addProvidianBuilding} from './providian-building.ts';
 import {addFolgerBuilding} from './folger-building.ts';
 import {addMarketHistoricFrontage} from './market-historic-frontages.ts';
 import {addBridgeDeck,bridgeLaneCenters} from './bridge-deck.ts';
@@ -173,6 +176,7 @@ export function createLandscape() {
       return;
     }
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
+    if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
     if(addFolgerBuilding(b,root,windowPositions)||addHyattRegency(b,root,windowPositions))return;
     if(addFinancialDistrictBuilding(b,root,windowPositions))return;
     const harbor=harborBuilding(b,font);
@@ -582,6 +586,7 @@ export function createLandscape() {
   const treeDraw=createTreeDraw(treeBatches,canopyMaterial);if(treeDraw)root.add(treeDraw);
   const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.hasAttribute('facadeGrid')),architectureMaterial),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
+  for(const chunk of architectureChunks)installOrderedArchitecture(chunk);
   const illuminatedArchitecture=architectureMaterial.clone();
   for(const chunk of architectureChunks)if(chunk.geometry.hasAttribute('signLight'))chunk.material=illuminatedArchitecture;
   root.add(...architectureChunks);
