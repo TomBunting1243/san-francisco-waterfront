@@ -116,11 +116,66 @@ export function waterfrontLandmark(b:Building,font:Font){
       for(const dx of [-.30,.30]){box(.075,.87,.10,x+dx,.48,.085,ivory,front);box(.13,.065,.15,x+dx,.92,.10,ivory,front);}
     }
     for(let x=-width/2+.055;x<width/2;x+=.095)box(.04,.055,.12,x,.977,.095,stone,front);
-    // Shed roof strips, clerestory and cargo bays stay within its mapped envelope.
-    box(.45,.12,8.7,12.05,.64,6.15,'#a3aca2');box(.58,.045,8.8,12.05,.715,6.15,'#d3d0b9');
-    for(const {face,len} of faces){if(len<2||face.position.z<0)continue;
-      for(let x=-len/2+.25;x<len/2;x+=.65){pane(x,.30,.065,.40,.29,face);box(.04,.55,.085,x-.27,.29,.07,stone,face);box(.4,.021,.05,x,.30,.1,metal,face);}
-      box(len,.045,.10,0,.58,.055,ivory,face);
+    // The 2024 San Francisco orthophoto shows a long southern bank of panels
+    // and two shorter banks at the head. The south eave steps in along the slip.
+    const ridgeX=12.24, ridgeY=.747, pitch=.119;
+    const roofY=(x:number)=>ridgeY-Math.abs(x-ridgeX)*pitch;
+    const stations=[[-.35,11.12,13.195],[1.43,11.04,13.20],[5.41,11.025,13.209],[8.57,11.62,13.217],[11.71,11.62,13.224]];
+    const pitches=new Map<string,{color:string;name:string;positions:number[];indices:number[]}>();
+    function surface(corners:number[][],color:string,name:string){
+      if(!pitches.has(color))pitches.set(color,{color,name,positions:[],indices:[]});
+      const batch=pitches.get(color)!,offset=batch.positions.length/3;
+      batch.positions.push(...corners.flat());
+      batch.indices.push(offset,offset+1,offset+2,offset,offset+2,offset+3);
+    }
+    function roofSurface(corners:number[][],color:string,lift:number,name:string){
+      surface(corners.map(([x,z])=>[x,roofY(x)+lift,z]),color,name);
+    }
+    for(let i=1;i<stations.length;i++){
+      const [z0,s0,n0]=stations[i-1],[z1,s1,n1]=stations[i];
+      surface([[s0,b.h,z0],[s1,b.h,z1],[s1,roofY(s1),z1],[s0,roofY(s0),z0]],'#b9af96','Pier 1 south eave');
+      surface([[n0,b.h,z0],[n0,roofY(n0),z0],[n1,roofY(n1),z1],[n1,b.h,z1]],'#c5bea8','Pier 1 north eave');
+      roofSurface([[s0,z0],[s1,z1],[ridgeX,z1],[ridgeX,z0]],'#c0beb1',0,'Pier 1 south pitch');
+      roofSurface([[ridgeX,z0],[ridgeX,z1],[n1,z1],[n0,z0]],'#d6d2c3',0,'Pier 1 north pitch');
+    }
+    box(.035,.024,12.06,ridgeX,ridgeY+.006,5.68,'#dbd6c5');
+    // Orthophoto bounds in the local projection. Clear service aisles divide
+    // the racks, with access to the ridge and to the mechanical curb at the head.
+    const fields=[[-.09,.82,11.77,12.17],[.97,2.67,11.77,12.17],[2.81,6.10,11.77,12.17],[6.34,7.63,11.77,12.17],
+      [8.08,9.78,12.55,12.96],[10.02,11.66,12.55,12.76],[10.63,11.66,12.77,13.02],
+      [8.08,8.39,11.70,12.16],[8.68,10.85,11.70,12.06],[10.96,11.66,11.70,12.51]];
+    const panelColors=['#515f70','#56657a','#4f6073','#5c697b'];
+    for(const [near,far,low,high] of fields){
+      roofSurface([[low,near],[low,far],[high,far],[high,near]],'#a7aaa6',.009,'Pier 1 panel rack');
+      const rows=Math.max(1,Math.round((high-low)/.11)),cols=Math.max(1,Math.round((far-near)/.185));
+      for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+        const x0=low+(high-low)*row/rows+.006,x1=low+(high-low)*(row+1)/rows-.006;
+        const z0=near+(far-near)*col/cols+.006,z1=near+(far-near)*(col+1)/cols-.006;
+        roofSurface([[x0,z0],[x0,z1],[x1,z1],[x1,z0]],panelColors[(row*3+col*7)%4],.014,'Pier 1 solar module');
+      }
+    }
+    const [headZ,headSouth,headNorth]=stations[stations.length-1];
+    for(const [left,right] of [[headSouth,ridgeX],[ridgeX,headNorth]]){
+      surface([[left,b.h,headZ],[right,b.h,headZ],[right,roofY(right),headZ],[left,roofY(left),headZ]],'#cfc6ae','Pier 1 bay end');
+    }
+    for(const {color,name,positions,indices} of pitches.values()){
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+      geo.setIndex(indices);geo.computeVertexNormals();mesh(geo,color,0,0,0).name=name;
+    }
+    for(const z of [8.85,9.45,10.12]){
+      box(.19,.037,.34,12.33,ridgeY+.032,z,'#a5ada8');box(.205,.018,.36,12.33,ridgeY+.056,z,'#dfdcd0');
+    }
+    // Full-height, steel-framed glazing occupies the old freight openings.
+    for(const {face,len} of faces){if(len<1.15||face.position.z<0)continue;
+      const bays=Math.max(1,Math.round(len/.55)),spacing=len/bays;
+      for(let i=0;i<bays;i++){
+        const x=-len/2+(i+.5)*spacing,w=spacing*.79;
+        pane(x,.315,.059,w,.422,face);
+        for(const dx of [-w*.25,0,w*.25])box(.012,.428,.025,x+dx,.315,.085,'#728582',face);
+        for(const y of [.251,.411])box(w,.012,.025,x,y,.086,'#84918b',face);
+        box(.05,.47,.073,x-spacing*.47,.32,.054,stone,face);
+      }
+      box(len,.043,.088,0,.575,.053,ivory,face);
     }
   }
   return {root,windows};

@@ -39,6 +39,8 @@ function pointInPolygon(x:number,z:number,polygon:number[][]){
   return inside;
 }
 
+// The exact wharf polygon also contains the short landing necks for Gates B and E–G.
+export const fixedFerryApron=sfMap.piers.find(pier=>!pier.name&&pointInPolygon(-3.7,6.2,pier.p))!;
 export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
   const terminal=new THREE.Group();
   terminal.name='Ferry terminal boarding decks';root.add(terminal);
@@ -134,15 +136,19 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
       box(.20,.008,.046,stopX+(stopX>cx?-.112:.112),deckY+.004,stopZ,yellow,landing);
     }else{
-      for(const [x,z] of [to,[stopX-.14,stopZ]]){
-        cylinder(.034,.79,x,deckY-.445,z,fender,landing).name='Golden Gate hydraulic support';
+      for(const [x,z] of [to,[stopX-.15,stopZ]]){
+        const cap=deckY-.067, toe=waterSurface.level-.32;
+        cylinder(.031,cap-toe,x,(cap+toe)/2,z,'#778681',landing).name='Golden Gate hydraulic support';
+        box(.108,.053,.123,x,cap-.012,z,'#8c9a92',landing);
       }
       const stopSign=stopX>cx?1:-1;
       for(let i=0;i<5;i++){
         const z=stopZ+(i-2)*.077,x=stopX+.043*stopSign;
-        cylinder(.021,.57,x,waterSurface.level+.18,z,'#605e4e',landing);
-        box(.036,.39,.048,x+.016*stopSign,waterSurface.level+.196,z,fender,landing);
+        cylinder(.024,.675,x,waterSurface.level+.079,z,'#605e4e',landing);
+        box(.036,.274,.048,x+.017*stopSign,waterSurface.level+.222,z,fender,landing);
       }
+      box(.053,.056,.395,stopX+.042*stopSign,waterSurface.level+.068,stopZ,'#6b7e79',landing);
+      box(.086,.063,.395,stopX+.026*stopSign,waterSurface.level+.37,stopZ,'#7e887a',landing);
       box(.091,.009,.13,stopX-stopSign*.069,deckY+.004,stopZ,yellow,landing);
     }
     // Keep the handrail outside the two threshold passages and out of the cutouts
@@ -165,16 +171,74 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
     }
   }
-  const apron=sfMap.piers.find(pier=>!pier.name&&pointInPolygon(-3.7,6.2,pier.p))!;
-  const support=new THREE.Group();
-  support.name='Fixed ferry apron piles';terminal.add(support);
-  for(let z=3.37;z<10.56;z+=.53){
-    const edge=-1.19-(z-2.22)*.123;
-    for(const x of [edge-.17,edge-.64]){
-      if(!pointInPolygon(x,z,apron.p))continue;
-      cylinder(.059,1.0,x,-.586,z,'#788780',support);
-      box(.184,.12,.145,x,-.131,z,'#9da59a',support);
+  const boundary=fixedFerryApron.p, underside=apronY-.128;
+  mesh(footprintGeometry(boundary,.128),'#b9b8a6',0,underside,0,terminal).name='Surveyed fixed ferry apron';
+  const support=new THREE.Group();support.name='Fixed ferry apron piles';terminal.add(support);
+  const guard=new THREE.Group();guard.name='Fixed ferry apron edge guard';terminal.add(guard);
+  const tip=waterSurface.level-.32;
+  const snapped=new Map<string,PlanPoint>();
+  function pile(x:number,z:number){
+    if(!pointInPolygon(x,z,boundary)||z<-.14)return;
+    const key=Math.round(x/.14)+','+Math.round(z/.14);
+    if(snapped.has(key))return;
+    snapped.set(key,[x,z]);
+    const top=underside-.008;
+    cylinder(.043,top-tip,x,(top+tip)/2,z,'#8b9a90',support).name='Continuous fixed concrete pile';
+    box(.146,.071,.138,x,underside-.022,z,'#a4a99c',support).name='Pile-to-deck cap';
+    cylinder(.047,.306,x,waterSurface.level-.112,z,'#6b7d74',support).name='Splash-zone pile collar';
+  }
+  // Photograph the exposed bents as repeated rows. Keep the darker pile bases
+  // below the minimum animated water level, including at the shallow berth heads.
+  for(let z=.35;z<10.4;z+=.59){
+    for(let x=-14.46;x<6.44;x+=.78)pile(x,z);
+  }
+  const orient=Math.sign(boundary.reduce((s,[x,z],i)=>{
+    const [a,b]=boundary[(i+1)%boundary.length];return s+x*b-z*a;
+  },0));
+  for(let i=1;i<boundary.length;i++){
+    const a=boundary[i-1],b=boundary[i],dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz);
+    if(length<.035||Math.max(a[1],b[1])<1.57)continue;
+    const nx=-orient*dz/length,nz=orient*dx/length;
+    const at=(t:number,y:number,offset=0)=>new THREE.Vector3(a[0]+dx*t+nx*offset,y,a[1]+dz*t+nz*offset);
+    link(at(0,underside+.031,.011),at(1,underside+.031,.011),.056,'#a1aa9e',support,.057).name='Fixed apron recessed edge beam';
+    link(at(0,apronY-.009),at(1,apronY-.009),.019,'#c9c2ad',support,.027);
+    const intervals=Math.max(1,Math.ceil(length/.47));
+    for(let span=0;span<intervals;span++){
+      const loc=at((span+.5)/intervals,underside,.082);
+      if(length>.17)pile(loc.x,loc.z);
     }
+    const gaps=ferryConnections.flatMap(({from,to,width})=>[from,to].flatMap(([x,z])=>{
+      const t=((x-a[0])*dx+(z-a[1])*dz)/(length*length);
+      const nearest=at(t,0,.025),distance=Math.hypot(x-nearest.x,z-nearest.z);
+      const radius=width*.86;
+      if(distance>=radius)return [];
+      const slice=Math.sqrt(radius*radius-distance*distance)/length;
+      return [[Math.max(0,t-slice),Math.min(1,t+slice)]];
+    })).filter(([from,to])=>from<to).sort((a,b)=>a[0]-b[0]);
+    let guardStart=0;
+    for(const [stop,resume] of [...gaps,[1,1]]){
+      const run=(stop-guardStart)*length;
+      if(run>.042&&at((guardStart+stop)/2,0).z>2.17){
+        for(const height of [.026,.053,.077]){
+          link(at(guardStart,apronY+height,.025),at(stop,apronY+height,.025),.006,'#567b85',guard,.007).name='Human-scale apron handrail';
+        }
+        const spans=Math.ceil(run/.31);
+        for(let post=0;post<=spans;post++){
+          const upright=at(THREE.MathUtils.lerp(guardStart,stop,post/spans),apronY+.039,.025);
+          box(.008,.078,.008,upright.x,upright.y,upright.z,'#607f86',guard);
+        }
+      }
+      guardStart=Math.max(guardStart,resume);
+    }
+  }
+  for(let z=2.58;z<10.45;z+=.57){
+    const a=-7.003+(z-2.23)*.151,b=-1.288-(z-2.995)*.123;
+    link(new THREE.Vector3(a+.09,apronY+.0005,z),new THREE.Vector3(b-.135,apronY+.0005,z),.002,'#9d9b8b',terminal,.005);
+  }
+  for(const [x,z] of [[-4.78,8.7],[-5.60,4.92],[-4.13,9.58],[3.88,1.99],[-6.64,3.35]]){
+    box(.28,.014,.081,x,apronY+.034,z,'#ae9877',terminal);
+    box(.28,.037,.009,x,apronY+.055,z-.038,'#a89070',terminal);
+    for(const side of [-1,1])box(.015,.036,.069,x+side*.095,apronY+.017,z,'#65756e',terminal);
   }
   // Steuart Tower's aerial shows a long corrugated gable, with detached low kiosk roofs.
   // The water and waiting room photographs show the red lattice above the concrete posts.

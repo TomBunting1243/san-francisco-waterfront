@@ -3,6 +3,7 @@ import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {center} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
+import {centerTowerFacade} from './embarcadero-center.ts';
 
 type Building={id:number;name:string;p:number[][];h:number;minH?:number;parent?:number};
 type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
@@ -69,6 +70,7 @@ export function refineReferenceMassing<T extends Building>(buildings:T[]):T[]{
 }
 
 export function referenceArchitecture(b:Building,buildings:Building[],font:Font){
+  if(architectureProfile(b)==='center')return centerTowerFacade(b,buildings);
   const root=new THREE.Group(),windows:Pane[]=[],materials=new Map<string,THREE.MeshStandardMaterial>(),profile=architectureProfile(b),base=b.minH||0,[cx,cz]=center(b.p);
   root.name=`Reference architecture: ${b.name||b.id}`;
   const mat=(c:string)=>{if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.87}));return materials.get(c)!;};
@@ -175,19 +177,19 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
       }
       continue;
     }
-    const centerTower=profile==='center',gateway=profile==='gateway',floors=profile==='harrison'?5:profile==='steuart'?20:gateway?(b.h>4.5?25:22):profile==='gap'?(base===0?6:Math.max(1,Math.round((b.h-base)/.29))):Math.max(1,Math.round((b.h-base)/(centerTower?.237:.269)));
-    const step=(b.h-base-.06)/floors,bays=Math.max(1,Math.round(len/(centerTower?.16:gateway?.28:profile==='harrison'?.46:.32))),spacing=len/bays;
+    const gateway=profile==='gateway',floors=profile==='harrison'?5:profile==='steuart'?20:gateway?(b.h>4.5?25:22):profile==='gap'?(base===0?6:Math.max(1,Math.round((b.h-base)/.29))):Math.max(1,Math.round((b.h-base)/.269));
+    const step=(b.h-base-.06)/floors,bays=Math.max(1,Math.round(len/(gateway?.28:profile==='harrison'?.46:.32))),spacing=len/bays;
     for(let i=0;i<bays;i++){
       const x=-len/2+(i+.5)*spacing;
       for(let f=0;f<floors;f++){
-        const y=base+.03+(f+.5)*step;pane(x,y,spacing*(centerTower?.78:.75),step*(gateway?.64:.79));
+        const y=base+.03+(f+.5)*step;pane(x,y,spacing*.75,step*(gateway?.64:.79));
         if(gateway&&i%3===1&&exposed(x,y)){box(spacing*.88,.025,.10,x,y-step*.34,.080,cream,face);box(.012,step*.6,.07,x-spacing*.45,y,.071,cream,face);}
       }
-      if(centerTower||profile==='steuart'||profile==='harrison'||profile==='gap'){
-        for(let y=base+.14;y<b.h-.05;y+=.24)if(exposed(x-spacing/2,y))box(centerTower?.025:.033,Math.min(.24,b.h-y),centerTower?.055:.073,x-spacing/2,y,.047,cream,face);
+      if(profile==='steuart'||profile==='harrison'||profile==='gap'){
+        for(let y=base+.14;y<b.h-.05;y+=.24)if(exposed(x-spacing/2,y))box(.033,Math.min(.24,b.h-y),.073,x-spacing/2,y,.047,cream,face);
       }
     }
-    for(let f=1;f<floors;f++)band(base+.03+f*step,centerTower?.014:.026,profile==='harrison'?.12:.07,cream);
+    for(let f=1;f<floors;f++)band(base+.03+f*step,.026,profile==='harrison'?.12:.07,cream);
     band(b.h+.011,.033,.10,cream);
     if(profile==='steuart')for(let f=4;f<20;f+=4)band(.03+f*step,.037,.20,'#dfded0');
     if(profile==='harrison'){band(.42,.055,.14,cream);band(b.h+.055,.040,.17,cream);}

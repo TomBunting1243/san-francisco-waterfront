@@ -5,6 +5,7 @@ import { createLandscape } from '../app/landscape.ts';
 import { pacificLighting } from '../app/lighting.ts';
 import { sfMap, mappedBuildings, center } from '../app/sf-map.ts';
 import { streetPose } from '../app/streets.ts';
+import {openingCamera,orbitPitch} from '../app/camera.ts';
 import { bridgeLayout, bridgePoint } from '../app/bridge-layout.ts';
 
 test('detailed geometry stays finite and uses batched rendering',()=>{
@@ -14,7 +15,23 @@ test('detailed geometry stays finite and uses batched rendering',()=>{
   assert.ok(reliefMeshes>0 && reliefMeshes<110,'Regional terrain stays spatially batched');
   assert.ok(meshes-reliefMeshes<240,`Too many separately culled waterfront batches: ${meshes-reliefMeshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
   assert.equal(scene.hitTargets.length,3);assert.equal(scene.clockHands.length,4);
-  for(const name of ['Hi Dive',"Red's Java House",'Pier 24','Pier 26','Pier 28','Ferry Building hall'])assert.ok(scene.root.getObjectByName(name),name);
+  for(const name of ['Hi Dive',"Red's Java House",'Pier 24','Pier 26','Pier 28','Ferry Building hall',...['1181064591','1181064592','1181064594'].map(id=>'Pier 3 boarding shelter '+id)])assert.ok(scene.root.getObjectByName(name),name);
+  // The inland offices and Bay Bridge approach used to cut through the user's
+  // orbit. Cast the sightline against actual batched architecture at the lowest tilt.
+  scene.root.updateMatrixWorld(true);
+  const chunks=scene.architectureChunks.map(mesh=>({mesh,box:new THREE.Box3().setFromObject(mesh)}));
+  const target=new THREE.Vector3(...openingCamera.target),ray=new THREE.Raycaster();
+  for(const lens of [openingCamera.desktop,openingCamera.mobile]){
+    const radius=Math.hypot(lens.distance,lens.elevation),base=Math.atan2(lens.elevation,lens.distance);
+    for(let degrees=0;degrees<360;degrees+=3){
+      const yaw=degrees*Math.PI/180,pitch=orbitPitch(yaw,-.095,base);
+      const eye=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(radius).add(target);
+      ray.set(eye,target.clone().sub(eye).normalize());ray.far=radius-4.5;
+      const candidates=chunks.filter(c=>ray.ray.intersectsBox(c.box)).map(c=>c.mesh);
+      assert.equal(ray.intersectObjects(candidates,false).length,0,`Sightline at ${degrees}° on a ${lens.distance}-unit orbit`);
+    }
+  }
+
 });
 test('Pacific daylight and standard time are independent of the visitor timezone',()=>{
   for(const [date,hour,phase] of [['2026-09-09T19:00:00Z',12,'day'],['2026-09-10T07:00:00Z',0,'night'],['2026-12-09T20:00:00Z',12,'day'],['2026-12-10T08:00:00Z',0,'night']]){
@@ -147,7 +164,7 @@ test('ferry materials and wakes receive the same world-space haze as the waterfr
   world.residentPositions.forEach((anchor,i)=>{
     world.walkerHeads.getMatrixAt(i+22,matrix);position.setFromMatrixPosition(matrix);
     assert.ok(Math.abs(position.x-anchor.x)<.05);
-    assert.ok(position.y>anchor.y+.15 && position.y<anchor.y+.20);
+    assert.ok((position.y-anchor.y)/.06>1.38 && (position.y-anchor.y)/.06<1.73);
   });
 });
 
@@ -356,6 +373,14 @@ test('Ferry Plaza roof glazing remains visible after merging into front-sided ba
 test('sailboats remain afloat, clear the piers and keep to their own water',async()=>{
   const {sailingPose}=await import('../app/motion.ts');
   const {waterHeight}=await import('../app/water-surface.ts');
+  const {createDaySailer,daySailerContact}=await import('../app/sailing.ts');
+  const boat=createDaySailer('#386676'),bounds=new THREE.Box3().setFromObject(boat,true);
+  const size=bounds.getSize(new THREE.Vector3());
+  assert.ok(Math.abs(size.x/.06-6.86)<.001&&Math.abs(size.z/.06-2.44)<.001);
+  assert.ok(Math.abs(bounds.min.y/.06+1.16)<.001);
+  assert.ok(Math.abs(bounds.max.y/.06-(1.14+7.96+.10))<.001);
+  assert.equal(daySailerContact.halfLength,5.79*.06/2);
+  assert.equal(daySailerContact.halfBeam,2.44*.06/2);
   const piers=sfMap.piers.filter(p=>p.closed).map(p=>new THREE.Box2().setFromPoints(p.p.map(v=>new THREE.Vector2(...v))));
   for(let t=0;t<360;t++){
     const boats=[sailingPose(t,0),sailingPose(t,1)];
@@ -382,10 +407,10 @@ test('light studies are deterministic and local time still tracks the Pacific su
 test('waterfront signs face the appropriate façades at the mapped sites',async()=>{
   const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
   const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
-  const {harborBuilding,harborDiners}=await import('../app/harbor-architecture.ts');
+  const {harborBuilding,smallHarborBuildings}=await import('../app/harbor-architecture.ts');
   const font=new FontLoader().parse(fontData);
   const position=new THREE.Vector3(),normal=new THREE.Vector3();
-  assert.deepEqual(harborDiners.map(b=>b.id),[104600008,124659443]);
+  assert.deepEqual(smallHarborBuildings.map(b=>b.id).sort((a,b)=>a-b),[104600008,124659443,1181064591,1181064592,1181064594]);
   for(const [id,label] of [[104600008,'HI DIVE'],[124659443,"RED'S JAVA HOUSE"],[186071977,'PIER 24'],[104599978,'PIER 26'],[104599994,'PIER 28']]){
     const b=sfMap.buildings.find(b=>b.id===id);
     const {root}=harborBuilding(b,font);
@@ -404,21 +429,27 @@ test('waterfront signs face the appropriate façades at the mapped sites',async(
   }
 });
 
-test('Ferry Building front arcade is open to recessed glazing and the Port sign faces the water',async()=>{
+test('Ferry Building retains the five-bay portico, 23 east arches and open central breezeway',async()=>{
   const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
   const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
   const {ferryHall}=await import('../app/ferry-architecture.ts');
   const {root,towerX,towerZ}=ferryHall(new FontLoader().parse(fontData));
   root.updateMatrixWorld(true);
-  const centerPortal=root.getObjectByName('Central three-arch entrance');
-  const ray=new THREE.Raycaster(new THREE.Vector3(towerX,.4,-3),new THREE.Vector3(0,0,1));
-  const clear=ray.intersectObject(centerPortal,true);
-  assert.ok(clear.length>0);
-  assert.ok(clear[0].point.z>-1.4,'A projecting wall filled the central arch');
-  ray.ray.origin.x=towerX+2.63/6+.045;
-  assert.ok(ray.intersectObject(centerPortal,true)[0].point.z<-1.73,'Stone pier no longer separates the arch openings');
+  const centerPortal=root.getObjectByName('Central five-bay entrance');
+  const east=root.getObjectByName('Ferry Plaza elevation');
+  assert.equal(centerPortal.getObjectsByProperty('name','Pierced arcade panel').length,5);
+  assert.equal(east.getObjectsByProperty('name','East round-headed sash').length,23);
+  assert.equal(east.getObjectsByProperty('name','Reused cast-iron arcade column').length,24);
+  assert.equal(root.getObjectsByProperty('name','Ferry Hall end gable').length,6);
+  const through=new THREE.Raycaster(new THREE.Vector3(towerX,.266,-3),new THREE.Vector3(0,0,1),0,5);
+  assert.equal(through.intersectObject(root,true).length,0,'A wall or rail closed the central breezeway');
+  const pier=new THREE.Raycaster(new THREE.Vector3(towerX+.30,.32,-3),new THREE.Vector3(0,0,1));
+  assert.ok(pier.intersectObject(centerPortal,true)[0].point.z<-1.73,'The portico pillars separate the tall arches');
+  const bayRay=new THREE.Raycaster(new THREE.Vector3(1.58,.24,3),new THREE.Vector3(0,0,-1));
+  assert.ok(bayRay.intersectObject(east,true)[0].point.z<1.50,'The rear storefront must sit back under the cantilever');
   const coastSign=root.getObjectByName('PORT OF SAN FRANCISCO');
-  assert.ok(coastSign.position.z>1.4&&coastSign.position.y>1.3);
+  assert.ok(coastSign.position.z>1.4&&coastSign.position.y>1.16&&coastSign.getObjectByName('PORT OF').position.x<0);
+  assert.ok(coastSign.getObjectByName('SAN FRANCISCO').position.x>0);
   assert.ok(towerZ<-1);
 });
 
@@ -433,7 +464,7 @@ test('pedestrians stay in architectural scale, plant their feet and keep shadows
     people.update(i,1,3,0,1,ground,0,true);
     heads.getMatrixAt(i,matrix);
     const headTop=heads.geometry.boundingBox.clone().applyMatrix4(matrix).max.y;
-    assert.ok(headTop-ground>.173 && headTop-ground<.220,'adult height should stay close to building scale');
+    assert.ok(headTop-ground>.094 && headTop-ground<.115,'adult height should stay close to building scale');
   }
   for(const [direction,speed] of [[1,pedestrianPace],[-1,pedestrianPace*.87]]){
     const previous=[null,null];
@@ -477,12 +508,24 @@ test('drawn pedestrian contours face an orbiting camera with the same world foot
     normal.set(0,0,1).transformDirection(matrix);
     const sight=new THREE.Vector3(x-head.x,0,z-head.z).normalize();
     assert.ok(Math.abs(normal.dot(sight))>.995);
-    assert.ok(head.y>ground+.149 && head.y<ground+.19);
+    assert.ok((head.y-ground)/.06>1.38 && (head.y-ground)/.06<1.6);
     for(const i of [0,1])assert.ok(position(shoes,i).distanceTo(original[i])<.000003);
   }
   people.group.children.forEach(mesh=>assert.equal(mesh.geometry.type,mesh.name==='Foot contact shadows'?'PlaneGeometry':'ShapeGeometry'));
 });
 
+
+test("Cupid's Span matches the published above-ground envelope at architectural scale",async()=>{
+  const {cupidsSpan}=await import('../app/rincon-park.ts');
+  const sculpture=cupidsSpan();
+  sculpture.position.set(0,0,0);sculpture.rotation.set(0,0,0);
+  const bounds=new THREE.Box3().setFromObject(sculpture,true),size=bounds.getSize(new THREE.Vector3());
+  const feetToScene=.3048*.06;
+  assert.ok(Math.abs(size.x/feetToScene-143.75)<1);
+  assert.ok(Math.abs(bounds.max.y/feetToScene-64)<.5);
+  assert.ok(Math.abs(size.z/feetToScene-17)<1);
+  assert.ok(bounds.min.y<0,'the shaft and stave must penetrate the knoll');
+});
 
 test('Rincon Park and ferry routes stay continuous and meet the built walking surfaces',async()=>{
   const {walkingRouteLength,cyclingRouteLength,pedestrianPace,cyclingPace,waterfrontWalker,waterfrontCyclist}=await import('../app/waterfront-routes.ts');
@@ -580,7 +623,7 @@ test('stance anchors stay in place through a turn on the actual Rincon route',as
       crowd.update(0,p.x,p.z,elapsed,1,p.y,0,false,p.heading,poseAt);
       for(let foot=0;foot<2;foot++){
         const shoe=shoeAt(feet,foot), mark=shoeAt(contact,foot);
-        const grounded=Math.abs(shoe.y-p.y-.020*(1.65*.06*1.85/.548))<.000001;
+        const grounded=Math.abs(shoe.y-p.y-.020*(1.65*.06/.548))<.000001;
         if(grounded&&tracked[foot]){
           assert.ok(shoe.distanceTo(tracked[foot])<.000008);
           compared++;

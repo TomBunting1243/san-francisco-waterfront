@@ -1,13 +1,16 @@
+import {addSurveyShore,seawallAt} from './survey-shore.ts';
 import {createBayRelief} from './bay-relief.ts';
-import {createSouthBeach,southBeach} from './south-beach.ts';
+import {createSouthBeach} from './south-beach.ts';
+import {backgroundFrontage} from './background-frontages.ts';
+import {addSurveyBlocks,addSurveyFront,outsideSurveyRoads,surveyedHeight} from './survey-blocks.ts';
 import {hasShorelineFacade,shorelineFacade} from './shoreline-facades.ts';
 import * as THREE from 'three';
-import {streetPose,streetcarPose} from './streets.ts';
+import {streetPose,buildStreetcarTrack} from './streets.ts';
 import {createStreetcar} from './streetcar.ts';
 import {createPeople} from './people.ts';
-import {bicycleScale,bicycleWheelBottom,rinconGround,rinconLawn,rinconLawnHeight,rinconApproach,rinconExit,routes,routeWidth,walkSurface,waterfrontCyclist,waterfrontWalker} from './waterfront-routes.ts';
-import {harborBuilding,harborDiners,harborPublicPiers,ferryPortal} from './harbor-architecture.ts';
-import {buildFerryTerminal,ferryConnections} from './ferry-terminal.ts';
+import {bicycleScale,bicycleWheelBottom,rinconGround,rinconApproach,rinconExit,routes,routeWidth,walkSurface,waterfrontCyclist,waterfrontWalker} from './waterfront-routes.ts';
+import {harborBuilding,smallHarborBuildings,harborPublicPiers,ferryPortal} from './harbor-architecture.ts';
+import {buildFerryTerminal,ferryConnections,fixedFerryApron} from './ferry-terminal.ts';
 import {ferryHall,ferryPublicRealm} from './ferry-architecture.ts';
 import {cutPavingAtBasin} from './vaillancourt-plan.ts';
 import {createRememberedWaterfront,fountainPavingCut} from './remembered-waterfront.ts';
@@ -20,16 +23,19 @@ import {bakeBlocks} from './city-blocks.ts';
 import {waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
 import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
-import {waterfrontGardens} from './waterfront-gardens.ts';
-import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
+import {waterfrontGardens,waterfrontLandscape} from './waterfront-gardens.ts';
+import {createEmbarcaderoCenter} from './embarcadero-center.ts';
+import {cupidsSpan,knollHeight,rinconKnoll,rinconPoint} from './rincon-park.ts';
+import {waterfrontTree} from './waterfront-trees.ts';
 import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import {architectureProfile,referenceColor,refineReferenceMassing,referenceArchitecture} from './reference-architecture.ts';
-import {isMooredVessel,mooredVessel} from './moored-vessels.ts';
+import {isMooredVessel,mooredVessel,pierThreeFloat} from './moored-vessels.ts';
 import {windowGlow,applyWindowLighting} from './window-lighting.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
 import {buildApproachRoad} from './approach-road.ts';
 import {buildApproachBlocks} from './approach-blocks.ts';
+import {hillsCoffeeTubes} from './coffee-neon.ts';
 import {buildApproachBillboards} from './approach-billboards.ts';
 import {addBridgeDeck,bridgeLaneCenters} from './bridge-deck.ts';
 import {addBridgeAnchorages} from './bridge-anchorage.ts';
@@ -70,7 +76,7 @@ export function createLandscape() {
     return mesh(geo,color,x,y,z,parent);
   }
   function tree(x:number,z:number,s=1,ground=.08){
-    waterfrontTree(mesh,x,ground,z,Math.round(x*113+z*439),s*3.58);
+    waterfrontTree(mesh,x,ground,z,Math.round(x*113+z*439),s*2.0);
   }
   // Water and a long, softened waterfront. Nothing is a texture or image.
   const waterMaterial = new THREE.MeshStandardMaterial({ color: '#a5ccd1', roughness: .38, metalness: .15 });
@@ -80,21 +86,7 @@ export function createLandscape() {
   const bayHorizon=configureBayWater(waterMaterial,waterTime,hullShadows,nightInk);
   const water = new THREE.Mesh(new THREE.PlaneGeometry(waterSurface.size, waterSurface.size, waterSurface.columns, waterSurface.rows), waterMaterial);
   water.rotation.x = -Math.PI / 2; water.position.y = waterSurface.level; water.receiveShadow = true; root.add(water);
-  // The mapped shoreline and footprints establish the open spaces and street widths.
-  const ordered=[...sfMap.coasts].sort((a,b)=>a[0][0]-b[0][0]);
-  const coast=ordered.flat();
-  const shore=coast.filter(p=>p[0]>-99&&p[0]<112).sort((a,b)=>a[0]-b[0]);
-  // Coast vertices are retained in chain order below; no regular island rectangle.
-  const chain: number[][]=[];
-  const remaining=[...sfMap.coasts];let current=remaining.splice(remaining.findIndex(c=>c[0][0]<-99),1)[0];
-  if(current){chain.push(...current);while(remaining.length){const end=chain[chain.length-1];const next=remaining.findIndex(c=>Math.hypot(c[0][0]-end[0],c[0][1]-end[1])<.05);if(next<0)break;current=remaining.splice(next,1)[0];chain.push(...current.slice(1));}}
-  const mappedEdge=chain.length?chain:shore;
-  const southEdge=southBeach.shoreline;
-  // The surveyed South Beach chain joins the existing city at the first shared coast vertex.
-  const joined=Math.hypot(southEdge.at(-1)![0]-mappedEdge[0][0],southEdge.at(-1)![1]-mappedEdge[0][1])<.003;
-  const landEdge=joined?[...southEdge.slice(0,-1),...mappedEdge]:mappedEdge;
-  const landPoints=joined?[...landEdge,[112,-114],[-174.16,-135]]:[...landEdge,[112,-114],[-100,-114]];
-  mesh(footprintGeometry(landPoints,.72),'#b9bba9',0,-.73,0).name='Continuous mapped San Francisco shoreline';
+  addSurveyShore(mesh);
   function linePath(points:number[][],width:number,y:number,color:string){
     for(let i=1;i<points.length;i++){
       const [ax,az]=points[i-1],[bx,bz]=points[i],length=Math.hypot(bx-ax,bz-az);
@@ -102,15 +94,14 @@ export function createLandscape() {
       const m=box(width,.028,length,(ax+bx)/2,y,(az+bz)/2,color);m.rotation.y=Math.atan2(bx-ax,bz-az);
     }
   }
-  linePath(mappedEdge,1.1,.03,'#ddcfb7');
-  if(joined)linePath(southEdge,.34,.027,'#c7bca6');
-  [...sfMap.roads,...southBeach.roads].forEach(road=>{
+  addSurveyBlocks(mesh);
+  outsideSurveyRoads.forEach(road=>{
     const width=road.name.includes('Embarcadero')?1.02:road.name==='Market Street'?1.45:road.kind==='primary'?.8:.48;
     linePath(road.p,width,.04,'#889b9a');
     if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
   });
-  sfMap.parks.forEach(park=>{if(park.p.length>3)mesh(footprintGeometry(park.p,.07),park.name==='Rincon Park'?'#c2bfa8':park.name==='Embarcadero Plaza'?'#b7896f':'#89a66c',0,.04,0);});
-  sfMap.piers.filter(p=>p.closed&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,.18),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,-.12,0));
+  sfMap.parks.forEach(park=>{if(park.p.length>3&&park.name!=='Rincon Park')mesh(footprintGeometry(park.p,.07),park.name==='Embarcadero Plaza'?'#b7896f':'#89a66c',0,.04,0);});
+  sfMap.piers.filter(p=>p.closed&&p!==pierThreeFloat&&p!==fixedFerryApron&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,.18),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,-.12,0));
   const southernWaterfront=createSouthBeach(font,waterTime);
   root.add(southernWaterfront.root);
   windowPositions.push(...southernWaterfront.windows);
@@ -127,7 +118,7 @@ export function createLandscape() {
   for(const pier of sfMap.piers.filter(p=>p.closed)){
     const [cx,cz]=center(pier.p);if(cx< -90||cx>65||cz>30)continue;
     const timber=pier.name==='Pier 7';
-    if(pier.name.startsWith('Ferry Building Gate'))continue;
+    if(pier===pierThreeFloat||pier===fixedFerryApron||pier.name.startsWith('Ferry Building Gate'))continue;
     for(let e=1;e<pier.p.length;e++){
       const [ax,az]=pier.p[e-1],[bx,bz]=pier.p[e],len=Math.hypot(bx-ax,bz-az);if(len<.3)continue;
       const count=Math.max(1,Math.ceil(len/1.2));
@@ -153,8 +144,10 @@ export function createLandscape() {
   const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
   const detailedBuildings=refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing]));
   const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
-  const gardens=waterfrontGardens(detailedBuildings);root.add(gardens.root);
-  [...detailedBuildings,...harborDiners.filter(diner=>!detailedBuildings.some(b=>b.id===diner.id))].forEach(b=>{
+  const gardens=waterfrontGardens(detailedBuildings,font);root.add(gardens.root);
+  const centerComplex=createEmbarcaderoCenter(waterfrontLandscape.areas,waterfrontLandscape.paths,detailedBuildings);
+  root.add(centerComplex.root);windowPositions.push(...centerComplex.windows);
+  [...detailedBuildings,...smallHarborBuildings].forEach(b=>{
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
@@ -162,8 +155,12 @@ export function createLandscape() {
     }
     const harbor=harborBuilding(b,font);
     if(harbor){root.add(harbor.root);windowPositions.push(...harbor.windows);return;}
-    const [cx,cz]=center(b.p),h=b.h,minH=b.minH||0;
+    const [cx,cz]=center(b.p),minH=b.minH||0;
     const family=b.parent||b.id,reference=architectureProfile(b);
+    if(addSurveyFront(mesh,b.id,b.h))return;
+    const h=(!reference&&!hasNeighborhoodDetail(b)&&!hasShorelineFacade(b)&&!characterBuildings.has(b.name)&&!detailedWaterfrontNames.has(b.name)?surveyedHeight(b.id):undefined)??b.h;
+    const background=backgroundFrontage(b,h,font);
+    if(background){root.add(background.root);windowPositions.push(...background.windows);return;}
     const ribbed=b.name.includes('Embarcadero Center')||['Spear Tower','Steuart Tower'].includes(b.name);
     const hotel=b.name.includes('Hyatt Regency');
     const historic=['Southern Pacific Building','The Audiffred Building','Ferry Station Post Office Building','Pier 1'].includes(b.name);
@@ -409,74 +406,72 @@ export function createLandscape() {
     bridge.add(car);
     return car;
   });
-  const coffeeSign=new THREE.Group();root.add(coffeeSign);
-  // The steel sign frame rises from behind the plant's low brick parapet.
-  coffeeSign.position.set(-41.35,1.46,-6.94);coffeeSign.rotation.y=.148;
-  const coffeeMaterial=new THREE.MeshStandardMaterial({color:'#cf5545',emissive:'#f14a2d',emissiveIntensity:0,roughness:.5});
-  const coffeeLetters=lettering('HILLS BROS COFFEE',.43,0,.31,.03,'#cf5545',coffeeSign);coffeeLetters.material=coffeeMaterial;
-  const signWidth=coffeeLetters.geometry.boundingBox!.max.x-coffeeLetters.geometry.boundingBox!.min.x;
-  coffeeSign.scale.x=Math.min(1,5.9/signWidth);
-  for(let x=-signWidth/2;x<=signWidth/2;x+=.52){
-    pole(new THREE.Vector3(x,0,0),new THREE.Vector3(x,.85,0),.012,'#738578',coffeeSign);
-    pole(new THREE.Vector3(x,0,-.44),new THREE.Vector3(x,.77,0),.014,'#738578',coffeeSign);
+  const coffeeSign=new THREE.Group();coffeeSign.name='Hills Bros Coffee rooftop neon';root.add(coffeeSign);
+  coffeeSign.position.set(-41.10,1.46,-6.35);coffeeSign.rotation.y=.148;
+  const coffeeMaterial=new THREE.MeshStandardMaterial({color:'#d93825',emissive:'#ff361a',emissiveIntensity:0,roughness:.44});
+  const tubes=hillsCoffeeTubes(),signWidth=tubes.boundingBox!.max.x-tubes.boundingBox!.min.x;
+  const coffeeLetters=mesh(tubes,'#d93825',0,.32,.035,coffeeSign);coffeeLetters.name='HILLS BROS COFFEE';coffeeLetters.material=coffeeMaterial;
+  // Low roof monitor and angled steel backstays below the exposed neon.
+  const monitor=new THREE.Shape();monitor.moveTo(-.29,0);monitor.lineTo(.29,0);monitor.lineTo(.29,.092);monitor.lineTo(0,.245);monitor.lineTo(-.29,.092);monitor.closePath();
+  const monitorRoof=mesh(new THREE.ExtrudeGeometry(monitor,{depth:signWidth+.10,bevelEnabled:false}),'#986b52',-(signWidth+.10)/2,0,-.21,coffeeSign);monitorRoof.rotation.y=Math.PI/2;
+  for(let i=0;i<=8;i++){
+    const x=signWidth*(i/8-.5);
+    pole(new THREE.Vector3(x,.05,-.03),new THREE.Vector3(x,.84,-.03),.007,'#716e61',coffeeSign);
+    pole(new THREE.Vector3(x,.07,-.48),new THREE.Vector3(x,.74,-.03),.008,'#757467',coffeeSign);
   }
-  for(const y of [.2,.72])box(signWidth,.025,.025,0,y,-.025,'#758577',coffeeSign);
+  for(const y of [.28,.45,.77])box(signWidth,.014,.018,0,y,-.04,'#726a5a',coffeeSign);
   // Rincon Park, a curved lawn set between boulevard and bay.
-  const sculpture=new THREE.Group();sculpture.position.set(-32.29,rinconLawnHeight(-1.16),-1.16);sculpture.scale.setScalar(.43);sculpture.rotation.y=-.13;root.add(sculpture);
-  const bowCurve=new THREE.CatmullRomCurve3([new THREE.Vector3(-3.8,.05,0),new THREE.Vector3(-2.9,2.7,0),new THREE.Vector3(-1.1,4.1,0),new THREE.Vector3(1.4,3.7,0),new THREE.Vector3(3.8,.05,0)]);
-  mesh(new THREE.TubeGeometry(bowCurve,40,.17,8,false),'#d69b32',0,0,0,sculpture);
-  pole(new THREE.Vector3(-3.8,.08,.05),new THREE.Vector3(.3,2,.05),.025,'#645244',sculpture);
-  pole(new THREE.Vector3(.3,2,.05),new THREE.Vector3(3.8,.08,.05),.025,'#645244',sculpture);
-  // Red fletching above the buried arrow: the recognizable Cupid's Span silhouette.
-  pole(new THREE.Vector3(.1,0,.1),new THREE.Vector3(1.7,6,.1),.105,'#bb5334',sculpture);
-  const featherShape=new THREE.Shape();featherShape.moveTo(0,0);featherShape.lineTo(-.92,.55);featherShape.lineTo(-1.18,2.05);featherShape.lineTo(-.14,1.38);featherShape.lineTo(.85,2.1);featherShape.lineTo(.83,.8);featherShape.closePath();
-  const arrowFeather=mesh(new THREE.ExtrudeGeometry(featherShape,{depth:.12,bevelEnabled:false}),'#ce5035',1.3,4.6,.05,sculpture);arrowFeather.rotation.z=-.26;
-  // The tilted grass plane meets continuous paths and low concrete seat walls.
-  const lawn=footprintGeometry(rinconLawn,.13), lawnPosition=lawn.attributes.position;
-  for(let i=0;i<lawnPosition.count;i++)lawnPosition.setY(i,lawnPosition.getY(i)-.13+rinconLawnHeight(lawnPosition.getZ(i)));
-  lawn.computeVertexNormals();
-  mesh(lawn,'#829b61',0,0,0).name='Rincon tilted lawn';
-  mesh(walkSurface(routes.rincon,routeWidth.rincon,.11),'#d4cbb7',0,0,0).name='Rincon shared promenade';
-  for(const approach of [rinconApproach,rinconExit])mesh(walkSurface(approach,.48,.10),'#d4cbb7',0,0,0);
-  function shrub(x:number,z:number,r=.12){
-    const bush=mesh(new THREE.IcosahedronGeometry(r,1),'#849472',x,rinconLawnHeight(z)+r*.36,z);bush.scale.set(1,.68,1);
+  const gardenBorder=[[312,206],[310,178],[342,147],[376,129],[412,128],[495,140],[569,160],[640,183],
+    [714,201],[769,213],[760,225],[719,237],[675,237],[644,239],[602,216],[552,192],[502,177],[462,166],
+    [419,164],[378,175],[343,191]].map(([u,v])=>rinconPoint(u,v));
+  mesh(footprintGeometry(gardenBorder,.009),'#9a9878',0,.108,0);
+  for(const bed of waterfrontLandscape.areas.filter(a=>[32862580,1164309758,1164309759,1164309760].includes(a.id))){
+    mesh(footprintGeometry(bed.p,.008),'#889969',0,.109,0);
   }
-  const seatingCurves=[
-    [[-36.01,.64],[-35.70,.59],[-35.31,.53],[-34.94,.57]],
-    [[-33.81,.43],[-33.38,.36],[-32.94,.32],[-32.58,.34]],
-    [[-31.34,.18],[-30.93,.105],[-30.44,.07],[-30.10,.09]],
-    [[-29.08,-.078],[-28.73,-.14],[-28.32,-.18],[-27.99,-.16]],
-  ];
-  for(const points of seatingCurves){
-    const curve=new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,.198,z)));
-    mesh(walkSurface(curve,.107,.075),'#d3cbb4',0,0,0).name='Rincon concrete seat wall';
-    for(const t of [.20,.47,.75]){
-      const p=curve.getPointAt(t);
-      shrub(p.x,p.z-.104,.066);
+  for(const [u,v] of [[401,148],[415,145],[432,146],[451,150],[473,154],[494,159],[516,166],
+    [540,175],[567,181],[650,209],[666,213],[685,220],[713,220],[732,218]]){
+    const [x,z]=rinconPoint(u,v-4.5);
+    const shrub=mesh(new THREE.IcosahedronGeometry(.06,1),'#828968',x,.13,z);shrub.scale.set(1.55,.59,1);
+  }
+  root.add(cupidsSpan());
+  mesh(rinconKnoll(),'#829b61',0,0,0).name='Rincon lawn knoll';
+  mesh(walkSurface(routes.rincon,routeWidth.rincon,.05),'#d4cbb7',0,0,0).name='Rincon shared promenade';
+  for(const approach of [rinconApproach,rinconExit])mesh(walkSurface(approach,.24,.06),'#d4cbb7',0,0,0);
+  // The wave-shaped seat walls sit in the scallops along the water side of the actual lawn.
+  for(const points of [[[369,254],[378,254],[389,255],[401,258]],[[482,250],[498,250],[514,248],[530,243]],
+    [[558,238],[575,237],[589,237],[605,240]]]){
+    const curve=new THREE.CatmullRomCurve3(points.map(([u,v])=>{
+      const [x,z]=rinconPoint(u,v);return new THREE.Vector3(x,rinconGround+.027,z);
+    }));
+    mesh(walkSurface(curve,.038,.065),'#cbbda3',0,0,0).name='Rincon concrete seat wall';
+    for(const t of [.16,.33,.52,.70,.86]){
+      const p=curve.getPointAt(t),r=.031;
+      const bush=mesh(new THREE.IcosahedronGeometry(r,1),'#778a67',p.x,knollHeight(p.x,p.z-.045)+r*.32,p.z-.045);
+      bush.scale.set(1.6,.74,1);
     }
   }
-  for(const [x,z] of [[-38.1,-1.5],[-25.7,-.2]])tree(x,z,.36);
-  // Palms occupy the boulevard median, leaving the paths and lawn open.
-  for(let x=-45;x<-23;x+=2.8){
-    const z=(streetPose(x,1).z+streetPose(x,-1).z)/2;
-    waterfrontPalm(mesh,x,0,z,Math.round(x*413),1.45,.78);
+  // Surviving pile heads traced in the 2024 city orthophoto. The missing
+  // piles and second row are visible from the promenade.
+  for(const [v,start,count] of [[332,379,1],[325,440,2],[320,476,1],[317,492,2],
+    [314,510,6],[308,510,3],[304,544,2],[300,570,6],[310,570,4],[295,604,3],
+    [292,640,1],[290,657,1],[267,831,8],[277,832,8],[286,833,2]]){
+    for(let k=0;k<count;k++){
+      const [x,z]=rinconPoint(start+k*8.9,v-k*.94);
+      const top=-.52+.023*Math.sin(x*11),bottom=-1.08;
+      mesh(new THREE.CylinderGeometry(.016,.021,top-bottom,8),'#788178',x,(top+bottom)/2,z);
+    }
   }
-  // Surviving timber piles and low waterside rails follow the bay edge.
-  for(let i=0;i<27;i++){
-    const x=-37+i*.43,z=2.4+(i%3)*.33;
-    mesh(new THREE.CylinderGeometry(.055,.066,.53+(i%4)*.04,7),'#78867a',x,-.48,z);
-  }
-  const railLine=[[-37.70,1.43],[-35.4,1.36],[-32.9,1.15],[-29.8,.78],[-27.1,.47],[-25.6,.24]];
-  linePath(railLine,.017,rinconGround+.113,'#839a91');
+  const railLine=[-37.70,-35.953,-31.273,-27.403,-25.6].map(x=>[x,seawallAt(x)!.z-.035]);
+  linePath(railLine,.006,rinconGround+.061,'#839a91');
   for(let i=1;i<railLine.length;i++){
     const [ax,az]=railLine[i-1],[bx,bz]=railLine[i],n=Math.ceil(Math.hypot(bx-ax,bz-az)/.3);
     for(let j=0;j<n;j++){
       const x=ax+(bx-ax)*j/n,z=az+(bz-az)*j/n;
-      pole(new THREE.Vector3(x,.06,z),new THREE.Vector3(x,rinconGround+.12,z),.0075,'#6f8887');
+      pole(new THREE.Vector3(x,.012,z),new THREE.Vector3(x,rinconGround+.061,z),.004,'#6f8887');
     }
   }
   function waterfrontBench(x:number,y:number,z:number,angle=0){
-    const g=new THREE.Group();g.name='Promenade bench';g.position.set(x,y,z);g.rotation.y=angle;root.add(g);
+    const g=new THREE.Group();g.name='Promenade bench';g.position.set(x,y,z);g.rotation.y=angle;g.scale.setScalar(.53);root.add(g);
     for(let slat=0;slat<3;slat++)box(.254,.010,.023,0,.048,-.024+slat*.025,'#ac9573',g);
     for(const dx of [-.098,.098]){
       box(.014,.048,.057,dx,.024,0,dark,g);
@@ -484,8 +479,10 @@ export function createLandscape() {
     }
     for(const y of [.079,.099])box(.254,.015,.010,0,y,-.041,'#a89170',g);
   }
-  waterfrontBench(-37.70,rinconGround,.69,-.13);
-  for(const [x,z] of [[-35.08,.361],[-31.26,-.04],[-28.10,-.365]])waterfrontBench(x,rinconLawnHeight(z),z,-.13);
+  waterfrontBench(-37.70,.11,.45,-.13);
+  for(const [u,v] of [[376,279],[450,283],[520,272]]){
+    const [x,z]=rinconPoint(u,v);waterfrontBench(x,.11,z,.11);
+  }
   // Embarcadero Plaza: the historic brick room at the foot of Market Street.
   const plaza=sfMap.parks.find(p=>p.name==='Embarcadero Plaza')!;
   for(let x=-7.5;x<7.2;x+=.32)for(let z=-11.1;z<-5.3;z+=.32){
@@ -512,8 +509,8 @@ export function createLandscape() {
   }
   for(const [x,z] of [[-5.26,-7.12],[-3.02,-7.09],[-1.02,-7.46],[2.22,-8.74]])residentPositions.push({x,z,y:.139});
   // Visitors gather on the grass, clear of the shared route, furnishings and sculpture.
-  for(const [x,z] of [[-36.26,-.20],[-35.57,-.16],[-34.67,-.29],[-30.85,-.27],[-30.47,-.39],[-28.89,-.30],[-27.66,-.28]]){
-    residentPositions.push({x,z,y:rinconLawnHeight(z)});
+  for(const [u,v] of [[350,222],[376,213],[396,236],[424,221],[474,230],[502,219],[556,225]]){
+    const [x,z]=rinconPoint(u,v);residentPositions.push({x,z,y:knollHeight(x,z)});
   }
   // Glazed restaurant pavilions and terraces at the southern end of the park.
   for(const id of [188401113,188401115]){
@@ -527,12 +524,21 @@ export function createLandscape() {
       box(len-.04,pavilion.h*.7,.04,0,pavilion.h*.5,.045,'#52757a',face);
       for(let x=-len/2+.04;x<len/2;x+=.23)box(.024,pavilion.h*.78,.08,x,pavilion.h*.5,.075,'#d1c9b5',face);
     }
-    for(let i=0;i<4;i++){
-      const x=cx-.7+i*.47,z=cz+.8;
-      mesh(new THREE.CylinderGeometry(.11,.11,.025,12),'#c8b898',x,.24,z);
-      pole(new THREE.Vector3(x,.04,z),new THREE.Vector3(x,.24,z),.018,dark);
-      for(const dx of [-.16,.16])box(.09,.04,.1,x+dx,.17,z,'#8b9b83');
-      if(i%2===0){mesh(new THREE.ConeGeometry(.28,.09,8),'#e0d1b1',x,.7,z);pole(new THREE.Vector3(x,.1,z),new THREE.Vector3(x,.7,z),.014,dark);}
+  }
+  // Terrace furniture on the water side of the pavilions. The tabletop is
+  // 760 mm above the terrace, the chair seats 450 mm and parasols 2.3 m.
+  for(const [i,[u,v]] of [[111,226],[117,230],[127,231],[143,233],[151,233],[78,214],[89,214]].entries()){
+    const [x,z]=rinconPoint(u,v),ground=.11;
+    mesh(new THREE.CylinderGeometry(.029,.029,.003,12),'#c8b898',x,ground+.0456,z);
+    pole(new THREE.Vector3(x,ground,z),new THREE.Vector3(x,ground+.044,z),.003,dark);
+    for(const dx of [-.044,.044]){
+      box(.028,.003,.027,x+dx,ground+.027,z,'#8b9b83');
+      for(const side of [-.010,.010])box(.0025,.027,.024,x+dx+side,ground+.0135,z,dark);
+      box(.003,.022,.027,x+dx+Math.sign(dx)*.013,ground+.038,z,'#8b9b83');
+    }
+    if(i%3===1){
+      mesh(new THREE.ConeGeometry(.072,.019,10),'#e0d1b1',x,ground+.138,z);
+      pole(new THREE.Vector3(x,ground,z),new THREE.Vector3(x,ground+.138,z),.002,dark);
     }
   }
   root.add(harborPublicPiers(sfMap.piers,font));
@@ -546,18 +552,17 @@ export function createLandscape() {
   for(const [x,z] of [[-4.63,2.98],[-4.24,3.10],[-3.40,4.73],[-4.30,4.95],[-3.70,5.30],[-3.49,5.66]])residentPositions.push({x,z,y:.096});
   // Buckyball at the Exploratorium, north along the Embarcadero.
   const bucky=mesh(new THREE.IcosahedronGeometry(.58,0),'#bc985d',47.26,.9,.07);bucky.material=material('#bc985d');bucky.material.wireframe=true;
+  const lanterns:number[]=[];
   for(let x=-39;x<40;x+=2.8){
-    const z=x< -20?-2.1:x<0?-1.7:-1.9;
-    pole(new THREE.Vector3(x,0,z),new THREE.Vector3(x,1.5,z),.025,dark);
-    mesh(new THREE.SphereGeometry(.075,6,4),cream,x,1.56,z);
+    const z=streetPose(x,1).z+.59;
+    pole(new THREE.Vector3(x,0,z),new THREE.Vector3(x,.48,z),.008,dark);
+    mesh(new THREE.SphereGeometry(.022,8,6),cream,x,.50,z);
+    lanterns.push(x,.50,z);
   }
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
-  const railPath=Array.from({length:261},(_,i)=>{const p=streetcarPose(-65+i*.5);return [p.x,p.z];});
-  for(const side of [-1,1])linePath(railPath.map(([x,z])=>[x,z+side*.115]),.012,.078,'#a1aca3');
-  for(let i=1;i<railPath.length;i++){const [x,z]=railPath[i],[px,pz]=railPath[i-1];pole(new THREE.Vector3(px,1.035,pz),new THREE.Vector3(x,1.035,z),.0035,'#52675f');}
-  for(let x=-62;x<64;x+=6){const p=streetcarPose(x);pole(new THREE.Vector3(x,.02,p.z-.38),new THREE.Vector3(x,1.17,p.z-.38),.009,dark);pole(new THREE.Vector3(x,1.14,p.z-.38),new THREE.Vector3(x,1.035,p.z),.005,dark);}
-  const ferries=[createDoradoFerry(mesh,.68,'Dorado'),createDoradoFerry(mesh,.58,'Delphinus')];
+  buildStreetcarTrack(box,pole);
+  const ferries=[createDoradoFerry(mesh,'Dorado'),createDoradoFerry(mesh,'Delphinus')];
   root.add(...ferries);
   for(const ferry of ferries)for(const side of [-1,1]){
     const name=lettering(ferry.name.toUpperCase(),.092,1.445,.563,side*.766,'#344e5d',ferry);
@@ -569,7 +574,7 @@ export function createLandscape() {
   // scalloped edge; each fabric strip follows the same roof plane as its neighbour.
   const fruitColors=['#a95840','#969856','#ca944f'];
   for(const [stall,x] of [-3.57,-3.06,-2.55,-.15,.36,.87].entries()){
-    const canopy=new THREE.Group();canopy.position.set(x,.096,1.84);root.add(canopy);
+    const canopy=new THREE.Group();canopy.scale.setScalar(.52);canopy.position.set(x,.096,1.84);root.add(canopy);
     const w=.456,run=.149,rise=.090,eave=.308;
     for(const side of [-1,1])for(const dx of [-.194,.194]){
       box(.009,eave,.009,dx,eave/2,side*.129,'#7e8071',canopy);
@@ -591,16 +596,13 @@ export function createLandscape() {
       for(let k=0;k<8;k++)mesh(new THREE.IcosahedronGeometry(.016+(k%3)*.001,0),fruitColors[(bin+stall)%3],bx+(k%4-1.5)*.021,.155,.046+(k<4?-.017:.010),canopy);
     }
   }
-  waterfrontBench(-24,rinconGround,-.29,-.10);
+  waterfrontBench(-26.917,.11,.125,.11);
   for(const x of [-21,31,34]){
-    const segment=landEdge.findIndex(([bx],i)=>i>0&&(x-landEdge[i-1][0])*(x-bx)<=0&&bx!==landEdge[i-1][0]);
-    if(segment<1)continue;
-    const [ax,az]=landEdge[segment-1],[bx,bz]=landEdge[segment];
-    const z=az+(bz-az)*(x-ax)/(bx-ax)-.12;
-    waterfrontBench(x,.044,z,-Math.atan2(bz-az,bx-ax));
+    const edge=seawallAt(x);
+    if(edge)waterfrontBench(x,-.01,edge.z-.18,-edge.angle);
   }
   // A swimming sea lion beside Pier 7.
-  const seaLion=new THREE.Group();seaLion.position.set(24,-.6,8);seaLion.scale.setScalar(.65);seaLion.rotation.y=-.35;root.add(seaLion);
+  const seaLion=new THREE.Group();seaLion.position.set(24,-.6,8);seaLion.scale.setScalar(.073);seaLion.rotation.y=-.35;root.add(seaLion);
   const sealBody=mesh(new THREE.SphereGeometry(.42,10,7),'#786148',0,.15,0,seaLion);sealBody.scale.set(2.2,.75,.82);
   const sealNeck=mesh(new THREE.SphereGeometry(.3,9,6),'#786148',.7,.2,0,seaLion);sealNeck.scale.set(.9,.7,.8);
   mesh(new THREE.SphereGeometry(.30,12,9),'#98704f',.94,.3,0,seaLion);
@@ -639,7 +641,7 @@ export function createLandscape() {
   });
   const gulls=new THREE.Group();root.add(gulls);
   const birds=Array.from({length:7},()=>{
-    const bird=new THREE.Group();bird.scale.setScalar(.56);gulls.add(bird);
+    const bird=new THREE.Group();bird.scale.setScalar(.061);gulls.add(bird);
     const body=mesh(new THREE.SphereGeometry(.15,9,7),cream,0,0,0,bird);body.scale.set(2.1,.8,1);
     const wings=[-1,1].map(side=>{
       const wing=new THREE.Group();bird.add(wing);
@@ -662,7 +664,7 @@ export function createLandscape() {
   const fireboat=createFireboat();root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
-  const moving=new Set<THREE.Object3D>([...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,seaLion,...cyclists,...ferries,...cars,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,seaLion,...cyclists,...ferries,...cars,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -767,10 +769,7 @@ export function createLandscape() {
     mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-edge-haze-v2${mat===illuminatedArchitecture?'|sign-lights':''}`;
   }
   // Haloes share one transparent batch and sit at the coordinates of the promenade lamps.
-  const lanterns:number[]=[];
-  for(let x=-39;x<40;x+=2.8)lanterns.push(x,1.56,x< -20?-2.1:x<0?-1.7:-1.9);
-  for(let x=-6;x<7;x+=2.4)lanterns.push(x,1.10,1.98);
-  const lampGlow=new THREE.PointsMaterial({color:'#ffd799',size:.35,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,opacity:0});
+  const lampGlow=new THREE.PointsMaterial({color:'#ffd799',size:.105,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,opacity:0});
   lampGlow.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
     float lens=length(gl_PointCoord-vec2(.5))*2.;
     diffuseColor.a*=exp(-5.*lens*lens)*(1.-smoothstep(.6,1.,lens));`);};
@@ -829,6 +828,8 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   source.root.traverse(o=>{if(o instanceof THREE.Mesh&&o.material===source.coffeeMaterial&&variant==='street'){const copy=copyMesh(o);copy.matrix.copy(o.matrixWorld);copy.matrix.decompose(copy.position,copy.quaternion,copy.scale);root.add(copy);}});
   // The plaza shares the fountain geometry while following its own pausable clock.
   if(variant==='plaza'){
+    const glass=source.root.getObjectByName('Sinbad display glass') as THREE.Mesh;
+    const glazing=copyMesh(glass);glass.matrixWorld.decompose(glazing.position,glazing.quaternion,glazing.scale);root.add(glazing);
     const surface=source.root.getObjectByName(fountainWaterName)!;
     const copy=new THREE.Group();copy.name=fountainWaterName;
     surface.matrixWorld.decompose(copy.position,copy.quaternion,copy.scale);

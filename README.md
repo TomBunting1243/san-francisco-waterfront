@@ -19,10 +19,10 @@ Build static files with `npm run build`; review that build with `npm run preview
 
 ## Explore
 
-- Drag to orbit and tilt. Double-click a spot on the waterfront to zoom toward it.
+- Drag to orbit and tilt. Double-click or pinch to change the focal length. On touchscreens, move two fingers vertically together to tilt. The lens stays aimed at the Ferry Building.
 - The bottom-right controls zoom, return to the opening view, and pause or resume motion.
 - With the city focused, use the arrow keys to orbit and tilt, `+` and `−` to zoom, Escape to reset, and Enter to hear from a passerby.
-- On touch screens, drag horizontally to orbit or pinch to zoom at a spot. The page scrolls with one finger. Motion pauses in a hidden tab and honors the system reduced-motion preference. An explicit pause or resume is remembered.
+- On touch screens, drag horizontally to orbit or pinch to change the lens. The page scrolls with one finger. Motion pauses in a hidden tab and honors the system reduced-motion preference. An explicit pause or resume is remembered.
 
 The fireboat leaves Station 35, performs its five-stream display, and returns on a two-minute animation cycle. Pausing the scene also pauses the boat and water.
 

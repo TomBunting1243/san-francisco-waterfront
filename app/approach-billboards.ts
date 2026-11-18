@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import cocaCola from '../public/data/approach-coke.json' with {type:'json'};
-import {bayReliefPosition} from './bay-relief.ts';
-import {approachGround,type ApproachMesh} from './approach-road.ts';
+import {type ApproachMesh} from './approach-road.ts';
 
 const feet=.3048*.06;
 export const approachBillboards=[
@@ -11,6 +10,14 @@ export const approachBillboards=[
   {name:'Coca-Cola at 701 Bryant Street',latitude:37.777545,longitude:-122.400403,facing:212,width:70*feet,height:30*feet,aboveGrade:112*feet-15*feet},
   {name:'Anthropic at the I-80 Fourth Street bulletin',latitude:37.7795941,longitude:-122.400674,facing:200,width:(68+2/12)*feet,height:25*feet,aboveGrade:2.17},
   {name:'SpaceX at the Bryant and Seventh bulletin',latitude:37.774504,longitude:-122.404293,facing:270,width:48*feet,height:14*feet,aboveGrade:.855},
+] as const;
+// Interpretive display locations on existing SoMa roofs. The inventory above
+// retains the original sites, orientation and face dimensions for provenance.
+export const displayRoofs=[
+  {id:32862467,name:'Google Community Space',x:-22.535,z:-4.870,y:1.680,yaw:1.277},
+  {id:93817368,name:'Gap headquarters, Two Folsom',x:-32.148,z:-7.690,y:4.550,yaw:1.265},
+  {id:104599975,name:'Ferry Station Post Office Building',x:-11.620,z:.430,y:.900,yaw:1.625},
+  {id:193054133,name:'Hotel Griffon',x:-18.150,z:-5.360,y:1.050,yaw:1.275},
 ] as const;
 export const anthropicCopy='Building an equitable future, one trillion dollar IPO at a time';
 export const spaceXCopy='Fuck you';
@@ -37,11 +44,12 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
   const unit=new THREE.BoxGeometry(1,1,1);
   const bulb=new THREE.SphereGeometry(.007,5,4);
   for(const [index,site] of approachBillboards.entries()){
-    const [x,z]=bayReliefPosition(site.longitude,site.latitude);
+    const roof=displayRoofs[index];
     const group=new THREE.Group(),w=site.width,h=site.height;
-    const grade=approachGround(x,z);
-    group.name=site.name;group.position.set(x,grade+site.aboveGrade,z);
-    group.rotation.y=Math.atan2(.04836012986,.03552029735)-THREE.MathUtils.degToRad(site.facing);
+    const centerHeight=roof.y+(index===2?.42:.60);
+    group.name=site.name;group.position.set(roof.x,centerHeight,roof.z);
+    group.rotation.y=roof.yaw;
+    group.userData.displayRoof=roof;
     group.userData.location={latitude:site.latitude,longitude:site.longitude};
     billboards.add(group);
     function box(w:number,h:number,d:number,x:number,y:number,z:number,color:string,parent=group){
@@ -66,7 +74,7 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
     function panel(shape:THREE.Shape,color:string,z:number,depth=.011){
       return mesh(new THREE.ExtrudeGeometry(shape,{bevelEnabled:false,depth,curveSegments:7}),color,0,0,z,group);
     }
-    const baseY=(index===1?.77:index===0?.30:index===2?.63:.57)-site.aboveGrade;
+    const baseY=roof.y-centerHeight;
     const bottom=-h/2;
     const scaffold=index===1?'#c4c9b9':paintedSteel;
     // Maintenance catwalk, lamp outriggers and the tapered steel rack visible behind the panels.

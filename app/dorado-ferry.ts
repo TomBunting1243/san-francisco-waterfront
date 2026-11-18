@@ -18,6 +18,14 @@ const stations = [
   { x:2.56, width:.115, bottom:-.38, sheer:.59, paint:[.54,.565,.585] },
   { x:2.72, width:.073, bottom:-.25, sheer:.60, paint:[.569,.583,.594] },
 ] as const;
+// San Francisco Bay Ferry fleet particulars for both Mavrik sister ships.
+export const doradoDimensions={length:42*.06,beam:10.5*.06,draft:1.4*.06};
+const deckScale=.27,waterline=-.20,keel=-.748;
+export const doradoWake={
+  stern:-2.59*doradoDimensions.length/5.31,
+  hullOffset:.562*doradoDimensions.beam/1.62,
+  halfBeam:doradoDimensions.beam/2,
+};
 const navy='#1d3c5a', blue='#3a7390', green='#5d966e', white='#e3e0ce', darkSeam='#597175';
 
 function hullSkin(parent: THREE.Group, mesh: FerryMesh) {
@@ -35,7 +43,8 @@ function hullSkin(parent: THREE.Group, mesh: FerryMesh) {
         const u=(y-section.bottom)/(section.sheer-section.bottom);
         // Narrow keel, full shoulder, and a raked bow form the twin demihulls.
         const breadth=section.width*(.54+.46*Math.sqrt(u));
-        return [section.x,y,center+side*breadth];
+        const skinY=y<waterline?waterline+(y-waterline)*doradoDimensions.draft/((waterline-keel)*deckScale):y;
+        return [section.x,skinY,center+side*breadth];
       });
     }
     const left=stations.map(s=>ring(s,-1)),right=stations.map(s=>ring(s,1));
@@ -67,10 +76,10 @@ function deckOutline(points: readonly Point[], thickness:number) {
   return new THREE.ExtrudeGeometry(shape,{depth:thickness,bevelEnabled:false}).rotateX(-Math.PI/2);
 }
 
-export function createDoradoFerry(mesh:FerryMesh,scale:number,name:string) {
+export function createDoradoFerry(mesh:FerryMesh,name:string) {
   const hull=new THREE.Group();
   hull.name=name;
-  hull.scale.setScalar(scale);
+  hull.scale.set(doradoDimensions.length/5.31,deckScale,doradoDimensions.beam/1.62);
   hullSkin(hull,mesh);
   const box=(w:number,h:number,d:number,x:number,y:number,z:number,color:string)=>
     mesh(new THREE.BoxGeometry(w,h,d),color,x,y,z,hull);
@@ -101,12 +110,12 @@ export function createDoradoFerry(mesh:FerryMesh,scale:number,name:string) {
     box(.12,.137,.027,-1.59,.836,z*1.02,cabin);
     box(2.10,.034,.031,-.54,.575,z*1.015,rubbing);
     for(const at of [-1.06,.27,.85]){
-      box(.017,.026,.062,at,.608,z*1.037,trim);
+      box(.017,.026,.062,at,.608,z*1.033,trim);
     }
     // Narrow boarding cut with dark weather stripping and a deck-level ledge.
     box(.16,.286,.027,.44,.68,z*1.014,'#b3beb6');
     box(.009,.261,.029,.50,.683,z*1.033,darkSeam);
-    box(.205,.027,.075,.44,.529,z*1.045,roof);
+    box(.205,.027,.075,.44,.529,z*1.025,roof);
   }
   const bowGlass=box(.036,.270,1.22,1.76,.905,0,cabin);
   bowGlass.rotation.z=-.27;
@@ -160,5 +169,8 @@ export function createDoradoFerry(mesh:FerryMesh,scale:number,name:string) {
   box(.087,.058,.275,mastX,mastHead,0,roof);
   box(.04,.045,.050,mastX,1.972,-.192,'#a55c4d');
   box(.04,.045,.050,mastX,1.972,.192,green);
+  // The moving group's origin follows the water triangle under the hulls.
+  // Position every painted and structural part relative to that load waterline.
+  for(const part of hull.children)part.position.y-=waterline;
   return hull;
 }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { center, footprintGeometry, mappedBuildings, sfMap } from './sf-map.ts';
+import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import type { FerryConnection } from './ferry-terminal.ts';
 
 type Building = (typeof mappedBuildings)[number];
@@ -500,7 +501,26 @@ function rinconTower(b:Building,m:Model) {
   }
 }
 
+// Three open shelters are mapped as buildings. Their fabric sheds span a clear
+// boarding aisle, as shown in the City's 2024 orthophoto of the cruise pier.
+function cruiseShelter(b:Building,m:Model){
+  m.root.name='Pier 3 boarding shelter '+b.id;
+  const xs=b.p.map(p=>p[0]),zs=b.p.map(p=>p[1]);
+  const left=Math.min(...xs),right=Math.max(...xs),start=Math.min(...zs),end=Math.max(...zs);
+  const mid=(left+right)/2,span=(right-left)/2,eave=.244,rise=.055;
+  for(const side of [-1,1]){
+    const roof=m.box(Math.hypot(span,rise)+.012,.014,end-start,mid+side*span/2,eave+rise/2,(start+end)/2,'#e3dfd1');
+    roof.rotation.z=-side*Math.atan2(rise,span);
+    for(let i=0;i<=6;i++){
+      const z=start+.015+(end-start-.03)*i/6,x=mid+side*(span-.013);
+      m.box(.013,eave-.06,.013,x,(eave+.06)/2,z,'#788884');
+      m.beam(new THREE.Vector3(x,eave-.005,z),new THREE.Vector3(mid,eave+rise-.008,z),.013,'#a3aaa1');
+    }
+  }
+}
+
 const buildingModels=new Map<number,(building:Building,model:Model)=>void>([
+  [1181064591,cruiseShelter],[1181064592,cruiseShelter],[1181064594,cruiseShelter],
   [104600008,diner],[124659443,diner],
   [186071977,pierShed],[104599978,pierShed],[104599994,pierShed],
   [939499092,mira],[445566153,fremont],
@@ -508,7 +528,8 @@ const buildingModels=new Map<number,(building:Building,model:Model)=>void>([
   [944891683,rinconTower],[944891684,rinconTower],
 ]);
 
-export const harborDiners=sfMap.buildings.filter(b=>b.id===104600008||b.id===124659443);
+// Preserve small, individually modeled structures below the citywide footprint cutoff.
+export const smallHarborBuildings=sfMap.buildings.filter(b=>buildingModels.has(b.id)&&!mappedBuildings.some(mapped=>mapped.id===b.id));
 
 export function harborBuilding(b:Building,font:Font){
   const stylized=!b.name&&!b.part&&!b.parent&&b.h>3&&b.h<14&&b.p.length<=10&&center(b.p)[1]>-56;
@@ -517,6 +538,82 @@ export function harborBuilding(b:Building,font:Font){
   const m=model(b.name||`Skyline ${b.id}`,font);
   build(b,m);
   return {root:m.root, windows:m.windows};
+}
+
+// The 2022 California NAIP plate is rectified to this pier's oceanward
+// and southward axes. Coordinates below are pixels on the 48 px/unit plate.
+function cargoApron(m:ReturnType<typeof model>,outline:Point[]){
+  const at=(u:number,v:number):[number,number]=>[
+    -63.48-(.53*u+.848*v)/48, -7.12+(.848*u-.53*v)/48,
+  ];
+  const positions:number[]=[],colors:number[]=[],ink=new THREE.Color();
+  function patch(u:number,v:number,w:number,h:number,y:number,color:string){
+    const corners=[at(u,v),at(u+w,v),at(u+w,v+h),at(u,v+h)];
+    if(!corners.every(([x,z])=>contains(outline,x,z)))return;
+    ink.set(color);
+    for(const i of [0,2,1,0,3,2]){
+      const [x,z]=corners[i];positions.push(x,y,z);colors.push(ink.r,ink.g,ink.b);
+    }
+  }
+  // Rectangular repairs in the central working bay and the wearing courses of
+  // the two parking fields are visible in the aerial even when the lot is empty.
+  patch(146,219,536,120,.063,'#b9b9af');
+  patch(312,223,100,76,.065,'#c5c6ba');
+  patch(151,265,132,62,.065,'#b4b5ab');
+  patch(478,227,202,78,.065,'#b3b5ad');
+  for(const y of [18,57,76,117,155,200,392,436,482,523]){
+    const start=y<210?22:150,end=y<210?688:646;
+    patch(start,y,end-start,.46,.069,'#d2d1be');
+    for(let x=start;x<end;x+=7.5){
+      if((x>564&&y<130)||(x>597&&y>425))continue;
+      patch(x,y-(y%2===0?0:12),.42,12,.069,'#d9d7c3');
+    }
+  }
+  for(const [x,y,w,h] of [[148,219,.8,120],[142,340,545,.9],[397,20,.62,182],[307,218,.68,78],[687,111,.6,219]]){
+    patch(x,y,w,h,.071,'#a7a69a');
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  g.computeVertexNormals();g.userData.paintVertices=true;
+  m.mesh(g,'#ffffff').name='Piers 30–32 parking fields and concrete working apron';
+  const stalls=[
+    [30,76],[45,76],[53,76],[67,76],[74,76],[89,76],[112,76],[120,76],[142,76],
+    [37,111],[52,111],[75,111],[105,111],[157,111],[30,157],[45,157],[67,157],
+    [188,23],[210,23],[240,23],[172,196],
+  ];
+  parkVehicles(m,stalls.map(([u,v])=>at(u,v)).filter(([x,z])=>contains(outline,x,z)),Math.atan2(.53,-.848));
+}
+
+function parkVehicles(m:Model,points:number[][],heading:number){
+  const paint=streetVehicleMaterial();
+  const prototypes=[0,1,2,5,3,4].map(type=>{
+    const car=createStreetVehicle(type,paint,true);
+    car.traverse(o=>{if(o instanceof THREE.Mesh)o.geometry.userData.paintVertices=true;});
+    return car;
+  });
+  points.forEach(([x,z],i)=>{
+    const car=prototypes[i%prototypes.length].clone();
+    car.position.set(x,.06-.055*.25,z);car.scale.setScalar(.25);
+    car.rotation.y=heading+(i%3===1?Math.PI:0);m.root.add(car);
+  });
+}
+
+function cruiseApron(m:Model){
+  // Pier 3, 2024. Short rows of parked cars face one another along the middle
+  // aisle. Preserve curbside access to the vessels, shelter aisles and gangways.
+  m.box(2.30,.006,10.48,18.29,.063,6.46,'#b3afa2');
+  const spaces:number[][]=[];
+  for(const [x,from,to] of [[18.12,2.15,10.71],[17.53,2.08,4.68],[18.43,8.06,10.55]]){
+    const count=Math.floor((to-from)/.155);
+    for(let i=0;i<=count;i++){
+      const z=from+i*.155;
+      m.box(.309,.006,.013,x,.072,z,'#ded9c6');
+      if(i<count && (z<3.37||z>7.15||(i%9===4&&z>4.1)) && (i+Math.round(x*10))%7!==0)spaces.push([x,z+.0775]);
+    }
+  }
+  parkVehicles(m,spaces,0);
+
 }
 
 export function harborPublicPiers(piers:Pier[],font:Font){
@@ -571,7 +668,9 @@ export function harborPublicPiers(piers:Pier[],font:Font){
     m.box(.36,.117,.025,0,.50,.024,color,marker);
     m.sign(p.name.toUpperCase(),.065,0,.473,.039,'#f0dfba',marker,.33);
   }
-  // Leave the former cargo apron open. Fenders and restraint hardware trace the mapped perimeter.
+  cargoApron(m,apron.p);
+  cruiseApron(m);
+  // Fenders and restraint hardware trace the mapped perimeter.
   for(const e of edges(apron.p)){
     if(e.w<2)continue;
     const f=m.facade(e);

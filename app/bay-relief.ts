@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import reliefData from '../public/data/bay-relief.json' with { type: 'json' };
+import { replacesReliefVertex } from './survey-shore.ts';
 import { waterSurface } from './water-surface.ts';
 
 type Location = readonly [longitude: number, latitude: number];
@@ -120,6 +121,7 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
   const downtown = Math.min(x + 96, 67 - x, z + 99, 14 - z);
   const blend = THREE.MathUtils.smoothstep(downtown, -9, 0);
   if (y > -.04) y = THREE.MathUtils.lerp(y, -.04, blend);
+  if (replacesReliefVertex(grid.name, row * grid.cols + col)) y = Math.min(y, waterSurface.level - .36);
   return { x, y, z, lng, lat, meters };
 }
 

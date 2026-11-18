@@ -32,6 +32,24 @@ function observeArrivalFog() {
   requestAnimationFrame(sample);
 }
 
+// Read the two matrices actually uploaded to the visible framebuffer. This keeps
+// the check independent of the scene implementation and excludes the shadow map.
+function observeCameraMatrices(){
+  const gl=WebGL2RenderingContext.prototype, names=new WeakMap();
+  const location=gl.getUniformLocation, upload=gl.uniformMatrix4fv;
+  const matrices=globalThis.waterfrontMatrices={};
+  gl.getUniformLocation=function(program,name){
+    const value=location.call(this,program,name);
+    if(value&&(name==='viewMatrix'||name==='projectionMatrix'))names.set(value,name);
+    return value;
+  };
+  gl.uniformMatrix4fv=function(value,transpose,data,...rest){
+    const name=names.get(value);
+    if(name&&this.canvas.closest('.world > .world-scene')&&this.getParameter(this.FRAMEBUFFER_BINDING)===null)matrices[name]=Array.from(data);
+    return upload.call(this,value,transpose,data,...rest);
+  };
+}
+
 function sceneState(){
   const world=document.querySelector('.world'),scene=world?.querySelector(':scope > .world-scene');
   const controls=world?.querySelector('.world-controls');
@@ -167,6 +185,7 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
   if(evidenceDir)await mkdir(evidenceDir,{recursive:true});
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:940,deviceScaleFactor:1,mobile:false});
   await media(false);
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`(${observeCameraMatrices})()`});
   if(checkFog)await send('Page.addScriptToEvaluateOnNewDocument',{source:`(${observeArrivalFog})()`});
   const navigation=await send('Page.navigate',{url});
   if(navigation.errorText)throw new Error(navigation.errorText);
@@ -208,9 +227,14 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
     ()=>evaluate(send,"!document.querySelector('.world > .passerby-bubble')"),Boolean);
   await awaitScene('Escape to restore the opening view',state=>state.exploring==='false');
   const opening=await scenePixels();
+  const readMatrices=()=>evaluate(send,'globalThis.waterfrontMatrices');
+  const homeCamera=await readMatrices();
   await clickControl('Zoom in');
   await awaitScene('the zoomed view',state=>state.exploring==='true');
   await waitFor('the canvas pixels to change after zoom',scenePixels,pixels=>difference(opening,pixels)>.35);
+  const telephoto=await waitFor('a longer focal length',readMatrices,
+    value=>value.projectionMatrix[0]>homeCamera.projectionMatrix[0]*1.05);
+  assert.deepEqual(telephoto.viewMatrix,homeCamera.viewMatrix,'Zoom must preserve the camera position and direction');
   await clickControl('Reset the view');
   await awaitScene('the reset view',state=>state.exploring==='false');
   await delay(1250,undefined,{signal});

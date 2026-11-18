@@ -4,8 +4,9 @@ import * as THREE from 'three';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 import data from '../public/data/approach-soma.json' with {type:'json'};
-import {approachBillboards,anthropicCopy,buildApproachBillboards,spaceXCopy} from '../app/approach-billboards.ts';
+import {approachBillboards,displayRoofs,anthropicCopy,buildApproachBillboards,spaceXCopy} from '../app/approach-billboards.ts';
 import {approachDistance,approachGround,approachLengths,approachPose,buildApproachRoad} from '../app/approach-road.ts';
+import {openingLens,orbitPitch} from '../app/camera.ts';
 import {bridgeLayout} from '../app/bridge-layout.ts';
 import {createLandscape} from '../app/landscape.ts';
 
@@ -49,16 +50,16 @@ test('approach traffic updates in four batches and construction stays finite',()
   assert.ok(piers.every(o=>o.scale.y>.09&&Number.isFinite(o.position.y)));
 });
 
-test('four billboards preserve their ordered roadside sites and custom advertising copy',()=>{
+test('four displays retain their historic roadside metadata and custom advertising copy',()=>{
   const root=new THREE.Group(),font=new FontLoader().parse(fontData);
   const group=buildApproachBillboards(addMesh,root,font);
   assert.equal(group.children.length,4);
   for(const [i,billboard] of group.children.entries()){
     const site=approachBillboards[i];
     assert.equal(billboard.name,site.name);
-    const x=billboard.position.x,z=billboard.position.z;
-    assert.ok(approachDistance(x,z,data.west.points)<12);
-    assert.ok(billboard.position.y>approachGround(x,z)+.5);
+    assert.deepEqual(billboard.userData.location,{latitude:site.latitude,longitude:site.longitude});
+    assert.equal(billboard.userData.displayRoof.id,displayRoofs[i].id);
+
   }
   const [yahoo,coke,anthropic,spacex]=group.children;
   const vacancy=yahoo.getObjectByName('VACANCY');
@@ -75,34 +76,50 @@ test('four billboards preserve their ordered roadside sites and custom advertisi
   assert.ok(spacex.getObjectByName(spaceXCopy));
 });
 
-test('Yahoo and the Bryant Street billboard clear their actual roofs and face the open approach',()=>{
-  const world=createLandscape();
-  world.root.updateMatrixWorld(true);
-  const ray=new THREE.Raycaster(),visibleTerrain=[...world.architectureChunks];
-  world.relief.root.traverse(object=>{if(object instanceof THREE.Mesh)visibleTerrain.push(object);});
-  for(const [index,roofHeight] of [[0,.253],[3,.210]]){
-    const site=approachBillboards[index];
-    const sign=world.root.getObjectByName(site.name);
-    const pivot=sign.getWorldPosition(new THREE.Vector3());
+test('the four billboard racks meet mapped roofs and their faces are visible from the Ferry orbit',()=>{
+  const world=createLandscape();world.root.updateMatrixWorld(true);
+  const scenery=[...world.architectureChunks];
+  world.relief.root.traverse(o=>{if(o instanceof THREE.Mesh)scenery.push(o);});
+  const home=new THREE.Vector3(0,2.4,0);
+  // Real user controls on a fixed Ferry orbit. Reserve space for the controls
+  // and heading and check physical line of sight at the same magnification.
+  const closeViews=[
+    [[1.525,-.04,5.75],[1.4,.05,5.25]],
+    [[1.10,-.095,3.5],[1.30,-.095,5.75]],
+    [[1.575,-.075,20],[1.60,-.095,17.25]],
+    [[1.25,-.095,20],[1.275,-.075,20]],
+  ];
+  const boxes=scenery.map(o=>new THREE.Box3().setFromObject(o)),ray=new THREE.Raycaster();
+  function hit(origin,direction,distance){
+    ray.set(origin,direction);ray.far=distance;
+    return ray.intersectObjects(scenery.filter((o,i)=>ray.ray.intersectsBox(boxes[i])),false)[0];
+  }
+  const casePane=world.root.getObjectByName('Sinbad display glass');
+  assert.ok(casePane?.isMesh&&casePane.material.transparent&&!casePane.material.depthWrite,'The baked scene must preserve transparent display glass');
+  const neon=world.root.getObjectByName('HILLS BROS COFFEE');
+  assert.equal(neon.material,world.coffeeMaterial,'The sign tubes must retain their night-lighting material');
+  for(const [i,site] of approachBillboards.entries()){
+    const sign=world.root.getObjectByName(site.name),roof=displayRoofs[i],base=roof.y-sign.position.y;
     const local=(x,y,z)=>sign.localToWorld(new THREE.Vector3(x,y,z));
-    const normal=new THREE.Vector3(0,0,1).transformDirection(sign.matrixWorld);
-    const target=local(0,0,.032);
-    // Cast from the road-facing side through the packed terrain and buildings.
-    for(const angle of [0,22,41]){
-      const a=THREE.MathUtils.degToRad(angle),eye=local(6*Math.sin(a),1.48,6*Math.cos(a));
-      ray.set(eye,target.clone().sub(eye).normalize());
-      ray.far=eye.distanceTo(target)+.12;
-      const hit=ray.intersectObjects(visibleTerrain,false)[0];
-      assert.ok(hit&&hit.point.distanceTo(target)<.06,'A foreground building hides '+site.name);
-      assert.ok(hit.face.normal.dot(normal)>.8,'The ray must hit the front face');
+    for(const side of [-1,1])for(const foot of i===1?[.16,.32,.47]:[.29,.45])for(const depth of [.016*1.25,-(i===1?.35:.22)*1.25]){
+      const p=local(site.width*side*foot*1.06,base+.004,depth);
+      const surface=hit(p,new THREE.Vector3(0,-1,0),.020);
+      assert.ok(surface&&Math.abs(surface.point.y-roof.y)<.009,'Rack foot unsupported on '+roof.name+' '+p.toArray());
     }
-    const aboveRoof=local(0,10,-.15);
-    ray.set(aboveRoof,new THREE.Vector3(0,-1,0));
-    ray.far=20;
-    const roof=ray.intersectObjects(visibleTerrain,false)
-      .find(hit=>hit.point.y<pivot.y-site.height/2-.09);
-    assert.ok(roof&&Math.abs(roof.point.y-roofHeight)<.018,'Missing mapped roof beneath '+site.name);
-    assert.ok(roof.point.y>approachGround(aboveRoof.x,aboveRoof.z)+.24,'Sign should stand on its building');
-    assert.ok(pivot.y-site.height/2-roof.point.y>.12,'Roof buries the billboard face');
+    const [desktop,mobile]=closeViews[i];
+    for(const [width,height,yaw,tilt,zoom] of [[1440,940,1.24,0,1],[1440,940,...desktop],[390,844,...mobile]]){
+      const lens=openingLens(width,height),r=Math.hypot(lens.elevation,lens.distance);
+      const a=orbitPitch(yaw,tilt,Math.atan2(lens.elevation,lens.distance));
+      const eye=new THREE.Vector3(r*Math.cos(a)*Math.sin(yaw),r*Math.sin(a),r*Math.cos(a)*Math.cos(yaw)).add(home);
+      const camera=new THREE.PerspectiveCamera(20,width/height,.35,1800);
+      camera.setFocalLength(lens.focalLength*zoom);camera.position.copy(eye);camera.lookAt(home);camera.updateMatrixWorld();
+      for(const x of [-.32,0,.32])for(const y of [-.22,0,.22]){
+        const target=local(x*site.width,y*site.height,i===1?.07:.035),d=target.clone().sub(eye);
+        const ndc=target.clone().project(camera);
+        assert.ok(Math.max(Math.abs(ndc.x),Math.abs(ndc.y))<.99&&ndc.z>0&&ndc.z<1,'Outside orbit view '+site.name);
+        const surface=hit(eye,d.clone().normalize(),d.length()+.14);
+        assert.ok(surface&&surface.point.distanceTo(target)<.10,'Obstructed face '+site.name+' '+[width,zoom,x,y,surface?.point.distanceTo(target)]);
+      }
+    }
   }
 });

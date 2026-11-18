@@ -1,3 +1,6 @@
+import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
+import {pierThreeShelter} from './water-surface.ts';
+import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
 import {center,mappedBuildings} from './sf-map.ts';
 
@@ -27,8 +30,10 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.uniforms.shoreProfiles={value:profiles};
     shader.uniforms.bayHorizon=horizon;
     shader.vertexShader='uniform float harborTime; varying vec2 baySurface;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
-      transformed.z += sin(position.x*.47+harborTime*.5)*.08 + cos(position.y*.64+harborTime*.65)*.06;
-      baySurface=vec2(position.x,-position.y);`);
+      baySurface=vec2(position.x,-position.y);
+      vec2 slip=abs(baySurface-vec2(${pierThreeShelter.x},${pierThreeShelter.z}));
+      float amplitude=slip.x<${pierThreeShelter.halfX.toFixed(2)} && slip.y<${pierThreeShelter.halfZ} ? ${pierThreeShelter.strength} : 1.;
+      transformed.z += amplitude*(sin(position.x*.47+harborTime*.5)*.08 + cos(position.y*.64+harborTime*.65)*.06);`);
     shader.fragmentShader=`
       uniform float harborTime;
       uniform sampler2D shoreProfiles;
@@ -59,7 +64,10 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       vec2 p=baySurface;
       float windStrength=windPatch(p*vec2(.19,.27)+vec2(harborTime*.021,0.));
       float lanes=windPatch(p*vec2(.43,1.15)-vec2(.015,.035)*harborTime);
-      float ripple=sin(p.y*12.+p.x*2.3+harborTime*1.18+windStrength*8.6+lanes*2.3);
+      // Intersecting wind and tidal wavelets split crests into short strokes.
+      float windPhase=dot(p,vec2(2.3,12.))+harborTime*1.18+windStrength*8.6+lanes*2.3;
+      float crossPhase=dot(p,vec2(9.1,-5.4))-harborTime*.87+lanes*6.8;
+      float ripple=.64*sin(windPhase)+.36*sin(crossPhase);
       float swell=sin(p.y*2.1-p.x*.71-harborTime*.65+windStrength*3.6);
       float detail=1.-smoothstep(.10,.8,fwidth(p.x)+fwidth(p.y));
       vec3 mirrorRay=normalize(vec3(p.x-cameraPosition.x,cameraPosition.y+.7,p.y-cameraPosition.z));
@@ -71,14 +79,17 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       for(int i=0;i<4;i++) {
         vec3 hull=hullShadows[i];vec2 off=p-hull.xy;
         vec2 along=vec2(cos(hull.z),-sin(hull.z));
-        vec2 size=i<2?vec2(1.34,.41):vec2(.88,.30);
+        vec2 size=i<2?vec2(${(doradoDimensions.length/2).toFixed(4)},${doradoWake.halfBeam.toFixed(4)}):vec2(${daySailerContact.halfLength.toFixed(4)},${daySailerContact.halfBeam.toFixed(4)});
         vec2 local=vec2(dot(off,along),dot(off,vec2(-along.y,along.x)))/size;
         diffuseColor.rgb *= .67+.33*smoothstep(.24,1.45,dot(local,local));
         if(i<2){
-          float aft=-dot(off,along);
+          float aft=${doradoWake.stern.toFixed(4)}-dot(off,along);
           float width=abs(dot(off,vec2(-along.y,along.x)));
-          float wake=1.-smoothstep(.0,.23+aft*.035,abs(width-.20-aft*.20));
-          float fade=smoothstep(.9,2.2,aft)*(1.-smoothstep(3.5,9.,aft));
+          // Foam leaves each transom at its hull center. The two
+          // wash lines open away from one another behind the boat.
+          float spread=max(0.,aft);
+          float wake=1.-smoothstep(.012,.055+spread*.038,abs(width-${doradoWake.hullOffset.toFixed(4)}-spread*.20));
+          float fade=smoothstep(-.025,.10,aft)*(1.-smoothstep(2.8,7.6,aft));
           diffuseColor.rgb+=vec3(.21,.23,.21)*wake*fade*(.6+.4*swell)*detail;
         }
       }
@@ -106,12 +117,13 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       }
       diffuseColor.rgb*=mix(vec3(.85,.94,1.01),vec3(1.13,1.06,.93),windStrength);
       diffuseColor.rgb*=1.+ripple*.023*detail+(.06*lanes-.03);
-      float glint=smoothstep(.68,.99,ripple)*smoothstep(.48,.73,lanes)*smoothstep(.28,.66,windStrength);
-      diffuseColor.rgb+=vec3(.075,.087,.08)*glint*detail*(1.-bayNight*.82);
+      float glint=smoothstep(.53,.94,ripple)*smoothstep(.42,.68,lanes)*smoothstep(.32,.7,windStrength);
+      glint*=mix(.18,1.,smoothstep(-.15,.72,cos(crossPhase*.57-windPhase*.19)));
+      diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82);
     `).replace('#include <fog_fragment>',`#include <fog_fragment>
       float distanceMist=smoothstep(38.,420.,length(vViewPosition));
       gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist*.97);`);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v2';
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v3';
   return horizon;
 }

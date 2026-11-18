@@ -5,7 +5,7 @@ import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 import {buildFerryTerminal,ferryConnections} from '../app/ferry-terminal.ts';
 import {ferryPortal} from '../app/harbor-architecture.ts';
-import {footprintGeometry,sfMap} from '../app/sf-map.ts';
+
 import {waterSurface} from '../app/water-surface.ts';
 
 const material=new THREE.MeshStandardMaterial();
@@ -16,8 +16,7 @@ function addMesh(geometry,color,x,y,z,parent){
 
 test('all six ferry gangways physically meet the fixed apron and their own boarding deck',()=>{
   const root=new THREE.Group(),terminal=buildFerryTerminal(addMesh,root);
-  const apron=sfMap.piers.find(pier=>!pier.name&&pier.p.some(([x,z])=>z>10&&x< -5&&x> -6));
-  addMesh(footprintGeometry(apron.p,.18),0,0,.096-.18,0,root).name='Fixed apron';
+  const apron=terminal.getObjectByName('Surveyed fixed ferry apron');
   root.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
   for(const connection of ferryConnections){
@@ -35,7 +34,7 @@ test('all six ferry gangways physically meet the fixed apron and their own board
     }
     const port=covered?-.012:-.030;
     ray.ray.origin.set(from[0]+(to[0]-from[0])*port/length,2,from[1]+(to[1]-from[1])*port/length);
-    assert.ok(ray.intersectObject(root.getObjectByName('Fixed apron'),false)[0],gate+' gangway misses the fixed apron');
+    assert.ok(ray.intersectObject(apron,false)[0],gate+' gangway misses the fixed apron');
     ray.ray.origin.set(to[0],2,to[1]);
     assert.ok(Math.abs(ray.intersectObject(dock,false)[0]?.point.y-deckY)<1e-6,gate+' gangway misses its own landing');
   }
@@ -97,4 +96,31 @@ test('the Golden Gate waiting shelter has a seamed gable on piers with a clear c
   const along=new THREE.Raycaster(shelter.localToWorld(new THREE.Vector3(.103,.222,-1.81)),
     new THREE.Vector3(0,0,1).applyQuaternion(shelter.getWorldQuaternion(new THREE.Quaternion())),0,3.55);
   assert.equal(along.intersectObject(shelter,true).length,0,'Supports and screens leave the sheltered walkway open');
+});
+
+
+test('fixed apron piles reach the deck and through the bay without oversized or blocking guardrails',()=>{
+  const root=new THREE.Group(),terminal=buildFerryTerminal(addMesh,root);
+  root.updateMatrixWorld(true);
+  const apron=terminal.getObjectByName('Surveyed fixed ferry apron');
+  const piles=terminal.getObjectsByProperty('name','Continuous fixed concrete pile');
+  assert.ok(piles.length>60);
+  const caps=terminal.getObjectsByProperty('name','Pile-to-deck cap');
+  const y=new THREE.Box3().setFromObject(apron).min.y;
+  for(const [i,pile] of piles.entries()){
+    const a=new THREE.Box3().setFromObject(pile),b=new THREE.Box3().setFromObject(caps[i]);
+    assert.ok(a.min.y<waterSurface.level-.21&&a.max.y>=b.min.y);
+    assert.ok(b.max.y>y);
+  }
+  const guard=terminal.getObjectByName('Fixed ferry apron edge guard');
+  assert.ok(new THREE.Box3().setFromObject(guard).max.y<.179);
+  for(const gate of ferryConnections){
+    const [x,z]=gate.from;
+    const toward=new THREE.Vector3(gate.to[0]-x,0,gate.to[1]-z).normalize();
+    for(const height of [.026,.053,.077]){
+      const start=new THREE.Vector3(x,gate.landY+height,z).addScaledVector(toward,-.21);
+      const passage=new THREE.Raycaster(start,toward,0,.37);
+      assert.equal(passage.intersectObject(guard,true).length,0,gate.gate+' guard crosses the boarding approach');
+    }
+  }
 });

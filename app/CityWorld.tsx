@@ -4,9 +4,10 @@ import { landmarks, type Landmark } from './landmarks';
 import { pacificLighting } from './lighting';
 import SceneControls from './SceneControls';
 import { ferryPose, birdPose, sailingPose } from './motion';
+import {waterHeight} from './water-surface';
 import { streetPose, streetcarPose } from './streets';
 import { bridgeLayout } from './bridge-layout';
-import { openingCamera, openingLens, openingYaw, dampCameraAxis } from './camera';
+import { openingCamera, openingLens, openingYaw, orbitPitch, dampCameraAxis } from './camera';
 import { starfieldData } from './sky';
 import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,createQualityMonitor,drawingPixelRatio} from './city-runtime';
@@ -29,9 +30,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   useEffect(()=>{const sync=()=>setPaused(readMotionPreference());sync();window.addEventListener(motionEvent,sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener(motionEvent,sync);window.removeEventListener('storage',sync);};},[]);
   const toggleMotion=()=>{const next=!paused;setPaused(next);writeMotionPreference(next);};
   const [zoom,setZoom]=useState(openingCamera.zoom);
-  const changeZoom=(amount:number)=>setZoom(value=>clampZoom(value+amount*Math.max(1,value*.8)));
+  const changeZoom=(amount:number)=>setZoom(value=>clampZoom(value*Math.exp(amount)));
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
-  const settings = useRef({ paused, zoom, tilt: 0, yaw: openingCamera.yaw, aim:[...openingCamera.target] as number[] });
+  const settings = useRef({ paused, zoom, tilt: 0, yaw: openingCamera.yaw });
   const wake = useRef<()=>void>(()=>{});
   const reducedMotion = useRef(false);
   useEffect(()=>{settings.current.paused=paused;settings.current.zoom=zoom;wake.current();},[paused,zoom]);
@@ -76,13 +77,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let quality=maxQuality;
       let width=1, height=1, elapsed=0, last=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       const startYaw=openingYaw(host.clientWidth,host.clientHeight);settings.current.yaw=startYaw;
-      const target = new THREE.Vector3(...openingCamera.target), destination = target.clone(), homeTarget=target.clone();
-      const cameraAxes={x:{value:target.x,velocity:0},y:{value:target.y,velocity:0},z:{value:target.z,velocity:0},yaw:{value:startYaw,velocity:0},tilt:{value:0,velocity:0},zoom:{value:1,velocity:0}};
+      const target = new THREE.Vector3(...openingCamera.target);
+      const cameraAxes={yaw:{value:startYaw,velocity:0},tilt:{value:0,velocity:0},zoom:{value:1,velocity:0}};
       const economy=window.matchMedia('(prefers-reduced-data: reduce)').matches;
       let lighting=localLight;
       let nightPrint=document.documentElement.dataset.palette==='ink';
       const refreshPalette=()=>{nightPrint=document.documentElement.dataset.palette==='ink';lastLightingCheck=-Infinity;requestFrame();};
       window.addEventListener('portfolio-palette-change',refreshPalette);
+      let appliedFocalLength=0;
       let shadowRegion='',lastShadowSun='', nextDraw=0, timer:ReturnType<typeof setTimeout>|undefined;
       function requestFrame(){
         if(timer!==undefined){clearTimeout(timer);timer=undefined;}
@@ -159,38 +161,33 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         return -1;
       }
       const pointer = {down:false,startX:0,startY:0,startYaw:0,startTilt:0};
-      const touches=new Map<number,{x:number;y:number}>();let pinchDistance=0,pinchZoom=1,wasPinch=false;
-      const touchDistance=()=>{const [a,b]=[...touches.values()];return a&&b?Math.hypot(a.x-b.x,a.y-b.y):0;};
+      const touches=new Map<number,{x:number;y:number}>();
+      let wasPinch=false, nativeTouchPair=false;
+      type Contact={clientX:number;clientY:number};
+      let pair:{distance:number;midY:number;zoom:number;tilt:number;intent:'pending'|'lens'|'tilt'}|null=null;
+      function beginPair(a:Contact,b:Contact){
+        pair={distance:Math.max(1,Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)),midY:(a.clientY+b.clientY)/2,
+          zoom:settings.current.zoom,tilt:cameraAxes.tilt.value,intent:'pending'};
+        wasPinch=true;pointer.down=false;
+      }
+      function movePair(a:Contact,b:Contact){
+        if(!pair)return;
+        const distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+        const spread=Math.abs(distance-pair.distance),travel=(a.clientY+b.clientY)/2-pair.midY;
+        if(pair.intent==='pending'){
+          if(spread>=4 && spread>=Math.abs(travel)*.7)pair.intent='lens';
+          else if(Math.abs(travel)>=10 && Math.abs(travel)>spread*1.7)pair.intent='tilt';
+        }
+        if(pair.intent==='lens')setZoom(clampZoom(pair.zoom*distance/pair.distance));
+        if(pair.intent==='tilt')settings.current.tilt=clampTilt(pair.tilt+travel/height);
+        lastInput=performance.now();requestFrame();
+      }
+      const pointerContacts=()=>Array.from(touches.values(),p=>({clientX:p.x,clientY:p.y}));
       const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
       function pick(e:PointerEvent){const rect=host.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);return raycaster.intersectObjects(world.hitTargets)[0]?.object.userData.landmark as Landmark|undefined;}
-      // Keep one continuous camera. A precise zoom can center any point along the modeled waterfront.
-      const ground=new THREE.Plane(new THREE.Vector3(0,1,0),0), picked=new THREE.Vector3();
-      // Continue the inspection area along the western span to its island landing.
-      // Elsewhere a click on the far horizon stays with the current waterfront view.
-      function canInspect(x:number,z:number){
-        if(x<=-148||x>=85||z<=-168)return false;
-        if(z<65)return true;
-        const dx=x-bridgeLayout.origin[0],dz=z-bridgeLayout.origin[1];
-        const sin=Math.sin(bridgeLayout.angle),cos=Math.cos(bridgeLayout.angle);
-        return dx*sin+dz*cos<bridgeLayout.length+13&&Math.abs(dx*cos-dz*sin)<9;
-      }
-      function aimAt(clientX:number,clientY:number) {
-        const rect=host.getBoundingClientRect();
-        mouse.set((clientX-rect.left)/width*2-1,1-(clientY-rect.top)/height*2);
-        raycaster.setFromCamera(mouse,camera);
-        if(settings.current.zoom>=1.65){
-          const surface=raycaster.intersectObjects(world.architectureChunks,false)[0]?.point;
-          if(surface&&surface.y>.16&&canInspect(surface.x,surface.z)){
-            settings.current.aim=surface.toArray();return;
-          }
-        }
-        if(raycaster.ray.intersectPlane(ground,picked)&&canInspect(picked.x,picked.z)){
-          settings.current.aim=[picked.x,.7,picked.z];
-        }
-      }
-      function zoomHere(e:MouseEvent){
+      function zoomHere(){
         if(streetView)return;
-        aimAt(e.clientX,e.clientY);conversation=null;setSpeech(null);setZoom(value=>clampZoom(Math.max(2,value*1.65)));setFocus(null);wake.current();
+        conversation=null;setSpeech(null);setZoom(value=>clampZoom(value*1.65));setFocus(null);wake.current();
       }
       host.addEventListener('dblclick',zoomHere);
       function resize() {
@@ -200,19 +197,26 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(viewportQuality!==maxQuality){maxQuality=viewportQuality;qualityMonitor=createQualityMonitor(maxQuality);quality=maxQuality;}
         renderer.setPixelRatio(drawingPixelRatio(width,height,window.devicePixelRatio||1,economy,streetView)); renderer.setSize(width,height);
         renderer.shadowMap.enabled=quality>0&&duskAmount<.85;renderer.shadowMap.needsUpdate=true;host.dataset.quality=String(quality);host.dataset.shadows=String(renderer.shadowMap.enabled);
-        camera.aspect=width/height;camera.setFocalLength(streetView?42:openingLens(width,height).focalLength);camera.updateProjectionMatrix();lastVisual='';requestFrame();
+        camera.aspect=width/height;appliedFocalLength=0;lastVisual='';requestFrame();
       }
       const resizeObserver=new ResizeObserver(resize); resizeObserver.observe(host); resize();
       const onDown=(e:PointerEvent)=>{
         if(streetView||e.button!==0)return;requestFrame();
         lastInput=performance.now();
-        if(e.pointerType==='touch'){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size===2){const pair=[...touches.values()];aimAt((pair[0].x+pair[1].x)/2,(pair[0].y+pair[1].y)/2);pinchDistance=touchDistance();pinchZoom=settings.current.zoom;wasPinch=true;pointer.down=false;return;}wasPinch=false;}
+        if(e.pointerType==='touch'){
+          touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+          if(touches.size>=2){const [a,b]=pointerContacts();if(touches.size===2)beginPair(a,b);return;}
+          wasPinch=false;
+        }
         pointer.down=true;pointer.startX=e.clientX;pointer.startY=e.clientY;pointer.startYaw=cameraAxes.yaw.value;pointer.startTilt=cameraAxes.tilt.value;settings.current.yaw=pointer.startYaw;cameraAxes.yaw.velocity=0;host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});
       };
       const onMove=(e:PointerEvent)=>{
         if(streetView)return;requestFrame();
         lastInput=performance.now();
-        if(touches.has(e.pointerId)){touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size>=2&&pinchDistance>0){e.preventDefault();setZoom(clampZoom(pinchZoom*touchDistance()/pinchDistance));return;}}
+        if(touches.has(e.pointerId)){
+          touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+          if(touches.size>=2){if(!nativeTouchPair&&touches.size===2){const [a,b]=pointerContacts();movePair(a,b);}return;}
+        }
         if(pointer.down){settings.current.yaw=pointer.startYaw+(e.clientX-pointer.startX)/Math.max(width,320)*Math.PI*.85;
           if(e.pointerType!=='touch')settings.current.tilt=clampTilt(pointer.startTilt+(e.clientY-pointer.startY)/height);
         }
@@ -220,15 +224,24 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           const candidate=pickPerson(e);if(candidate!==hoveredPerson){hoveredPerson=candidate;hoveredSince=performance.now();}host.style.cursor=hoveredPerson>=0?'pointer':'grab';
         }
       };
-      // Keep one-finger page scrolling; prevent browser zoom only for a two-finger city gesture.
-      const onTouchStart=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){pinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchZoom=settings.current.zoom;wasPinch=true;}};
-      const onTouchMove=(e:TouchEvent)=>{if(!streetView&&e.touches.length===2){e.preventDefault();const distance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pinchDistance>0)setZoom(clampZoom(pinchZoom*distance/pinchDistance));}};
-      host.addEventListener('touchstart',onTouchStart,{passive:true});host.addEventListener('touchmove',onTouchMove,{passive:false});
-      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();if(e.deltaY<0&&settings.current.zoom<=1)aimAt(e.clientX,e.clientY);setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
+      // One finger scrolls the page vertically. A two-finger gesture locks to a lens
+      // change or a vertical tilt so incidental drift during a pinch cannot re-aim it.
+      const onTouchStart=(e:TouchEvent)=>{
+        if(streetView||e.touches.length!==2)return;
+        nativeTouchPair=true;e.preventDefault();beginPair(e.touches[0],e.touches[1]);
+      };
+      const onTouchMove=(e:TouchEvent)=>{
+        if(!nativeTouchPair||e.touches.length!==2)return;
+        e.preventDefault();movePair(e.touches[0],e.touches[1]);
+      };
+      const onTouchEnd=(e:TouchEvent)=>{if(e.touches.length<2){nativeTouchPair=false;pair=null;}};
+      host.addEventListener('touchstart',onTouchStart,{passive:false});host.addEventListener('touchmove',onTouchMove,{passive:false});
+      host.addEventListener('touchend',onTouchEnd);host.addEventListener('touchcancel',onTouchEnd);
+      const onWheel=(e:WheelEvent)=>{if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
       host.addEventListener('wheel',onWheel,{passive:false});
       const onLeave=()=>{hoveredPerson=-1;};
       const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;};
-      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pinchDistance=0;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e,true);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
+      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pair=null;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e,true);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
       host.addEventListener('pointerdown',onDown);host.addEventListener('pointermove',onMove);host.addEventListener('pointerup',onUp);host.addEventListener('pointercancel',onCancel);host.addEventListener('pointerleave',onLeave);
       const onLost=(e:Event)=>{e.preventDefault();rendering=false;setStatus('fallback');}; renderer.domElement.addEventListener('webglcontextlost',onLost);
       const onVisibility=()=>{
@@ -242,7 +255,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       function animate(now:number) {
         frame=0;if(disposed||!visible||!rendering||document.hidden)return;
         const frameMs=now-last;last=now;
-        const movingCamera=pointer.down||touches.size>0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.tilt.value-settings.current.tilt)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005||target.distanceToSquared(destination)>1e-5;
+        const movingCamera=pointer.down||touches.size>0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.tilt.value-settings.current.tilt)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005;
         // Let the main scene follow the display. Carry fractional frame time for paced views.
         const interval=economy||streetView?1000/30:0;
         if(interval&&now+.8<nextDraw){requestFrame();return;}
@@ -252,23 +265,24 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(!streetView&&movingCamera&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
         const config=settings.current, still=config.paused;
         if(!still)elapsed+=dt;
-        destination.fromArray(config.aim);
-        target.set(dampCameraAxis(cameraAxes.x,destination.x,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.y,destination.y,dt,3.8,reducedMotion.current),dampCameraAxis(cameraAxes.z,destination.z,dt,3.8,reducedMotion.current));
         yaw=dampCameraAxis(cameraAxes.yaw,config.yaw,dt,pointer.down?9:4.5,reducedMotion.current);
-        const dolly=dampCameraAxis(cameraAxes.zoom,config.zoom,dt,4,reducedMotion.current);
+        const magnification=dampCameraAxis(cameraAxes.zoom,config.zoom,dt,4,reducedMotion.current);
         const lens=openingLens(width,height);
-        // Move through the neighborhood as the lens closes in so nearby roofs do not hide distant storefronts.
-        const travel=Math.pow(dolly,.82);
         const tilt=dampCameraAxis(cameraAxes.tilt,config.tilt,dt,pointer.down?9:4.5,reducedMotion.current);
-        const horizontal=lens.distance/travel, vertical=lens.elevation/travel;
-        const radius=Math.hypot(horizontal,vertical), angle=Math.atan2(vertical,horizontal)+tilt;
+        const horizontal=lens.distance, vertical=lens.elevation;
+        const radius=Math.hypot(horizontal,vertical), angle=orbitPitch(yaw,tilt,Math.atan2(vertical,horizontal));
         offset.set(0,Math.sin(angle)*radius,Math.cos(angle)*radius).applyAxisAngle(axis,yaw);camera.position.copy(target).add(offset);
         const headroom=width/height>1.8?Math.min(1.5,(width/height-1.8)*2.7):0;
         camera.lookAt(target.x,target.y+headroom,target.z);
-        camera.zoom=dolly/travel;camera.updateProjectionMatrix();
+        // A lens change crops the same sightline and preserves foreground/background alignment.
+        const focalLength=streetView?42:lens.focalLength*magnification;
+        if(focalLength!==appliedFocalLength){
+          camera.setFocalLength(focalLength);
+          appliedFocalLength=focalLength;
+        }
         if(streetView){
           // Locked view across the promenade at Cupid's Span; movement belongs to the street.
-          if(variant==='plaza'){camera.position.set(11,13,17);camera.lookAt(0,0,0);}else{camera.position.set(-24,17,13);camera.lookAt(width<650?-32:-35,0,-3);}camera.zoom=1;camera.updateProjectionMatrix();
+          if(variant==='plaza'){camera.position.set(11,13,17);camera.lookAt(0,0,0);}else{camera.position.set(-24,17,13);camera.lookAt(width<650?-32:-35,0,-3);}
         }
         stars.position.copy(camera.position);
         const lightChanged=lastLightingCheck===0;
@@ -298,7 +312,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           // Fixed extents avoid shadow crawl during orbit. A closer investigation can use all
           // shadow texels around the chosen address, without updating the map every frame.
           const span=config.zoom>=10?9:config.zoom>=4?23:59;
-          const sx=span===59?-9:Math.round(destination.x), sz=span===59?-7:Math.round(destination.z);
+          const sx=span===59?-9:Math.round(target.x), sz=span===59?-7:Math.round(target.z);
           const region=span+','+sx+','+sz;
           if(region!==shadowRegion){
             shadowRegion=region;sun.target.position.set(sx,0,sz);
@@ -345,9 +359,10 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.sailboats.forEach((boat,i)=>{const p=sailingPose(elapsed,i);boat.position.set(p.x,p.y,p.z);boat.rotation.set(p.heel,p.heading,0,'YXZ');});
         world.ferries.forEach((boat,i)=>{const pose=ferryPose(elapsed,i);boat.position.set(pose.x,pose.y,pose.z);boat.rotation.set(0,pose.heading,Math.sin(elapsed*1.2+i)*.007);});
         world.cars.forEach((car,i)=>{car.position.z=((elapsed*(i%2?1.1:-1.1)+i*8+bridgeLayout.length*5)%bridgeLayout.length);});
-        world.traffic.forEach((car,i)=>{const direction=i%2?1:-1,p=streetPose(streetView?((elapsed*(direction*1.2)+i*4+320)%32)-(variant==='plaza'?12:48):((elapsed*(direction*1.2)+i*16+640)%160)-80,direction);car.scale.setScalar(.5);car.position.set(p.x,.02,p.z);car.rotation.y=p.heading;});
+        world.traffic.forEach((car,i)=>{const direction=i%2?1:-1,p=streetPose(streetView?((elapsed*(direction*1.2)+i*4+320)%32)-(variant==='plaza'?12:48):((elapsed*(direction*1.2)+i*16+640)%160)-80,direction);car.scale.setScalar(.25);car.position.set(p.x,.04025,p.z);car.rotation.y=p.heading;});
         const sealT=elapsed*.14;
-        world.seaLion.position.set(24+Math.sin(sealT)*1.1,-.56+Math.sin(elapsed*2)*.045,8+Math.cos(sealT)*3);
+        const sealX=24+Math.sin(sealT)*1.1,sealZ=8+Math.cos(sealT)*3;
+        world.seaLion.position.set(sealX,waterHeight(sealX,sealZ,elapsed)-.011,sealZ);
         world.seaLion.rotation.set(Math.sin(elapsed*2)*.06,Math.atan2(Math.sin(sealT)*3,Math.cos(sealT)*1.1),Math.sin(elapsed*2)*.025);
         world.sealFlippers.forEach((flipper,i)=>{flipper.rotation.x=Math.sin(elapsed*2.5+i*Math.PI)*.38;});
         world.cyclists.forEach((bike,i)=>{
@@ -356,7 +371,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
           bike.rotation.y=-p.heading;
         });
-        const tramPose=streetcarPose(streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,.05,tramPose.z);world.tram.rotation.y=tramPose.heading;
+        const tramPose=streetcarPose(streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);world.tram.rotation.y=tramPose.heading;
         world.birds.forEach((bird,i)=>{const pose=birdPose(elapsed,i);bird.group.position.set(pose.x,pose.y,pose.z);bird.group.rotation.set(0,pose.heading,Math.cos(elapsed*.1+i)*.12);bird.wings[0].rotation.x=pose.flap;bird.wings[1].rotation.x=-pose.flap;});
         lastMotion=elapsed;
         }
@@ -365,7 +380,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           if(hoveredPerson>=0&&hoveredSince>0&&now-hoveredSince>850){
             hoveredSince=0;
             if(seen(personScreen(hoveredPerson)))say(hoveredPerson);
-          }else if(dolly>1.6&&elapsed>=nextQuip&&now-lastInput>2200){
+          }else if(magnification>1.6&&elapsed>=nextQuip&&now-lastInput>2200){
             nextQuip=elapsed+20;
             const listener=centralPasserby();if(listener>=0)say(listener);
           }
@@ -385,8 +400,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(!streetView)world.updateMarina();
         world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,boat.rotation.y));
         world.sailboats.forEach((boat,i)=>world.hullShadows[i+2].set(boat.position.x,boat.position.z,boat.rotation.y));
-        const visual=[width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),camera.zoom.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
-        const exploring=Math.abs(dolly-1)>.07||Math.abs(Math.sin((yaw-startYaw)/2))>.06||Math.abs(tilt)>.06||target.distanceToSquared(homeTarget)>1;
+        const visual=[width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
+        const exploring=Math.abs(magnification-1)>.07||Math.abs(Math.sin((yaw-startYaw)/2))>.06||Math.abs(tilt)>.06;
         if(host.parentElement?.dataset.exploring!==String(exploring)&&host.parentElement)host.parentElement.dataset.exploring=String(exploring);
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
         const changed=visual!==lastVisual;
@@ -402,7 +417,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       requestFrame();
       teardown=()=>{
         window.removeEventListener('portfolio-palette-change',refreshPalette);clearTimeout(timer);wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
-        host.removeEventListener('dblclick',zoomHere);host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
+        host.removeEventListener('dblclick',zoomHere);host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('touchend',onTouchEnd);host.removeEventListener('touchcancel',onTouchEnd);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
         sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
@@ -410,11 +425,11 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
   },[streetView,variant]);
-  const reset=()=>{wake.current();settings.current.aim=[...openingCamera.target];settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
+  const reset=()=>{wake.current();settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
-  return <section className="world" aria-label="Explore the Embarcadero. Drag or use the arrow keys to rotate. Double-click a spot to zoom in, or use plus and minus. Escape returns to the opening view. Press Enter to hear from a passerby." tabIndex={0} onKeyDown={e=>{if(e.target!==e.currentTarget&&e.target!==mount.current)return;wake.current();if(e.key==='+'||e.key==='='){changeZoom(.25);e.preventDefault();}if(e.key==='-'){changeZoom(-.25);e.preventDefault();}if(e.key==='ArrowLeft'){settings.current.yaw-=.18;e.preventDefault();}if(e.key==='ArrowRight'){settings.current.yaw+=.18;e.preventDefault();}if(e.key==='ArrowUp'||e.key==='ArrowDown'){settings.current.tilt=clampTilt(settings.current.tilt+(e.key==='ArrowUp'?.07:-.07));e.preventDefault();}if(e.key==='Escape')reset();if(e.key==='Enter'&&(e.target===e.currentTarget||e.target===mount.current)){speak.current();e.preventDefault();}}}>
+  return <section className="world" aria-label="Explore the Embarcadero. Drag or use the arrow keys to rotate. Double-click, pinch or use plus and minus to zoom around the Ferry Building. Slide two fingers up or down together to tilt. Escape returns to the opening view. Press Enter to hear from a passerby." tabIndex={0} onKeyDown={e=>{if(e.target!==e.currentTarget&&e.target!==mount.current)return;wake.current();if(e.key==='+'||e.key==='='){changeZoom(.25);e.preventDefault();}if(e.key==='-'){changeZoom(-.25);e.preventDefault();}if(e.key==='ArrowLeft'){settings.current.yaw-=.18;e.preventDefault();}if(e.key==='ArrowRight'){settings.current.yaw+=.18;e.preventDefault();}if(e.key==='ArrowUp'||e.key==='ArrowDown'){settings.current.tilt=clampTilt(settings.current.tilt+(e.key==='ArrowUp'?.07:-.07));e.preventDefault();}if(e.key==='Escape')reset();if(e.key==='Enter'&&(e.target===e.currentTarget||e.target===mount.current)){speak.current();e.preventDefault();}}}>
     <div className="world-poster" data-state={status} data-still={paused} aria-hidden="true"><div className="world-arrival-fog"/></div><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
     {overlay}{focus&&<div className="world-place" role="status">{landmarks[focus].label}</div>}
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}

@@ -1,0 +1,622 @@
+{
+ "source": "San Francisco Public Works Street Tree Inventory, matched to OSM within 3.17 metres; closest pair retained per public tree ID. Heights not recorded.",
+ "url": "https://data.sf.gov/d/tkzw-k3nq",
+ "asOf": "2026-09-30",
+ "trees": {
+  "2069721837": {
+   "sfId": 132123,
+   "species": "Phoenix canariensis",
+   "dbhInches": 18.0
+  },
+  "2069721840": {
+   "sfId": 132128,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "2069721841": {
+   "sfId": 132120,
+   "species": "Phoenix canariensis",
+   "dbhInches": 28.0
+  },
+  "2069721847": {
+   "sfId": 132121,
+   "species": "Phoenix canariensis",
+   "dbhInches": 18.0
+  },
+  "2069721848": {
+   "sfId": 132122,
+   "species": "Phoenix canariensis",
+   "dbhInches": 19.0
+  },
+  "2069721856": {
+   "sfId": 132119,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "2069721862": {
+   "sfId": 132118,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "2069721863": {
+   "sfId": 132126,
+   "species": "Phoenix canariensis",
+   "dbhInches": 16.0
+  },
+  "2069721864": {
+   "sfId": 194300,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "2069721876": {
+   "sfId": 194303,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "2069721891": {
+   "sfId": 194304,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "2069721905": {
+   "sfId": 194298,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "2069721923": {
+   "sfId": 132127,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "2069721975": {
+   "sfId": 194302,
+   "species": "Phoenix canariensis",
+   "dbhInches": 29.0
+  },
+  "2069721979": {
+   "sfId": 194301,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "2069721984": {
+   "sfId": 194305,
+   "species": "Phoenix canariensis",
+   "dbhInches": 28.0
+  },
+  "2069721989": {
+   "sfId": 132124,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "2069721997": {
+   "sfId": 194306,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "2069721998": {
+   "sfId": 132125,
+   "species": "Phoenix canariensis",
+   "dbhInches": 18.0
+  },
+  "2069722011": {
+   "sfId": 194299,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "3378535854": {
+   "sfId": 135581,
+   "species": "Platanus x hispanica",
+   "dbhInches": 9.0
+  },
+  "3378535859": {
+   "sfId": 135520,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "3378535864": {
+   "sfId": 135588,
+   "species": "Platanus x hispanica",
+   "dbhInches": 10.0
+  },
+  "5448144848": {
+   "sfId": 132100,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "5448144849": {
+   "sfId": 132101,
+   "species": "Phoenix canariensis",
+   "dbhInches": 18.0
+  },
+  "5448144850": {
+   "sfId": 132081,
+   "species": "Phoenix canariensis",
+   "dbhInches": 20.0
+  },
+  "5448144851": {
+   "sfId": 132102,
+   "species": "Phoenix canariensis",
+   "dbhInches": 17.0
+  },
+  "5448144852": {
+   "sfId": 132082,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "5448144853": {
+   "sfId": 132083,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "10828325148": {
+   "sfId": 194308,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "10828325149": {
+   "sfId": 194307,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "10828325153": {
+   "sfId": 194309,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "10828325154": {
+   "sfId": 194311,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "10828325155": {
+   "sfId": 194310,
+   "species": "Phoenix canariensis",
+   "dbhInches": 20.0
+  },
+  "10828325156": {
+   "sfId": 194312,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "10828325157": {
+   "sfId": 194313,
+   "species": "Phoenix canariensis",
+   "dbhInches": 12.0
+  },
+  "10828325158": {
+   "sfId": 194314,
+   "species": "Phoenix canariensis",
+   "dbhInches": 20.0
+  },
+  "10828325159": {
+   "sfId": 194315,
+   "species": "Phoenix canariensis",
+   "dbhInches": 20.0
+  },
+  "10828325160": {
+   "sfId": 194316,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "10828325161": {
+   "sfId": 194317,
+   "species": "Phoenix canariensis",
+   "dbhInches": 22.0
+  },
+  "10828325162": {
+   "sfId": 194319,
+   "species": "Phoenix canariensis",
+   "dbhInches": 19.0
+  },
+  "10828325163": {
+   "sfId": 194318,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "10828325281": {
+   "sfId": 194385,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "10828325282": {
+   "sfId": 194384,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "10828325283": {
+   "sfId": 194383,
+   "species": "Phoenix canariensis",
+   "dbhInches": 29.0
+  },
+  "10828325284": {
+   "sfId": 194382,
+   "species": "Phoenix canariensis",
+   "dbhInches": 28.0
+  },
+  "10828325285": {
+   "sfId": 194380,
+   "species": "Phoenix canariensis",
+   "dbhInches": 30.0
+  },
+  "10828325286": {
+   "sfId": 194381,
+   "species": "Phoenix canariensis",
+   "dbhInches": 28.0
+  },
+  "10828325287": {
+   "sfId": 194379,
+   "species": "Phoenix canariensis",
+   "dbhInches": 30.0
+  },
+  "10869934300": {
+   "sfId": 190479,
+   "species": "Ginkgo biloba",
+   "dbhInches": 7.0
+  },
+  "10869934301": {
+   "sfId": 190480,
+   "species": "Ginkgo biloba",
+   "dbhInches": 8.0
+  },
+  "10869934302": {
+   "sfId": 190483,
+   "species": "Ginkgo biloba",
+   "dbhInches": 5.0
+  },
+  "10869934303": {
+   "sfId": 190484,
+   "species": "Ginkgo biloba",
+   "dbhInches": 8.0
+  },
+  "10869934304": {
+   "sfId": 190482,
+   "species": "Ginkgo biloba",
+   "dbhInches": 9.0
+  },
+  "10869950125": {
+   "sfId": 195451,
+   "species": "Platanus x hispanica",
+   "dbhInches": 6.0
+  },
+  "10869950126": {
+   "sfId": 195450,
+   "species": "Platanus x hispanica",
+   "dbhInches": 4.0
+  },
+  "10869950127": {
+   "sfId": 195445,
+   "species": "Platanus x hispanica",
+   "dbhInches": 5.0
+  },
+  "11019019885": {
+   "sfId": 190284,
+   "species": "Platanus x hispanica",
+   "dbhInches": 3.0
+  },
+  "11019019886": {
+   "sfId": 190285,
+   "species": "Platanus x hispanica",
+   "dbhInches": 3.0
+  },
+  "11019019912": {
+   "sfId": 191460,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 9.0
+  },
+  "11019019915": {
+   "sfId": 191457,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 11.0
+  },
+  "11019019916": {
+   "sfId": 191456,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 11.0
+  },
+  "11019019918": {
+   "sfId": 191455,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 10.0
+  },
+  "11019019919": {
+   "sfId": 191453,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 8.0
+  },
+  "11019019943": {
+   "sfId": 191458,
+   "species": "Ligustrum lucidum",
+   "dbhInches": 16.0
+  },
+  "12003576298": {
+   "sfId": 192177,
+   "species": "Fraxinus americana",
+   "dbhInches": 17.0
+  },
+  "12633116642": {
+   "sfId": 135620,
+   "species": "Platanus x hispanica",
+   "dbhInches": 6.0
+  },
+  "12633116643": {
+   "sfId": 135619,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "12633116644": {
+   "sfId": 135618,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "12633116645": {
+   "sfId": 135617,
+   "species": "Platanus x hispanica",
+   "dbhInches": 7.0
+  },
+  "12633116646": {
+   "sfId": 135616,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "12633116647": {
+   "sfId": 195482,
+   "species": "Platanus x hispanica",
+   "dbhInches": 7.0
+  },
+  "12633116648": {
+   "sfId": 195481,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "12633116649": {
+   "sfId": 195480,
+   "species": "Platanus x hispanica",
+   "dbhInches": 7.0
+  },
+  "12633116650": {
+   "sfId": 195479,
+   "species": "Platanus x hispanica",
+   "dbhInches": 6.0
+  },
+  "12633116651": {
+   "sfId": 195478,
+   "species": "Platanus x hispanica",
+   "dbhInches": 8.0
+  },
+  "12793548822": {
+   "sfId": 25783,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548823": {
+   "sfId": 25782,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548824": {
+   "sfId": 25784,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548825": {
+   "sfId": 25734,
+   "species": "Phoenix canariensis",
+   "dbhInches": 16.0
+  },
+  "12793548826": {
+   "sfId": 25735,
+   "species": "Phoenix canariensis",
+   "dbhInches": 16.0
+  },
+  "12793548827": {
+   "sfId": 27937,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548828": {
+   "sfId": 27938,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548829": {
+   "sfId": 27939,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548830": {
+   "sfId": 132131,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "12793548831": {
+   "sfId": 132132,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "12793548832": {
+   "sfId": 132133,
+   "species": "Phoenix canariensis",
+   "dbhInches": 27.0
+  },
+  "12793548833": {
+   "sfId": 132130,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "12793548834": {
+   "sfId": 132129,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "12793548835": {
+   "sfId": 25672,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548836": {
+   "sfId": 25671,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548837": {
+   "sfId": 26031,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548838": {
+   "sfId": 26030,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548839": {
+   "sfId": 25668,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "12793548841": {
+   "sfId": 268975,
+   "species": "Phoenix canariensis",
+   "dbhInches": null
+  },
+  "12793548842": {
+   "sfId": 25628,
+   "species": "Phoenix canariensis",
+   "dbhInches": 12.0
+  },
+  "12793548843": {
+   "sfId": 25629,
+   "species": "Phoenix canariensis",
+   "dbhInches": 12.0
+  },
+  "12793548844": {
+   "sfId": 25630,
+   "species": "Phoenix canariensis",
+   "dbhInches": 12.0
+  },
+  "13356479854": {
+   "sfId": 135531,
+   "species": "Platanus x hispanica",
+   "dbhInches": 3.0
+  },
+  "13605228873": {
+   "sfId": 132116,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605228874": {
+   "sfId": 132117,
+   "species": "Phoenix canariensis",
+   "dbhInches": 17.0
+  },
+  "13605228875": {
+   "sfId": 132073,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "13605228876": {
+   "sfId": 132072,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "13605228877": {
+   "sfId": 132115,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605228879": {
+   "sfId": 132071,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605228880": {
+   "sfId": 132070,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605228881": {
+   "sfId": 132113,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "13605283515": {
+   "sfId": 132099,
+   "species": "Phoenix canariensis",
+   "dbhInches": 22.0
+  },
+  "13605283516": {
+   "sfId": 132080,
+   "species": "Phoenix canariensis",
+   "dbhInches": 26.0
+  },
+  "13605283517": {
+   "sfId": 132098,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605283518": {
+   "sfId": 132079,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "13605283519": {
+   "sfId": 132078,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "13605283521": {
+   "sfId": 132096,
+   "species": "Phoenix canariensis",
+   "dbhInches": 21.0
+  },
+  "13605283522": {
+   "sfId": 132077,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605283525": {
+   "sfId": 132075,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  },
+  "13605283526": {
+   "sfId": 132094,
+   "species": "Phoenix canariensis",
+   "dbhInches": 24.0
+  },
+  "13605283527": {
+   "sfId": 25798,
+   "species": "Phoenix canariensis",
+   "dbhInches": 36.0
+  },
+  "13605283528": {
+   "sfId": 132093,
+   "species": "Phoenix canariensis",
+   "dbhInches": 25.0
+  },
+  "13605369993": {
+   "sfId": 194324,
+   "species": "Phoenix canariensis",
+   "dbhInches": 18.0
+  },
+  "13605369994": {
+   "sfId": 194323,
+   "species": "Phoenix canariensis",
+   "dbhInches": 15.0
+  },
+  "13605369995": {
+   "sfId": 194322,
+   "species": "Phoenix canariensis",
+   "dbhInches": 22.0
+  },
+  "13605369996": {
+   "sfId": 194321,
+   "species": "Phoenix canariensis",
+   "dbhInches": 22.0
+  },
+  "13605369997": {
+   "sfId": 194320,
+   "species": "Phoenix canariensis",
+   "dbhInches": 23.0
+  }
+ }
+}

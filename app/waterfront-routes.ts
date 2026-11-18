@@ -1,18 +1,13 @@
 import * as THREE from 'three';
 
+import {rinconPoint} from './rincon-park.ts';
+
 type Point=[number,number];
-export const pedestrianPace=.108;
-export const bicycleScale=.155;
+export const pedestrianPace=.082;
+export const bicycleScale=.079;
 export const bicycleWheelBottom=.025;
 export const rinconGround=.146;
 export const plazaGround=.108;
-
-export const rinconLawn:Point[]=[
-  [-36.50,-1.24],[-35.1,-1.62],[-33.3,-1.82],[-31.3,-1.49],[-29.2,-.77],
-  [-27.1,-.38],[-26.15,-.32],[-26.14,-.12],[-28.8,.10],[-31.2,.40],
-  [-33.4,.64],[-35.4,.78],[-36.61,.65],[-36.72,.19],
-];
-export const rinconLawnHeight=(z:number)=>.147-z*.012;
 
 function curve(points:Point[],height:number,closed:boolean){
   const line=new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,height,z)),closed,'centripetal');
@@ -21,11 +16,9 @@ function curve(points:Point[],height:number,closed:boolean){
 }
 
 const rincon=curve([
-  [-36.97,.68],[-36.34,1.01],[-35.1,1.04],[-33.25,.84],[-31.15,.60],
-  [-28.92,.32],[-26.45,.035],[-25.57,-.09],[-25.34,-.31],[-25.73,-.51],
-  [-27.1,-.64],[-29.05,-1.075],[-31.25,-1.78],[-33.45,-2.11],[-35.42,-1.96],
-  [-36.51,-1.45],[-36.86,-.73],[-37.02,.09],
-],rinconGround,true);
+  [316,219],[322,201],[358,173],[398,159],[433,154],[476,157],[526,172],[578,198],[625,226],
+  [640,242],[612,248],[568,254],[528,260],[479,268],[437,274],[394,270],[355,263],[331,247],
+].map(([u,v])=>rinconPoint(u,v)),rinconGround,true);
 
 const ferry=curve([
   [-5.20,2.66],[-3.85,2.56],[-2.55,2.72],[-2.04,3.20],
@@ -33,16 +26,16 @@ const ferry=curve([
   [-5.84,4.16],[-5.78,3.11],
 ],plazaGround,true);
 
-export const routeWidth={rincon:.60,ferry:.42};
+export const routeWidth={rincon:.28,ferry:.42};
 export const routes={rincon,ferry};
 const gradedPath=(points:[number,number,number][])=>new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
 export const rinconApproach=gradedPath([
   [-46.51,.045,-1.15],[-46.08,.095,-1.04],[-45.81,.119,-.99],[-44.63,.132,-.71],
   [-42.91,rinconGround,-.37],[-41.13,rinconGround,-.01],[-39.58,rinconGround,.34],
-  [-38.25,rinconGround,.68],[-37.13,rinconGround,.85],[-36.34,rinconGround,1.01],
+  [-38.25,rinconGround,.68],[-37.13,rinconGround,.85],[-35.7,rinconGround,.65],[-34.60,rinconGround,.48],
 ]);
 export const rinconExit=gradedPath([
-  [-25.74,rinconGround,-.22],[-25.05,rinconGround,-.29],[-24.53,rinconGround,-.25],
+  [-28.67,rinconGround,.04],[-27.32,rinconGround,-.12],[-25.74,rinconGround,-.22],[-25.05,rinconGround,-.29],[-24.53,rinconGround,-.25],
   [-24.00,rinconGround,-.29],[-23.64,.118,-.29],[-23.10,.078,-.34],[-22.47,.045,-.40],
 ]);
 
@@ -76,8 +69,8 @@ function laneOffset(line:THREE.CatmullRomCurve3,offset:number){
     return [p.x+d.z*offset,p.z-d.x*offset];
   }),line.points[0].y,true);
 }
-const rinconWalkers=laneOffset(rincon,.071);
-const rinconCyclists=laneOffset(rincon,-.149);
+const rinconWalkers=laneOffset(rincon,.056);
+const rinconCyclists=laneOffset(rincon,-.065);
 export const walkingRouteLength={rincon:rinconWalkers.getLength(),ferry:ferry.getLength()};
 export const cyclingRouteLength=rinconCyclists.getLength();
 export const cyclingPace=.355;

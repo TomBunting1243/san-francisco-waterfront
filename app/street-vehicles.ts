@@ -13,8 +13,7 @@ const profiles = [
     rearBelt:-2.34, frontBelt:1.54, rearRoof:-2.27, frontRoof:.91, cabinWidth:.92 },
 ];
 
-// The street group applies .5 at runtime. This puts vehicles at the scale of the
-// surrounding figures and benches, with contact points at the top of the road.
+// Street and bridge vehicles both apply .25, giving the map scale of .06 units/metre.
 const metresToModel = .24;
 const roadOffset = .055;
 

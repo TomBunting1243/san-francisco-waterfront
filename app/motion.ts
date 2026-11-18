@@ -10,7 +10,7 @@ export function ferryPose(elapsed: number, index: number) {
   const phase=(x+index*11)*Math.PI/80;
   const z=route.z+Math.sin(phase)*1.1;
   const slope=Math.cos(phase)*1.1*Math.PI/80;
-  return {x,z,y:-.47+Math.sin(elapsed*1.4+index)*.035,heading:Math.atan2(-slope*route.direction,route.direction)};
+  return {x,z,y:waterHeight(x,z,elapsed),heading:Math.atan2(-slope*route.direction,route.direction)};
 }
 export function birdPose(elapsed:number,index:number){
   const t=elapsed*(.085+(index%3)*.01)+index*1.7;

@@ -1,12 +1,18 @@
+import {streetcarTrack} from './streets.ts';
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import fontData from './harbor-font.json' with {type:'json'};
 
+// Market Street Railway's car 1051 body dimensions include the bumper and
+// steps. Height is above rail, with the raised working pole measured separately.
+export const pccDimensions={
+  length:(48+5/12)*.3048*.06, width:(8+4/12)*.3048*.06, height:(10+3/12)*.3048*.06,
+};
 /** Code-native PCC miniature, based on Muni 1051's green-and-cream bodywork. */
 export function createStreetcar(){
-  const group=new THREE.Group();group.name='Muni PCC streetcar';group.scale.setScalar(.5);
+  const group=new THREE.Group();group.name='Muni PCC streetcar';group.scale.set(pccDimensions.length/3.629,pccDimensions.height/1.0675,pccDimensions.width/.8835);
   const colors={green:'#31735c',cream:'#e9dfb8',glass:'#3e5e64',rubber:'#283737',metal:'#9baba6',dark:'#354a43'};
   const materials=Object.fromEntries(Object.entries(colors).map(([key,color])=>[key,new THREE.MeshStandardMaterial({color,roughness:key==='glass'?.3:.68,metalness:key==='metal'?.5:.08})]));
   const glazing=materials.glass;glazing.emissive.set('#e6c583');
@@ -23,10 +29,11 @@ export function createStreetcar(){
   box(3.14,.08,.767,-.05,.87,0,materials.cream,.025);
   box(2.96,.055,.771,-.08,.32,0,materials.metal);
   box(2.8,.12,.56,0,.24,0,materials.dark);
+  const wheelCenter=(streetcarTrack.gauge+streetcarTrack.railHead)/(2*group.scale.z);
   for(const x of [-1.08,1.08]){
     box(.69,.14,.49,x,.19,0,materials.dark);
-    for(const dx of [-.22,.22])for(const z of [-.3,.3]){
-      const wheel=part(new THREE.CylinderGeometry(.14,.14,.07,14),materials.rubber,x+dx,.14,z);wheel.rotation.x=Math.PI/2;
+    for(const dx of [-.22,.22])for(const z of [-wheelCenter,wheelCenter]){
+      const wheel=part(new THREE.CylinderGeometry(.14,.14,.07,14),materials.rubber,x+dx,.14,z);wheel.rotation.x=Math.PI/2;wheel.name='Wheel tread';
       const hub=part(new THREE.CylinderGeometry(.079,.079,.074,12),materials.metal,x+dx,.14,z);hub.rotation.x=Math.PI/2;
     }
   }
@@ -69,7 +76,8 @@ export function createStreetcar(){
   box(.025,.24,.48,-1.757,.7,0,glazing,.04);box(.035,.03,.59,-1.74,.30,0,materials.metal);
   for(const x of [-.8,-.15,.47]){box(.25,.045,.30,x,1.015,0,materials.green);for(let j=0;j<4;j++)box(.018,.012,.24,x-.075+j*.05,1.043,0,materials.dark);}
   box(.24,.055,.25,.10,1.04,0,materials.dark);
-  rod([.1,1.07,0],[-1.05,1.94,0],.013);rod([.1,1.07,.02],[-.24,1.36,.02],.021,materials.metal);
-  box(.085,.023,.07,-1.05,1.95,0,materials.dark);
+  const wire=streetcarTrack.wireRise/group.scale.y;
+  rod([.1,1.07,0],[-1.05,wire-.018,0],.013);rod([.1,1.07,.02],[-.24,1.36,.02],.021,materials.metal);
+  box(.085,.023,.07,-1.05,wire-.0115,0,materials.dark).name='Trolley contact shoe';
   return {group,glazing,lamp};
 }

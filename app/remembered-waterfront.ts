@@ -328,6 +328,34 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   open.position.x=-.67;
   box(.156,.185,.025,-.34,.121,.045,'#cbb890',townSide).rotation.x=-.12;
   box(.46,.06,.17,.58,.022,.109,'#bdb39d',townSide);
+  // The 2013 entrance portrait places a life-size figure in a glazed case
+  // beside the doorway. Keep the landing and the door swing clear.
+  const cabinet=group('Sinbad the Sailor entrance display',[.415,.052,.12],townSide);
+  cabinet.rotation.y=-.46;
+  box(.077,.009,.054,0,.0045,0,'#73553e',cabinet);
+  box(.077,.006,.054,0,.140,0,'#876b50',cabinet);
+  box(.072,.130,.002,0,.072,-.024,'#493e34',cabinet);
+  for(const x of [-.036,.036])for(const z of [-.024,.024])box(.0024,.132,.0024,x,.074,z,'#b59467',cabinet);
+  const sailor=group('Sinbad the Sailor',[0,.009,0],cabinet);
+  function figurePart(x:number,y:number,z:number,w:number,h:number,d:number,c:string){
+    const part=mesh(new THREE.SphereGeometry(1,10,8),c,x,y,z,sailor);part.scale.set(w,h,d);return part;
+  }
+  const cloth='#ead9b4',vest='#826952',sash='#a95440',skin='#bd9271';
+  for(const side of [-1,1]){
+    figurePart(side*.010,.006,.003,.007,.006,.012,'#4c4237');
+    figurePart(side*.008,.031,0,.010,.025,.008,'#7d7361');
+    figurePart(side*.020,.073,0,.008,.016,.008,cloth).rotation.z=side*.29;
+    figurePart(side*.022,.060,.005,.005,.010,.005,skin);
+  }
+  figurePart(0,.073,0,.018,.023,.011,vest);
+  figurePart(0,.053,.001,.018,.006,.012,sash);
+  figurePart(0,.104,0,.010,.014,.009,skin);
+  figurePart(0,.099,.006,.010,.009,.005,'#463d32');
+  figurePart(0,.116,0,.014,.008,.012,cloth);
+  figurePart(0,.122,0,.009,.005,.009,'#bfae88');
+  const pane=box(.069,.124,.001,0,.074,.025,'#c5dddd',cabinet);
+  pane.name='Sinbad display glass';pane.material=new THREE.MeshStandardMaterial({color:'#c7ddda',roughness:.16,transparent:true,opacity:.12,depthWrite:false});
+  pane.castShadow=false;
   for(const x of [-.68,-.23,.23,.68])storefront(x,.434,.296,.41,.283,blueTrim,sinbads);
   sinbadWordmark(.126,.077,.459,.448,1.14,sinbads);
   const fish=new THREE.Shape();

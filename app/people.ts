@@ -3,7 +3,6 @@ import {pedestrianPace} from './waterfront-routes.ts';
 
 const metresToScene=.06;
 const modelHeight=.548;
-const figureExaggeration=1.85;
 const contactSurfaceOffset=.0009;
 const swingFraction=.44;
 const pedSpeed=(direction:number)=>direction>0?pedestrianPace:pedestrianPace*.87;
@@ -130,7 +129,7 @@ export function createPeople(count=22){
   function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample){
     const cadence=5.55+(i%4)*.23, phase=t*cadence+i*2.1, sway=Math.sin(phase);
     const style=i%cast.length, person=cast[style], adultHeight=1.65+(i%4)*.085;
-    const size=adultHeight*metresToScene*figureExaggeration/modelHeight;
+    const size=adultHeight*metresToScene/modelHeight;
     const stanceDuration=(1-swingFraction)*2*Math.PI/cadence;
     const stride=pedSpeed(direction)*stanceDuration/(2*size);
     const base=ground===0?.072:ground, bob=standing?sway*.003:Math.abs(sway)*.011;
