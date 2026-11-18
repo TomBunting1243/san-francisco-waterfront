@@ -9,7 +9,7 @@ export type BillboardSite={
   name:string;x:number;z:number;y:number;footY:number;yaw:number;width:number;height:number;
   mounting:'rack'|'wall'|'poster'|'column'|'existing column'; corridor:'I-80'|'Embarcadero'; source:string;
   evidence:'documented address'|'operator sheet'|'archival approximation'|'licensed kiosk'|'photographed kiosk';
-  latitude?:number;longitude?:number;
+  latitude?:number;longitude?:number; bearingSpread?:number;
 };
 function roadside(name:string,latitude:number,longitude:number,facing:number,width:number,height:number,aboveGrade:number,
   roof:number,source:string,evidence:BillboardSite['evidence']):BillboardSite{
@@ -40,7 +40,9 @@ export const billboardSites:BillboardSite[]=[
   archived('Mission at Steuart · parking lot bulletin','wnp14.2310',-11.96,-7.39,.28,.01,.14,.57,.23,'poster'),
   // At Market the Sunkist/Lucky Strike face and neighboring smaller board
   // occupy separate racks. They recur in multiple years of Ferry Loop photos.
-  archived('Market · Ferry Loop long roof face','wnp14.12866',-8.90,-7.04,1.17,.83,.145,.99,.33,'rack'),
+  // The 1 Hotel roof at this block-face pin is .840 high. Inset the feet
+  // between the terrace railings and carry the lower edge above the adjoining planter and rail.
+  {...archived('Market · Ferry Loop long roof face','wnp14.12866',-8.90,-7.04,1.32,.848,.145,.99,.33,'rack'),bearingSpread:.30},
   archived('Market · Ferry Loop neighboring face','wnp14.12866',-8.73,-5.62,.53,.24,.145,.48,.21,'rack'),
   archived('Clay · Harbor Garage roof rack','wnp27.50187',8.83,-10.60,.64,.137,.91,.70,.31,'rack'),
   // Contract addresses and photographed intersections identify the fixtures.

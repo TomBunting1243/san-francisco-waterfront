@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {oaklandContainerCranes} from './oakland-cranes.ts';
+import {distantEastSpan} from './east-span.ts';
 import {distantGoldenGate} from './golden-gate.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import reliefData from '../public/data/bay-relief.json' with { type: 'json' };
@@ -523,7 +525,7 @@ export function createBayRelief() {
         ${coastal ? `
           float lowShore = 1. - smoothstep(.06, .55, reliefHeight);
           float coastalAir = smoothstep(120., 445., depth) * lowShore;
-          fade = mix(fade, 1., coastalAir * .76);
+          fade = mix(fade, 1., coastalAir * mix(.18,.76,smoothstep(.0005,.009,reliefVisibilityFalloff)));
         ` : ''}
         gl_FragColor.rgb = mix(gl_FragColor.rgb, reliefHorizon, fade);
       `);
@@ -535,8 +537,10 @@ export function createBayRelief() {
   // The strait is west-northwest of the Ferry Building. Both the terrain's
   // depth buffer and the same marine visibility field can hide the steel.
   root.add(distantGoldenGate(bayReliefPosition,waterSurface.level,material({color:'#ac7969'},16)));
+  root.add(distantEastSpan(bayReliefPosition,waterSurface.level,material({vertexColors:true},16)));
   const ground = material({vertexColors:true}, 85, true);
   const masonry = material({vertexColors:true}, 105);
+  root.add(oaklandContainerCranes(bayReliefPosition,bayReliefGround,masonry));
   const concrete = material({color:'#e4dac2'}, 110);
   const slit = material({color:'#657579'}, 110);
   root.add(...grids.map(grid => terrain(grid, ground)));

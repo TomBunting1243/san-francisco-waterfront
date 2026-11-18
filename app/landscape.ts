@@ -39,7 +39,7 @@ import {bindFountainWaterClock,fountainWaterName} from './fountain-flow.ts';
 import {createFireboat} from './fireboat.ts';
 import {createDoradoFerry} from './dorado-ferry.ts';
 import {createDaySailer} from './sailing.ts';
-import {configureBayWater} from './bay-water.ts';
+import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
 import {bakeBlocks} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
@@ -69,6 +69,9 @@ import {addMillenniumTower} from './millennium-tower.ts';
 import {addRinconTower} from './rincon-tower.ts';
 import {addDrummFrontage} from './drumm-frontages.ts';
 import {addLuminaTower} from './lumina-tower.ts';
+import {addGoldenGatewayGarage,refineMaritimeLandings} from './golden-gateway-garage.ts';
+import {addRinconCenter} from './rincon-center.ts';
+import {add201Spear} from './201-spear.ts';
 import {addFortyFiveFremont} from './forty-five-fremont.ts';
 import {addMarketFlatiron} from './market-flatiron.ts';
 import {addFolgerBuilding} from './folger-building.ts';
@@ -115,7 +118,7 @@ export function createLandscape() {
   const nightInk={value:0};
   const hullShadows=Array.from({length:ferryFleet.length+2},()=>new THREE.Vector3(10000,10000,0));
   const bayWeather=configureBayWater(waterMaterial,waterTime,hullShadows,nightInk);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(waterSurface.size, waterSurface.size, waterSurface.columns, waterSurface.rows), waterMaterial);
+  const water = new THREE.Mesh(baySurfaceGeometry(), waterMaterial);
   water.rotation.x = -Math.PI / 2; water.position.y = waterSurface.level; water.receiveShadow = true; root.add(water);
   addSurveyShore(mesh,bayReliefBankHeight);
   function linePath(points:number[][],width:number,y:number,color:string){
@@ -176,7 +179,7 @@ export function createLandscape() {
     }
   }
   const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
-  const detailedBuildings=refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing]));
+  const detailedBuildings=refineMaritimeLandings(refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing])));
   const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
   const gardens=waterfrontGardens(detailedBuildings,font);root.add(gardens.root);
   const centerComplex=createEmbarcaderoCenter(waterfrontLandscape.areas,waterfrontLandscape.paths,detailedBuildings);
@@ -188,10 +191,11 @@ export function createLandscape() {
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;
     }
+    if(addGoldenGatewayGarage(b,root,windowPositions))return;
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
     if(addRinconRestaurant(b,root,windowPositions)||addMillenniumTower(b,root,windowPositions)||addRinconTower(b,root,windowPositions))return;
     if(addDrummFrontage(b,root,windowPositions)||addLuminaTower(b,root,windowPositions))return;
-    if(addFortyFiveFremont(b,root,windowPositions))return;
+    if(addFortyFiveFremont(b,root,windowPositions)||add201Spear(b,root,windowPositions)||addRinconCenter(b,root,windowPositions))return;
     if(addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
     if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
@@ -640,10 +644,12 @@ export function createLandscape() {
     // Keep printed lettering, glass, water, and transparent wakes on their own material treatments.
     const washSurface=mat instanceof THREE.MeshStandardMaterial&&!mat.transparent&&!mat.map&&
       mat!==windowMaterial&&mat!==waterMaterial&&mat.roughness>.55;
+    const marine=mat===waterMaterial||mat===ferryPaint;
     const previousCompile=mat.onBeforeCompile;
     const previousCacheKey=mat.customProgramCacheKey();
     mat.onBeforeCompile=(shader,renderer)=>{
       previousCompile.call(mat,shader,renderer);
+      if(marine){shader.uniforms.bayHorizon=bayWeather.bayHorizon;shader.fragmentShader='uniform vec3 bayHorizon;\n'+shader.fragmentShader;}
       shader.uniforms.edgeFogColor=edgeFogColor;shader.uniforms.seaMistBank=seaMist;shader.uniforms.rainOnStone=rainOnStone;
       shader.uniforms.pigmentSheet={value:pigment};shader.uniforms.nightInk=nightInk;
       const towerCenter=new THREE.Vector2(hall.towerX,hall.towerZ);shader.uniforms.ferryTowerCenter={value:towerCenter};
@@ -687,7 +693,7 @@ export function createLandscape() {
           gl_FragColor.rgb=mix(gl_FragColor.rgb,gl_FragColor.rgb*.74+edgeFogColor*sheen,damp);
         }
         `:''}
-        vec3 P=harborPosition;
+        ${mat===waterMaterial?'':`vec3 P=harborPosition;
         // Warm floodlighting on the Ferry Building and clock; pale concrete takes ink in shadow.
         vec2 fromTower=P.xz-ferryTowerCenter;
         float towerLight=(1.-smoothstep(.45,.83,length(fromTower)))*smoothstep(1.0,2.4,P.y)*(1.-smoothstep(4.6,5.,P.y));
@@ -695,22 +701,22 @@ export function createLandscape() {
         float wash=nightInk*(towerLight*.83+arcade*.49);
         gl_FragColor.rgb*=mix(vec3(1.),vec3(.68,.80,.99),nightInk*(1.-min(1.,wash)));
         gl_FragColor.rgb+=vec3(.60,.34,.09)*wash*max(.2,value);
-        ${mat===illuminatedArchitecture?'gl_FragColor.rgb+=nightSignLight*smoothstep(.18,.95,nightInk);':''}
+         ${mat===illuminatedArchitecture?'gl_FragColor.rgb+=nightSignLight*smoothstep(.18,.95,nightInk);':''}`}
         float sightline=distance(cameraPosition,harborPosition);
-        float boundary=max(smoothstep(65.,102.,harborPosition.x),smoothstep(128.,198.,-harborPosition.z));
+        ${marine?'':`float boundary=max(smoothstep(65.,102.,harborPosition.x),smoothstep(128.,198.,-harborPosition.z));
         float edgeHaze=max(boundary*smoothstep(18.,112.,sightline)*${mat===waterMaterial||mat.transparent?'1.0':'.51'},
           smoothstep(42.,180.,sightline)*mix(.15,.075,nightInk));
-        gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,edgeHaze);
+        gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,edgeHaze);`}
         if(seaMistBank.x>.005){
           float bank=texture2D(pigmentSheet,harborPosition.xz*.006+vec2(seaMistBank.y*.00048,0.)).r;
           float below=1.-smoothstep(.2,5.4,harborPosition.y+(bank-.5)*5.);
           float depth=smoothstep(12.,104.,sightline);
           gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,seaMistBank.x*below*depth*(.20+.34*bank));
         }
-        #include <fog_fragment>`);
+        ${marine?marineDistanceFog:'#include <fog_fragment>'}`);
       if(mat===illuminatedArchitecture)shader.fragmentShader='varying vec3 nightSignLight;\n'+shader.fragmentShader;
     };
-    mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-wash-v3|${washSurface}|${mat===waterMaterial||mat.transparent}|${mat===illuminatedArchitecture?'|sign-lights':''}`;
+    mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-wash-v4|${marine}|${washSurface}|${mat===waterMaterial||mat.transparent}|${mat===illuminatedArchitecture?'|sign-lights':''}`;
   }
   // Haloes share one transparent batch and sit at the coordinates of the promenade lamps.
   const lampGlow=new THREE.PointsMaterial({color:'#ffd799',size:.105,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,opacity:0});

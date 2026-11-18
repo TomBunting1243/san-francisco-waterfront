@@ -23,7 +23,21 @@ export const billboardCaptions:Record<ExtraBillboardAd,string>={
 export function renderBillboardEdition(id:string,w:number,h:number,group:THREE.Group,mesh:ApproachMesh,portrait=false){
   const index=extraBillboardAds.indexOf(id as ExtraBillboardAd);
   if(index<0)throw new Error('Unknown billboard artwork '+id);
-  if(!portrait)mesh(new THREE.BoxGeometry(w+.009,h+.008,.044),'#4a514d',0,0,0,group);
+  if(!portrait){
+    // The mounted print is the cabinet's front surface. A full metal face
+    // directly beneath it competes for the same depth samples at long lenses.
+    const cabinet=new THREE.BoxGeometry(w+.009,h+.008,.044);
+    const index=cabinet.index!,front=cabinet.groups.find(g=>g.materialIndex===4)!;
+    cabinet.setIndex(Array.from(index.array).filter((_,i)=>i<front.start||i>=front.start+front.count));
+    cabinet.clearGroups();
+    mesh(cabinet,'#4a514d',0,0,0,group).name='Print cabinet sides and rear';
+    const rect=(shape:THREE.Path,halfW:number,halfH:number)=>{
+      shape.moveTo(-halfW,-halfH);shape.lineTo(halfW,-halfH);shape.lineTo(halfW,halfH);shape.lineTo(-halfW,halfH);shape.closePath();
+    };
+    const rim=new THREE.Shape(),opening=new THREE.Path();
+    rect(rim,(w+.009)/2,(h+.008)/2);rect(opening,w/2,h/2);rim.holes.push(opening);
+    mesh(new THREE.ShapeGeometry(rim),'#4a514d',0,0,.022,group).name='Cabinet perimeter lip';
+  }
   const art=new THREE.PlaneGeometry(w,h);
   const uv=art.getAttribute('uv');
   // Eight edge-replicated pixels around each panel keep the neighboring ad
@@ -33,7 +47,7 @@ export function renderBillboardEdition(id:string,w:number,h:number,group:THREE.G
     uv.setXY(i,(left+uv.getX(i)*(portrait?132:896))/3180,1-(Math.floor(index/3)*356+8+(1-uv.getY(i))*340)/1780);
   }
   art.setAttribute('billboardPrint',uv);
-  const front=mesh(art,'#ffffff',0,0,portrait?.0004:.024,group);
+  const front=mesh(art,'#ffffff',0,0,portrait?.0004:.022,group);
   front.name=billboardCaptions[id as ExtraBillboardAd];
   return front;
 }

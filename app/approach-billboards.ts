@@ -134,7 +134,7 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
       // Three address pins sit at the edge of their roofs. The face projects
       // over the edge, but the bearing feet stay on the warehouse behind it.
       const offset=slot<2?.25:0;
-      const spread=slot<2?.21:slot===3?.105:.45;
+      const spread=site.bearingSpread??(slot<2?.21:slot===3?.105:.45);
       const depth=slot===3?-.16:0;
       const baseWidth=slot===3?.14:1;
       for(const side of [-1,1]){

@@ -21,7 +21,7 @@ const contains=(p:number[],area:Area)=>insideBuilding(p[0],p[1],area.p);
 const walton=sfMap.parks.find(p=>p.name.includes('Walton'))!;
 export const gardenAreas:Area[]=[...waterfrontLandscape.areas.filter(a=>['park','commercial','podium'].includes(a.kind)),{...walton,id:-1,kind:'park'}];
 const ecAreas=gardenAreas.filter(a=>a.kind==='podium');
-const plantedAreas=gardenAreas.filter(a=>a.kind!=='podium');
+const plantedAreas=gardenAreas.filter(a=>a.kind!=='podium'&&a.id!==32946402);
 
 /** Mapped lawns and paths, with lidar crown dimensions where survey returns resolve an individual tree. */
 export function waterfrontGardens(buildings:Building[],font?:Font){

@@ -162,3 +162,40 @@ test('road and kiosk layouts select different complete prints for every illustra
     assert.ok(new Set(swatch).size>32,ad+' print must contain readable light/dark separation');
   }
 });
+
+test('the Ferry Loop rack presents one clear print surface above the hotel terrace from the published camera',async()=>{
+  const {mappedBuildings,footprintGeometry}=await import('../app/sf-map.ts');
+  const {buildingCharacter}=await import('../app/building-character.ts');
+  const font=new FontLoader().parse(fontData),scene=new THREE.Group(),hotel=new THREE.Group();
+  const host=mappedBuildings.find(b=>b.id===1487225647);
+  // Actual roof and adjoining planted terraces preserved in the production hotel.
+  const roof=new THREE.Mesh(footprintGeometry(host.p,host.h),new THREE.MeshBasicMaterial());
+  hotel.add(roof);
+  for(const b of mappedBuildings.filter(b=>b.name==='1 Hotel San Francisco'))hotel.add(buildingCharacter(b,mappedBuildings,font).root);
+  scene.add(hotel);
+  const boards=buildApproachBillboards(addMesh,scene,font,billboardSites.map(()=> 'a16z'));
+  const rack=boards.getObjectByName('Market · Ferry Loop long roof face'),art=rack.getObjectByName('Printed artwork');
+  const sheet=art.children.find(m=>m.geometry?.hasAttribute('billboardPrint'));
+  scene.updateMatrixWorld(true);
+  const origin=new THREE.Vector3(-1.2680929023,19.5749526702,45.7328221830);
+  const ray=new THREE.Raycaster();
+  for(let i=0;i<13;i++)for(let j=0;j<9;j++){
+    const target=sheet.localToWorld(new THREE.Vector3(-.598+1.196*i/12,-.208+.416*j/8,0));
+    const depth=target.distanceTo(origin);ray.set(origin,target.sub(origin).normalize());ray.far=depth+.022;
+    const hits=ray.intersectObjects([hotel,rack],true);
+    assert.equal(hits[0]?.object,sheet,`corner or terrace obstructs sample ${i}/${j}`);
+    assert.ok(hits.every(h=>h.object===sheet),'no competing front-facing metal under the print');
+  }
+  let feet=0;
+  rack.traverse(o=>{
+    if(o.name!=='Rack bearing foot')return;
+    feet++;const sole=o.getWorldPosition(new THREE.Vector3());sole.y-=.008;
+    for(const corner of [[-.021,-.021],[-.021,.021],[.021,-.021],[.021,.021]]){
+      const pt=new THREE.Vector3(corner[0],0,corner[1]).applyAxisAngle(new THREE.Vector3(0,1,0),rack.rotation.y).add(sole);
+      ray.set(new THREE.Vector3(pt.x,sole.y+.5,pt.z),new THREE.Vector3(0,-1,0));ray.far=1;
+      const hit=ray.intersectObject(hotel,true)[0];
+      assert.ok(hit?.object===roof&&Math.abs(hit.point.y-sole.y)<.0001,'bearing lands on the roof clear of plants and railings');
+    }
+  });
+  assert.equal(feet,8);
+});

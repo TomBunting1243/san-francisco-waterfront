@@ -1,6 +1,7 @@
 import {harborDatum,waterSurface} from './water-surface.ts';
 import * as THREE from 'three';
 import data from '../public/data/survey-shore.json' with {type:'json'};
+import eastBay from '../public/data/east-bay-shore.json' with {type:'json'};
 
 type Surface=(geometry:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Polygon=number[][][];
@@ -8,6 +9,10 @@ type CoastalCell=[number,Polygon[],Polygon[]];
 const masks=new Map(Object.entries(data.tidalVertices).map(([key,indices])=>[key,new Set(indices)]));
 const cuts=new Map(Object.entries(data.coastalCells).map(([key,cells])=>[key,
   new Map((cells as CoastalCell[]).map(([index,lower,upper])=>[index,[lower,upper] as const]))]));
+const bayCuts=cuts.get('bay')!,bayMask=masks.get('bay')!;
+for(const index of eastBay.water)bayCuts.set(index,[[],[]]);
+for(const [index,lower,upper] of eastBay.coastalCells as CoastalCell[])bayCuts.set(index,[lower,upper]);
+for(const index of eastBay.tidalVertices)bayMask.add(index);
 
 export function isTidalVertex(grid:string,index:number){
   return masks.get(grid)?.has(index)??false;

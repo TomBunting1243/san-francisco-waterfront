@@ -4,6 +4,30 @@ import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
 import {center,mappedBuildings} from './sf-map.ts';
 
+/** One extra row around the wave grid carries the water out to the horizon.
+ * The interior vertices keep the spacing sampled by hulls and floating docks. */
+export function baySurfaceGeometry(){
+  const {size,columns,rows}=waterSurface;
+  const sheet=new THREE.PlaneGeometry(size+2*size/columns,size+2*size/rows,columns+2,rows+2);
+  const position=sheet.attributes.position,far=2000;
+  for(let row=0;row<=rows+2;row++)for(let col=0;col<=columns+2;col++){
+    const i=row*(columns+3)+col;
+    if(col===0||col===columns+2)position.setX(i,col===0?-far:far);
+    if(row===0||row===rows+2)position.setY(i,row===0?far:-far);
+  }
+  sheet.computeBoundingSphere();
+  return sheet;
+}
+
+// Use the same measured visibility and horizon color on the wake and its hull.
+export const marineDistanceFog = `
+  #ifdef USE_FOG
+    float clarity=smoothstep(95.,465.,fogFar);
+    float range=mix(32.,765.,clarity);
+    float distanceMist=1.-exp(-max(0.,length(vViewPosition)-8.)/range);
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist);
+  #endif`;
+
 /** Three shallow skyline strips approximate shore reflections without drawing the city a second time. */
 export function configureBayWater(material:THREE.MeshStandardMaterial, time:{value:number}, hulls:THREE.Vector3[],night:{value:number}) {
   const ferryWakes={value:new Float32Array(hulls.length-2)};
@@ -32,7 +56,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.uniforms.harborTime=time;
     shader.uniforms.hullShadows={value:hulls};shader.uniforms.ferryWakes=ferryWakes;shader.uniforms.bayNight=night;
     shader.uniforms.shoreProfiles={value:profiles};
-    shader.uniforms.bayHorizon=horizon;shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
+    shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
     shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
     shader.vertexShader='uniform float harborTime; varying vec2 baySurface; varying float bayElevation;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       baySurface=vec2(position.x,-position.y);
@@ -43,7 +67,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.fragmentShader=`
       uniform float harborTime;
       uniform sampler2D shoreProfiles;
-      uniform vec3 bayHorizon, sunsetGlitter;
+      uniform vec3 sunsetGlitter;
       uniform vec4 waterfrontSun;
       uniform vec3 hullShadows[${hulls.length}];
       uniform float ferryWakes[${hulls.length-2}];
@@ -148,10 +172,8 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       glint*=smoothstep(.40,.71,lanes)*smoothstep(.32,.66,windStrength);
       glint*=.32+.68*smoothstep(-.5,.78,sin(crossPhase*.44+lanes));
       diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82)*mix(.52,1.48,bayChop);
-    `).replace('#include <fog_fragment>',`#include <fog_fragment>
-      float distanceMist=smoothstep(38.,420.,length(vViewPosition));
-      gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist*.97);`);
+    `);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v5';
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v6';
   return {ferryWakes,baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

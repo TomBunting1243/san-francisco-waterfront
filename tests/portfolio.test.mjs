@@ -165,7 +165,7 @@ test('cut-paper walkers keep finite transforms while their arms and feet move',a
 });
 
 
-test('ferry materials and wakes receive the same world-space haze as the waterfront',()=>{
+test('ferry hulls and wakes share the waterfront mist bank and one weather-driven marine horizon',()=>{
   const world=createLandscape();
   const materials=new Set();
   for(const boat of world.ferries){
@@ -185,7 +185,12 @@ test('ferry materials and wakes receive the same world-space haze as the waterfr
     material.onBeforeCompile(shader,{});
     assert.equal(shader.uniforms.edgeFogColor,world.edgeFogColor);
     assert.match(shader.vertexShader,/modelMatrix\*harborWorld/);
-    assert.match(shader.fragmentShader,/mix\(gl_FragColor.rgb,edgeFogColor,edgeHaze\)/);
+    assert.equal(shader.uniforms.bayHorizon,world.bayHorizon);
+    assert.equal(shader.uniforms.seaMistBank,world.seaMist);
+    assert.match(shader.fragmentShader,/seaMistBank.x\*below\*depth/);
+    assert.match(shader.fragmentShader,/smoothstep\(95\.,465\.,fogFar\)/);
+    assert.match(shader.fragmentShader,/mix\(gl_FragColor.rgb,bayHorizon,distanceMist\)/);
+    assert.doesNotMatch(shader.fragmentShader,/#include <fog_fragment>|float edgeHaze/);
   }
   assert.equal(world.walkerHeads.count,world.walkerCount+world.residentPositions.length);
   const matrix=new THREE.Matrix4(),position=new THREE.Vector3();
@@ -308,7 +313,13 @@ test('fireboat departs, salutes and returns without crossing piers or ferry lane
 
 test('fireboat water contact matches the actual animated surface triangles',async()=>{
   const {waterHeight,waterSurface,waveAmplitudes}=await import('../app/water-surface.ts');
-  const geometry=new THREE.PlaneGeometry(waterSurface.size,waterSurface.size,waterSurface.columns,waterSurface.rows);
+  const {baySurfaceGeometry}=await import('../app/bay-water.ts');
+  const geometry=baySurfaceGeometry(),verticesPerRow=waterSurface.columns+3;
+  const corners=geometry.attributes.position;
+  assert.equal(corners.getX(verticesPerRow+1),-waterSurface.size/2);
+  assert.equal(corners.getY(verticesPerRow+1),waterSurface.size/2);
+  assert.equal(corners.getX(verticesPerRow-2),waterSurface.size/2);
+  assert.ok(corners.getX(0)<-1800&&corners.getY(0)>1800);
   const material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide}),surface=new THREE.Mesh(geometry,material);
   surface.rotation.x=-Math.PI/2;surface.position.y=waterSurface.level;surface.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(),direction=new THREE.Vector3(0,-1,0),vertices=geometry.attributes.position;

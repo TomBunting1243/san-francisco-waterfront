@@ -90,3 +90,10 @@ test('Airplane descends southeast on the Oakland runway 12 approach', () => {
   assert.equal(plane.visible, true);
   assert.deepEqual(plane.position.toArray(), second.toArray(), 'The next simulated approach follows the same route');
 });
+
+test('the East Bay shoreline preserves its port peninsulas, tidal entrance and homes on Alameda',()=>{
+  const wet=[[-122.338,37.816],[-122.323,37.7958],[-122.307,37.7935],[-122.333,37.785]];
+  const dry=[[-122.309,37.786],[-122.312,37.803],[-122.332,37.784]];
+  for(const p of wet)assert.ok(bayReliefGround(...bayReliefPosition(...p))<waterSurface.level,'chart water '+p);
+  for(const p of dry)assert.ok(bayReliefGround(...bayReliefPosition(...p))>waterSurface.level,'chart land '+p);
+});

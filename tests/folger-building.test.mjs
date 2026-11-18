@@ -50,7 +50,8 @@ test('an upper Howard Street bay has a clear line of sight from the normal Ferry
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const face=world.root.getObjectByName('Nine Howard Street bays');
   const target=face.localToWorld(new THREE.Vector3(.72,1.158,.003));
-  const lens=openingLens(1440,940),yaw=1.325,pitch=orbitPitch(yaw,-.095,Math.atan2(lens.elevation,lens.distance));
+  // This elevation clears the surveyed roof of Rincon Center II on Spear.
+  const lens=openingLens(1440,940),yaw=1.325,pitch=orbitPitch(yaw,-.065,Math.atan2(lens.elevation,lens.distance));
   const home=new THREE.Vector3(...openingCamera.target),radius=Math.hypot(lens.elevation,lens.distance);
   const eye=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(radius).add(home);
   const camera=new THREE.PerspectiveCamera(20,1440/940,.35,1800);
