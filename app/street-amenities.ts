@@ -7,7 +7,10 @@ import {westMarketGround} from './curb-survey.ts';
 const font=new FontLoader().parse(fontData);
 const boxGeometry=new THREE.BoxGeometry();
 const colors=new Map<string,THREE.MeshStandardMaterial>();
-const painted=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.74,side:THREE.DoubleSide});
+export function createStreetPaint(){
+  return new THREE.MeshStandardMaterial({vertexColors:true,roughness:.74,side:THREE.DoubleSide});
+}
+const painted=createStreetPaint();
 
 /** Each rigid assembly is baked once in local metres. Doors and people can then move independently. */
 export class StreetAssembly {
@@ -25,9 +28,9 @@ export class StreetAssembly {
     shape.computeBoundingBox();shape.translate(-.5*(shape.boundingBox!.min.x+shape.boundingBox!.max.x),0,0);
     this.add(shape,ink,x,y,z).rotation.y=angle;
   }
-  bake(name:string){
+  bake(name:string,material=painted){
     for(const part of this.parts)part.updateMatrixWorld();
-    return bakeRigidChunk(name,this.parts,painted);
+    return bakeRigidChunk(name,this.parts,material);
   }
 }
 

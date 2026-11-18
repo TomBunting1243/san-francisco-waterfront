@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {StreetAssembly} from './street-amenities.ts';
+import {createStreetPaint,StreetAssembly} from './street-amenities.ts';
 
 // Trace of the open herringbone court in the pre-removal 2024 orthophoto.
 // The art stalls run along its Market side and the fountain cuts its east end.
@@ -15,7 +15,7 @@ export function plazaSkaterPose(elapsed:number,index:number){
     push:Math.max(0,Math.sin(elapsed*2.05+index*2.3))**3};
 }
 
-export function createPlazaSkaters(){
+export function createPlazaSkaters(material=createStreetPaint()){
   const root=new THREE.Group();root.name='Embarcadero Plaza skateboarders';
   const riders=['#a05e44','#477576','#7c6a91'].map((coat,i)=>{
     const figure=new THREE.Group(),board=new StreetAssembly(),body=new StreetAssembly(),trailingLeg=new StreetAssembly();
@@ -50,10 +50,10 @@ export function createPlazaSkaters(){
     limb(trailingLeg,[0,0,0],[-.19,-.335,.005],.087,denim);
     limb(trailingLeg,[-.19,-.335,.005],[-.155,-.655,-.02],.071,denim);
     trailingLeg.box(-.153,-.679,-.012,.145,.07,.18,shoe);
-    const back=trailingLeg.bake('Trailing skate leg');
+    const back=trailingLeg.bake('Trailing skate leg',material);
     back.position.set(-.041,.835,.045);
-    const upper=new THREE.Group();upper.add(body.bake('Skater in low stance'),back);
-    figure.add(board.bake('Skateboard with four wheels'),upper);
+    const upper=new THREE.Group();upper.add(body.bake('Skater in low stance',material),back);
+    figure.add(board.bake('Skateboard with four wheels',material),upper);
     figure.scale.setScalar(.06);figure.name='Plaza skater '+(i+1);root.add(figure);
     return {figure,upper,back};
   });
@@ -66,5 +66,5 @@ export function createPlazaSkaters(){
     }
   }
   update(0);
-  return {root,update};
+  return {root,update,material};
 }

@@ -71,6 +71,12 @@ import {addDrummFrontage} from './drumm-frontages.ts';
 import {addLuminaTower} from './lumina-tower.ts';
 import {addGoldenGatewayGarage,refineMaritimeLandings} from './golden-gateway-garage.ts';
 import {addRinconCenter} from './rincon-center.ts';
+import {addLuminaMainStreet} from './building-421816059.ts';
+import {add388Beale} from './building-288645692.ts';
+import {addAppraisersBuilding} from './appraisers-building.ts';
+import {add101Mission} from './101-mission.ts';
+import {addBridgeview} from './bridgeview.ts';
+import {add221Main} from './221-main.ts';
 import {add201Spear} from './201-spear.ts';
 import {addFortyFiveFremont} from './forty-five-fremont.ts';
 import {addMarketFlatiron} from './market-flatiron.ts';
@@ -194,8 +200,11 @@ export function createLandscape() {
     if(addGoldenGatewayGarage(b,root,windowPositions))return;
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
     if(addRinconRestaurant(b,root,windowPositions)||addMillenniumTower(b,root,windowPositions)||addRinconTower(b,root,windowPositions))return;
-    if(addDrummFrontage(b,root,windowPositions)||addLuminaTower(b,root,windowPositions))return;
+    if(addDrummFrontage(b,root,windowPositions)||addLuminaTower(b,root,windowPositions)||addLuminaMainStreet(b,root,windowPositions))return;
     if(addFortyFiveFremont(b,root,windowPositions)||add201Spear(b,root,windowPositions)||addRinconCenter(b,root,windowPositions))return;
+    if(add388Beale(b,root,windowPositions))return;
+    if(add101Mission(b,root,windowPositions)||addBridgeview(b,root,windowPositions,font))return;
+    if(add221Main(b,root,windowPositions,font)||addAppraisersBuilding(b,root,windowPositions,font))return;
     if(addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
     if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
@@ -766,7 +775,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   const water=new THREE.Mesh(new THREE.PlaneGeometry(240,240,1,1),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=waterSurface.level;water.receiveShadow=true;root.add(water);
   const residents=source.residentPositions.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));
   const walkerCount=waterfrontWalkerCount(variant);
-  const skaters=variant==='plaza'?createPlazaSkaters():undefined;if(skaters)root.add(skaters.root);
+  const skaters=variant==='plaza'&&source.skaters?createPlazaSkaters(copiedMaterial(source.skaters.material) as THREE.MeshStandardMaterial):undefined;if(skaters)root.add(skaters.root);
   const people=createPeople(walkerCount+residents.length);people.group.traverse(o=>{o.castShadow=false;});root.add(people.group);
   for(let i=0;i<walkerCount;i++){
     const poseAt=(offset:number)=>waterfrontWalker(offset,i,variant);

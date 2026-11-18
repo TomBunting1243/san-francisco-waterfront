@@ -6,6 +6,24 @@ import {createWaterfrontTraffic} from '../app/waterfront-traffic.ts';
 import {createPlazaSkaters,plazaSkaterPose} from '../app/plaza-skaters.ts';
 import {createLandscape} from '../app/landscape.ts';
 
+test('a rebuilt waterfront keeps each set of skaters on its own single weather shader',()=>{
+  function skaterPaint(){
+    const world=createLandscape(),materials=new Set();
+    world.skaters.root.traverse(mesh=>{if(mesh.isMesh)materials.add(mesh.material);});
+    assert.equal(materials.size,1);
+    return {material:[...materials][0],rain:world.rainOnStone};
+  }
+  const first=skaterPaint(),second=skaterPaint();
+  assert.notEqual(first.material,second.material);
+  assert.equal(first.material.customProgramCacheKey(),second.material.customProgramCacheKey());
+  for(const {material,rain} of [first,second]){
+    const shader={uniforms:{},vertexShader:'#include <project_vertex>',fragmentShader:'#include <fog_fragment>'};
+    material.onBeforeCompile(shader,{});
+    assert.equal(shader.vertexShader.match(/varying vec3 pigmentPosition;/g)?.length,1);
+    assert.equal(shader.uniforms.rainOnStone,rain);
+  }
+});
+
 test('both road directions keep varied headways and move forward through the curved carriageways',()=>{
   for(const region of [undefined,'street','plaza']){
     const count=waterfrontCarCount(region);
