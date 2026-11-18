@@ -1,3 +1,4 @@
+import {createFerryFlag} from './ferry-flag.ts';
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
@@ -135,17 +136,8 @@ export function ferryClockTower(font:Font){
   round(.024,.012,.027,0,3.738,0,bronze);
   const top=235*foot;
   round(.0038,.002,(top-3.75),0,(top+3.75)/2,0,'#b6ae92');
-  // A shallow fold lets the same double-sided flag read from both sides of the bay.
-  for(let stripe=0;stripe<13;stripe++){
-    const y=top-.011-stripe*.009;
-    for(let j=0;j<4;j++){
-      const z=.013*Math.sin(j*1.3),q=.013*Math.sin((j+1)*1.3),h=y-(j+.5)*.004;
-      const m=box(.052,.009,.002,-(j+.5)*.051,h,(z+q)/2,stripe%2?'#e4dbca':'#a9534b');
-      m.rotation.y=Math.atan2(q-z,.051);
-    }
-  }
-  box(.082,.061,.007,-.041,top-.038,.012,'#4f6574');
-  return {root,hands};
+  const flag=createFerryFlag();flag.position.y=top-.007;root.add(flag);
+  return {root,hands,flag};
 }
 
 export function setFerryClockTime(hands:Hands[],hours:number,minutes:number){

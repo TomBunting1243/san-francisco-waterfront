@@ -51,7 +51,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     reducedMotion.current = motionQuery.matches;
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain')]).then(([THREE, { createLandscape, createCityVignette, setFerryClockTime },{createHarborSky},{createHarborRain}]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain')]).then(([THREE, { createLandscape, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain}]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
@@ -103,7 +103,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const coastalHorizon=new THREE.Color(),stratusHorizon=new THREE.Color();
       const weatherTarget=new THREE.Vector4(0,0,0,465),weatherNow=weatherTarget.clone();
       const windTarget=new THREE.Vector2(.188,.982);
-      let cloudClock=0;
+      const flagDownwind=new THREE.Vector2(-windTarget.x,-windTarget.y);
+      let flagHeading=Math.atan2(flagDownwind.y,flagDownwind.x),targetFlagHeading=flagHeading;
+      let flagWindKph=16,targetFlagWindKph=16,flagPhase=0,cloudClock=0;
       let chopTarget=.5,nextWeatherCheck=0,weatherSettling=false;
       function refreshWeather(){
         void readWaterfrontWeather().then(observation=>{
@@ -113,6 +115,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           const bearing=observation?.windFromDegrees;
           if(bearing!=null){const [x,,z]=harborSunDirection(bearing,0);windTarget.set(x,z);}
           else windTarget.set(.188,.982);
+          targetFlagWindKph=observation?.windKph??16;
+          if(bearing!=null||observation?.windKph==null)targetFlagHeading=Math.atan2(-windTarget.y,-windTarget.x);
           chopTarget=observation?.windKph!=null?THREE.MathUtils.clamp(observation.windKph/32,.04,1):.5;
           host.dataset.weather=observation?'local':'unavailable';
           host.dataset.rain=String(observation?.rain??0);host.dataset.rainSource=observation?.rainSource??'unavailable';
@@ -469,6 +473,16 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
         const changed=visual!==lastVisual;
         if(!still||changed){
+          if(world.ferryFlag){
+            const settle=still||reducedMotion.current?1:1-Math.exp(-dt*1.6);
+            const turn=targetFlagHeading-flagHeading;
+            flagHeading+=Math.atan2(Math.sin(turn),Math.cos(turn))*settle;
+            flagWindKph=THREE.MathUtils.lerp(flagWindKph,targetFlagWindKph,settle);
+            flagDownwind.set(Math.cos(flagHeading),Math.sin(flagHeading));
+            const wet=holidaySnow?0:rain;
+            if(!still&&!reducedMotion.current)flagPhase+=dt*ferryFlagFlutterRate(flagWindKph,wet);
+            updateFerryFlag(world.ferryFlag,flagPhase,flagDownwind,flagWindKph,wet);
+          }
           const treeDetailChanged=updateTreeBatches(world.treeBatches,camera,height);
           // Rigid architecture casts the depth map. Moving hull shadows travel with the water shader.
           const shadowSun=lighting.azimuth.toFixed(2)+','+lighting.altitude.toFixed(2);

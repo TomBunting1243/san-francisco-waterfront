@@ -219,3 +219,7 @@ The block-long base and inset eight-sided shaft occupy mapped parts 32862919 and
 ## 50 Fremont Center
 
 Mapped building 288716396 has a notched 36-corner footprint. The 2023 USGS roof scan resolves the high shoulders, the screened mechanical levels and the central roof at about 183 m. The [city plan, figure 2](https://sfplanning.s3.amazonaws.com/sfmea/2015-009288ENV_CPE_Checklist.pdf), [project engineer’s account](https://www.sgh.com/project/50-fremont-center/), [lease plans and plaza exhibits](https://www.sec.gov/Archives/edgar/data/1108524/000119312512005111/d277012dex101.htm) and [Andrew Campbell Nelson’s plaza and skyline photographs](https://sfyimby.com/2021/09/number-13-salesforce-west-at-50-fremont-center-soma-san-francisco.html) inform the dark recessed corner glazing, pale piers and stepped crown. Nine central bays narrow to seven on the broad face, and six narrow to four on the short face. Reveal depths and screen fin spacing are visually estimated.
+
+## Clock tower flag
+
+The waterfront view on the cover of the [San Francisco Public Utilities Commission design guide](https://www.sfpuc.gov/sites/default/files/documents/SMR_DesignGuide_May2016.pdf) shows the flag on the tower staff. The model retains the existing mounting position and approximates the flag at a six-foot hoist. Pier 1 wind speed and compass bearing drive extension and wave speed. Liquid precipitation increases the drape. Weather readings are from the waterfront station and do not measure gusts at the masthead.
