@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import font from '../app/harbor-font.json' with {type:'json'};
 import {ferryHall,ferryPublicRealm} from '../app/ferry-architecture.ts';
+import {createMarketPaving} from '../app/market-paving.ts';
 import street from '../public/data/market-street.json' with {type:'json'};
 
 test('each rooftop inscription has one opaque extrusion with enamel on its front and darker returns',()=>{
@@ -57,4 +58,16 @@ test('19 Market poster column stands on the surveyed public sidewalk clear of ra
   assert.ok(street.crossings.every(([,p])=>clearance(p)>.25));
   assert.ok(street.entrances.every(([,a,b])=>clearance([a,b])>.25));
   assert.equal(root.getObjectsByProperty('name','Curved poster frame and paper').length,6);
+});
+
+test('the two pedestrian paving panels end at the Embarcadero curbs',()=>{
+  const paving=createMarketPaving();
+  const ray=new THREE.Raycaster();
+  function surface(z,offset=0){
+    ray.set(new THREE.Vector3(-.13+(z+1.813)*.177+offset,1,z),new THREE.Vector3(0,-1,0));
+    return ray.intersectObject(paving).length>0;
+  }
+  assert.ok(surface(-4.7)&&surface(-8));
+  assert.equal(surface(-5.75),false);
+  assert.equal(surface(-8,1.1),false);
 });

@@ -1,3 +1,4 @@
+import {readWaterfrontRadar} from './waterfront-radar.ts';
 // NOAA observes visibility at Pier 17 and wind at Pier 1, beside the Ferry Building.
 // https://tidesandcurrents.noaa.gov/stationhome.html?id=9414296
 // https://tidesandcurrents.noaa.gov/stationhome.html?id=9414311
@@ -12,13 +13,13 @@ const endpoints={
 export type WaterfrontWeather={
   observedAt:string;station:string;description:string;
   visibilityKm:number|null;windKph:number|null;windFromDegrees:number|null;
-  fog:number;cloudCover:number;rain:number;cloudKnown:boolean;rainKnown:boolean;
+  fog:number;cloudCover:number;rain:number;cloudKnown:boolean;rainKnown:boolean;rainSource:'radar'|'forecast'|null;
 };
 type Reading={at:number;value:number;direction?:number|null};
 type Period={from:number;until:number;value:number};
 type Grid={at:number;cloud:Period|null;rain:Period|null};
-type Records={visibility?:Reading;wind?:Reading;sky?:Grid};
-type Options={request?:typeof fetch;now?:()=>number;storage?:Pick<Storage,'getItem'|'setItem'>|null;timeoutMs?:number};
+type Records={visibility?:Reading;wind?:Reading;sky?:Grid;radar?:Reading};
+type Options={request?:typeof fetch;now?:()=>number;storage?:Pick<Storage,'getItem'|'setItem'>|null;timeoutMs?:number;radar?:typeof readWaterfrontRadar};
 const minute=60_000,marineAge=45*minute,gridAge=18*60*minute,key='sf-waterfront-weather-v1';
 const clamp=(value:number)=>Math.max(0,Math.min(1,value));
 function valueOf(value:unknown,max:number){
@@ -84,15 +85,16 @@ function compose(records:Records,now:number):WaterfrontWeather|null{
   const visibilityKm=vis&&fresh(vis.at,now,marineAge)?valueOf(vis.value,200):null;
   const windKph=anemometer&&fresh(anemometer.at,now,marineAge)?valueOf(anemometer.value,468):null;
   const forecastValue=(p:Period|null|undefined)=>sky&&fresh(sky.at,now,gridAge)&&p&&p.from<=now&&now<p.until?valueOf(p.value,1):null;
-  const cloud=forecastValue(sky?.cloud),rain=forecastValue(sky?.rain);
+  const radar=records.radar&&fresh(records.radar.at,now,22*minute)?valueOf(records.radar.value,1):null;
+  const cloud=forecastValue(sky?.cloud),rain=radar??forecastValue(sky?.rain);
   if(visibilityKm===null&&windKph===null&&cloud===null&&rain===null)return null;
   const fog=visibilityKm===null?0:clamp(1-Math.log1p(visibilityKm)/Math.log(13));
   const windFromDegrees=windKph===null||windKph===0?null:valueOf(anemometer?.direction,360);
   const stations=[visibilityKm!==null?'9414296':'',windKph!==null?'9414311':''].filter(Boolean);
-  const at=stations.length?Math.max(visibilityKm!==null?vis!.at:0,windKph!==null?anemometer!.at:0):sky!.at;
-  const description=[visibilityKm!==null?'Pier 17 visibility':'',windKph!==null?'Pier 1 wind':'',cloud!==null||rain!==null?'NWS waterfront forecast':''].filter(Boolean).join(' · ');
-  return {station:stations.join('+')||'MTR/86,106',description,observedAt:new Date(at).toISOString(),visibilityKm,windKph,windFromDegrees,
-    fog,cloudCover:cloud??0,rain:rain??0,cloudKnown:cloud!==null,rainKnown:rain!==null};
+  const at=Math.max(visibilityKm!==null?vis!.at:0,windKph!==null?anemometer!.at:0,radar!==null?records.radar!.at:0)||sky!.at;
+  const description=[visibilityKm!==null?'Pier 17 visibility':'',windKph!==null?'Pier 1 wind':'',radar!==null?'NEXRAD over the Ferry Building':'',cloud!==null||forecastValue(sky?.rain)!==null?'NWS waterfront forecast':''].filter(Boolean).join(' · ');
+  return {station:stations.join('+')||(radar!==null?'NEXRAD':'MTR/86,106'),description,observedAt:new Date(at).toISOString(),visibilityKm,windKph,windFromDegrees,
+    fog,cloudCover:cloud??0,rain:rain??0,cloudKnown:cloud!==null,rainKnown:rain!==null,rainSource:radar!==null?'radar':rain!==null?'forecast':null};
 }
 
 // No browser storage, fetch or timer is touched until the first live-scene request.
@@ -110,7 +112,7 @@ export function createWaterfrontWeatherReader(options:Options={}){
       try{records=object(JSON.parse(storage()?.getItem(key)??'{}')) as Records;}catch{/* Private storage is optional. */}
     }
     const time=now(),previous=compose(records,time);
-    if(time>=lastTry&&time-lastTry<(previous?10*minute:minute))return Promise.resolve(previous);
+    if(time>=lastTry&&time-lastTry<(previous?5*minute:minute))return Promise.resolve(previous);
     lastTry=time;
     const controller=new AbortController();
     const alarm=setTimeout(()=>controller.abort(),options.timeoutMs??3000);
@@ -121,15 +123,25 @@ export function createWaterfrontWeatherReader(options:Options={}){
       }catch{/* A failed feed may still have a recent independent reading. */}
       return undefined;
     }
-    pending=Promise.all(Object.values(endpoints).map(get)).then(([visibility,wind,sky])=>{
+    pending=Promise.all([get(endpoints.visibility),get(endpoints.wind),get(endpoints.sky),
+      (options.radar??readWaterfrontRadar)(time,options.request??fetch,controller.signal)]).then(([visibility,wind,sky,radar])=>{
       const current=now(),v=marine(visibility,'visibility',current),w=marine(wind,'wind',current),g=grid(sky,current);
       if(v&&(!fresh(records.visibility?.at??NaN,current,marineAge)||v.at>=records.visibility!.at))records.visibility=v;
       if(w&&(!fresh(records.wind?.at??NaN,current,marineAge)||w.at>=records.wind!.at))records.wind=w;
       if(g&&(!fresh(records.sky?.at??NaN,current,gridAge)||g.at>=records.sky!.at))records.sky=g;
-      if(v||w||g)try{storage()?.setItem(key,JSON.stringify(records));}catch{/* Memory cache remains available. */}
+      if(radar&&(!records.radar||radar.at>=records.radar.at))records.radar=radar;
+      if(v||w||g||radar)try{storage()?.setItem(key,JSON.stringify(records));}catch{/* Memory cache remains available. */}
       return compose(records,current);
     }).finally(()=>{clearTimeout(alarm);pending=undefined;});
     return pending;
   };
 }
 export const readWaterfrontWeather=createWaterfrontWeatherReader();
+
+
+// Use the waterfront civil date for the holiday even when every weather feed is offline.
+const holidayDate=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',month:'numeric',day:'numeric'});
+export function harborChristmasSnow(at:Date){
+  const day=holidayDate.format(at);
+  return day==='12/24'||day==='12/25';
+}

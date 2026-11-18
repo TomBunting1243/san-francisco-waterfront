@@ -20,8 +20,9 @@ from affine import Affine
 from rasterio.features import geometry_mask, shapes
 from scipy.ndimage import distance_transform_edt, median_filter, label
 from shapely.geometry import Polygon, shape, mapping
+from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
-from shapely import STRtree
+from shapely import STRtree, set_precision
 from shapely.affinity import affine_transform
 
 DATA = Path(__file__).resolve().parents[1] / "public/data"
@@ -91,6 +92,7 @@ def read_cloud():
 grid=CACHE/'downtown-grid.npz'
 if not grid.exists():read_cloud()
 arrays=np.load(grid);dsm=arrays['dsm'];ground=arrays['ground']
+ground_observed=np.isfinite(ground)
 missing=~np.isfinite(ground)
 ground=ground[tuple(distance_transform_edt(missing,return_distances=False,return_indices=True))]
 sf=json.loads((DATA/'sf-waterfront.json').read_text())
@@ -98,7 +100,52 @@ def rings(poly):
     p=orient(poly,sign=1)
     return [[[round(x,3),round(z,3)] for x,z in ring.coords[:-1]] for ring in (p.exterior,*p.interiors)]
 
+def low_roof_sections(footprint, mask, raw, observed_ground, main_height, transform):
+    """Trace sustained lower planes, keeping an open court or end setback open to the sky."""
+    readings = raw.copy()
+    readings[~np.isfinite(readings) & observed_ground] = 0
+    observed = mask & np.isfinite(readings)
+    if observed.sum() < 25:
+        return []
+    distance, nearest = distance_transform_edt(~observed, return_indices=True)
+    surface = median_filter(readings[tuple(nearest)], size=3)
+    # Extend the nearest reliable interior sample through the guard strip before
+    # clipping to the mapped exterior. This avoids a false wall round a lower wing.
+    low = (distance < 3.2) & (surface < main_height - 3.2) & (surface > -1.2)
+    components, _ = label(low)
+    by_level = {}
+    for contour, index in shapes(components.astype(np.int32), mask=low, transform=transform):
+        sample = readings[(components == index) & observed]
+        if len(sample) < 13:
+            continue
+        lo, middle, hi = np.percentile(sample, [15, 50, 85])
+        if hi - lo > 2.2 or middle >= main_height - 3.2:
+            continue
+        cut = shape(contour).simplify(.105)
+        rectangle = cut.minimum_rotated_rectangle
+        if rectangle.area and cut.area / rectangle.area > .91:
+            cut = rectangle
+        cut = footprint.intersection(cut)
+        if cut.geom_type != 'Polygon' or cut.area < .12 or cut.area > footprint.area * .56:
+            continue
+        # Neighboring samples sharing a storey need only one vertical break.
+        level = round(max(.35, middle) / .75) * .75
+        by_level.setdefault(max(.35,level), []).append(cut)
+    if not by_level:
+        return []
+    retained = set_precision(footprint, .001)
+    sections = []
+    for level, cuts in sorted(by_level.items()):
+        retained = retained.difference(set_precision(unary_union(cuts), .001), grid_size=.001)
+        polygons = [retained] if retained.geom_type=='Polygon' else list(getattr(retained,'geoms',[]))
+        polygons = [p for p in polygons if p.geom_type=='Polygon' and p.area>.025]
+        if sum(p.area for p in polygons) < footprint.area*.28:
+            break
+        sections.append([round(level*.06,3), [rings(p) for p in polygons]])
+    return sections
+
 records={}
+recesses={}
 for building in sf['buildings']:
     p=Polygon(building['p']).buffer(0)
     if p.is_empty or p.geom_type!='Polygon' or p.area<.28:continue
@@ -136,6 +183,10 @@ for building in sf['buildings']:
         if geom.geom_type!='Polygon' or geom.area<.057 or geom.area>p.area*.67 or level<.14:continue
         tiers.append([round(level,3),rings(geom)])
     records[str(building['id'])]=[round(base*.06,3),sorted(tiers,key=lambda t:t[0])]
+    if not building.get('part') and not building.get('parent'):
+        steps=low_roof_sections(p,mask,raw,ground_observed[j:l,i:k],base,transform)
+        if steps:
+            recesses[str(building['id'])]=steps
 # Match the parcel by overlapping floor area. A building part inherits the same
 # parcel record; floor counts are used only on complete, contiguous volumes.
 directory=CACHE.parent
@@ -160,6 +211,6 @@ for building in sf['buildings']:
     year=integer(record.get('year_property_built')) or integer(tags.get('start_date','')[:4])
     floors=integer(tags.get('building:levels')) or integer(record.get('number_of_stories'))
     profiles[str(building['id'])]=[year if 1800<year<=2025 else 0,floors if floors<100 else 0,props.get('landuse',''),tags.get('building:material','')]
-out={'source':SOURCE+'ept.json','survey':'USGS 2023 San Francisco 3DEP','cellMeters':CELL/.06,'roofs':records,'profiles':profiles}
+out={'source':SOURCE+'ept.json','survey':'USGS 2023 San Francisco 3DEP','cellMeters':CELL/.06,'roofs':records,'profiles':profiles,'setbacks':recesses}
 (DATA/'downtown-roofs.json').write_text(json.dumps(out,separators=(',',':'))+'\n')
 print(len(records),'resolved roof planes;',sum(len(x[1]) for x in records.values()),'raised outlines;',len(profiles),'parcel matches')

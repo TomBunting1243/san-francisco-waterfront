@@ -28,3 +28,12 @@ test('tall mapped superstructures keep their base below them and inferred window
   const {normal,facadeGrid}=parts[0].geometry.attributes;
   for(let i=0;i<normal.count;i++)if(Math.abs(normal.getY(i))>.9)assert.equal(facadeGrid.getZ(i),-1);
 });
+
+test('sunlight reaches the measured lower terrace of Two Transamerica Center after batching',()=>{
+  const b=mappedBuildings.find(b=>b.id===32859283),m=new THREE.MeshStandardMaterial(),parts=[];
+  downtownBuilding((g,c,x,y,z)=>{const face=new THREE.Mesh(g,m);face.position.set(x,y,z);face.updateMatrixWorld();parts.push(face);return face;},b,b.h,false);
+  const blocks=bakeBlocks(parts,m);blocks.forEach(o=>o.updateMatrixWorld());
+  const roofAt=(x,z)=>new THREE.Raycaster(new THREE.Vector3(x,12,z),new THREE.Vector3(0,-1,0)).intersectObjects(blocks,false)[0]?.point.y;
+  assert.ok(Math.abs(roofAt(24.5523,-37.3959)-4.455)<.002);
+  assert.ok(Math.abs(roofAt(23.8892,-37.0997)-4.715)<.002);
+});

@@ -1,17 +1,21 @@
 import * as THREE from 'three';
+import {treeWell} from './tree-wells.ts';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {createGatewayClub,gatewayClubGround} from './gateway-club.ts';
 import treeSurvey from '../public/data/waterfront-tree-survey.json' with {type:'json'};
 import landscapeData from '../public/data/waterfront-landscape.json' with {type:'json'};
 import {sfMap,center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
+import {harryBridgesGround} from './curb-survey.ts';
+import {plazaTreeRecords,addSurveyedTree,treePavingHeight} from './plaza-survey.ts';
 import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
 
 type Building={id:number;p:number[][];h:number;minH?:number};
 type Area={id:number;name:string;kind:string;sport?:string|null;p:number[][]};
 type Path={id:number;kind:string;p:number[][];layer:string;level?:string;bridge?:string;width?:string};
 export const waterfrontLandscape=landscapeData as {areas:Area[];paths:Path[];trees:{id:number;p:number[];species:string;height:string|null;diameter:string|null}[]};
-const surveyedTrees:Record<string,{species:string;dbhInches:number|null}>=treeSurvey.trees;
+const surveyedTrees:Record<string,{sfId:number;species:string;dbhInches:number|null}>=treeSurvey.trees;
+const brickPlaza=sfMap.parks.find(park=>park.name==='Embarcadero Plaza')!;
 const rinconPaving=sfMap.parks.find(park=>park.name==='Rincon Park')!;
 const contains=(p:number[],area:Area)=>insideBuilding(p[0],p[1],area.p);
 const walton=sfMap.parks.find(p=>p.name.includes('Walton'))!;
@@ -19,7 +23,7 @@ export const gardenAreas:Area[]=[...waterfrontLandscape.areas.filter(a=>['park',
 const ecAreas=gardenAreas.filter(a=>a.kind==='podium');
 const plantedAreas=gardenAreas.filter(a=>a.kind!=='podium');
 
-/** Mapped lawns, paths and tree locations; crown sizes are interpreted from the reference photographs. */
+/** Mapped lawns and paths, with lidar crown dimensions where survey returns resolve an individual tree. */
 export function waterfrontGardens(buildings:Building[],font?:Font){
   const root=new THREE.Group();root.name='Referenced waterfront parks and gardens';
   const materials=new Map<string,THREE.MeshStandardMaterial>(),treeAnchors:{id:number;x:number;y:number;z:number}[]=[],pathSegments:{x:number;z:number;area:number}[]=[];
@@ -73,20 +77,31 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     const [x,z]=node.p,area=areaAt(node.p),inPark=insideBuilding(x,z,rinconPaving.p),y=area?height(area):inPark?.11:-.01;
     // Preserve street trees too, but never plant through a roof or traffic carriageway.
     if(solidAt(x,z,y)||gatewayClubGround(x,z)||ecAreas.some(a=>contains(node.p,a))||!area&&(z< -31||x< -45||x>56))continue;
-    // These two rows are identifiable in NAIP and the SF Public Works inventory.
-    // Public Works records 194307–8 and 194380–5 as Phoenix canariensis (25–30" DBH).
-    // Neither inventory gives tree height here; crown diameter and height are interpreted.
-    const palms=(node.id>=10828325148&&node.id<=10828325152)||
-      (node.id>=10828325274&&node.id<=10828325286);
-    const record=surveyedTrees[node.id];
-    if(palms||record?.species==='Phoenix canariensis'){
+    const record=surveyedTrees[node.id],canopy=plazaTreeRecords.get(node.id);
+    const palms=canopy?.palm||record?.species==='Phoenix canariensis'||
+      (node.id>=10828325148&&node.id<=10828325152)||(node.id>=10828325274&&node.id<=10828325286);
+    const trunkRadius=record?.dbhInches ? record.dbhInches*.0254*.06/2 : undefined;
+    const support=harryBridgesGround(x,z)??(area?y+.024:inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
+    if(record)treeWell(mesh,record.sfId,x,support,z,-Math.atan(.15));
+    if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,z,palms,record?.species??node.species,trunkRadius)){
+      treeAnchors.push({id:node.id,x,y:support,z});
+    }else if(palms){
       const seed=Math.abs(Math.sin(node.id));
-      const trunkRadius=record?.dbhInches ? record.dbhInches*.0254*.06/2 : undefined;
       waterfrontPalm(mesh,x,y,z,node.id,.52+.13*seed,.20+.04*seed,trunkRadius);
       treeAnchors.push({id:node.id,x,y,z});
     }else{
       const atRincon=x> -43&&x< -24.8&&z> -3;
       tree(x,z,y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
+    }
+  }
+  // Two broadleaf rows on Harry Bridges Plaza are absent from the OSM extract.
+  // 2024 imagery locates every well. Two unresolved heights use their measured row neighbors.
+  for(const record of plazaTreeRecords.values()){
+    if(!record.supplemental)continue;
+    const [x,z]=record.p,y=harryBridgesGround(x,z)??treePavingHeight(record);
+    if(!solidAt(x,z,y)&&addSurveyedTree(mesh,root,record,x,y,z,false,'Platanus x hispanica')){
+      treeAnchors.push({id:record.id,x,y,z});
+      treeWell(mesh,record.id,x,y,z,0,true);
     }
   }
   // OSM records the eastern Sue Bierman trees, but not its dense western grove,

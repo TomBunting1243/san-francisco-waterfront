@@ -9,6 +9,9 @@ export function createHarborSky() {
     sunDirection: {value: new THREE.Vector3()},
     nightAmount: {value: 0},
     cloudCover: {value: 0},
+    seaMist: {value: 0},
+    afterglow: {value: 0},
+    cloudDrift: {value: 0},
     rainAmount: {value: 0},
   };
   const material = new THREE.ShaderMaterial({
@@ -23,7 +26,7 @@ export function createHarborSky() {
     fragmentShader: `
       varying vec3 skyDirection;
       uniform vec3 skyTint, sunTint, sunDirection, coastalHorizon;
-      uniform float nightAmount, cloudCover, rainAmount;
+      uniform float nightAmount, cloudCover, rainAmount, seaMist, afterglow, cloudDrift;
       float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
       float noise(vec2 p){
         vec2 cell=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -39,6 +42,7 @@ export function createHarborSky() {
         vec3 color = mix(zenith, mist, horizon);
         color+=vec3(.023,.013,.009)*nightAmount*pow(horizon,2.5);
         vec2 sheet=dir.xz / max(.065,elevation+.055);
+        sheet+=vec2(cloudDrift*.006,cloudDrift*.002);
         float cloud=noise(sheet*vec2(.72,1.65))*.65+noise(sheet*vec2(2.5,5.5))*.25+noise(sheet*9.)*.1;
         float rain=clamp(rainAmount,0.,1.);
         float cover=max(clamp(cloudCover,0.,1.),rain*.84);
@@ -55,11 +59,24 @@ export function createHarborSky() {
         vec3 greyHorizon=light*mix(vec3(.94,.98,1.015),vec3(.82,.94,1.06),nightAmount);
         float overhead=smoothstep(.015,.46,elevation);
         vec3 stratus=greyHorizon*mix(1.,.83+(cloud-.5)*.32,overhead);
-        stratus*=1.-rain*(.12+.15*overhead);
+        stratus*=1.-rain*(.24+.25*overhead);
         // At the marine horizon distant cloud layers merge into a uniform silver-grey band.
         float distant=smoothstep(.18,.88,cover)*(1.-smoothstep(.012,.12,elevation));
         color=mix(color,stratus,max(opacity,distant));
         color=mix(color,coastalHorizon,distant);
+        // Sea fog lies in long banks below a lighter deck. Its ridges soften into the horizon.
+        float bank=noise(vec2(dir.x*5.6+dir.z*2.7+cloudDrift*.011,dir.y*17.-dir.z*2.4));
+        float low=1.-smoothstep(.006,.155,elevation+(bank-.5)*.06);
+        vec3 silver=mix(coastalHorizon,vec3(.60,.71,.74)*(.55+.45*daylight),.29+.11*bank);
+        color=mix(color,silver,seaMist*(.23+.71*low));
+        // Toward the setting sun the underside of broken cloud catches salmon light.
+        // The opposite horizon keeps a cooler belt of violet above the earth's shadow.
+        float west=dot(normalize(dir.xz+vec2(.00001)),normalize(sunDirection.xz+vec2(.00001)))*.5+.5;
+        float belt=exp(-abs(elevation-.082)*10.);
+        vec3 blush=mix(vec3(.36,.235,.36),vec3(.95,.385,.168),pow(west,2.));
+        float litEdge=smoothstep(.36,.68,cloud)*exp(-abs(elevation-.13)*5.);
+        color=mix(color,blush,afterglow*belt*(.29+.33*west+.14*litEdge));
+        color+=vec3(.56,.22,.051)*afterglow*pow(west,12.)*exp(-elevation*8.)*(1.-opacity*.80);
         gl_FragColor = vec4(color, 1.);
         #include <colorspace_fragment>
       }`,

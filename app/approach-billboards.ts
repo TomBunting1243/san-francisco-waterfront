@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import cocaCola from '../public/data/approach-coke.json' with {type:'json'};
+import portrait from '../public/data/approach-karp.json' with {type:'json'};
+import {bridgeLayout} from './bridge-layout.ts';
 import {type ApproachMesh} from './approach-road.ts';
 
 const feet=.3048*.06;
@@ -10,15 +12,28 @@ export const approachBillboards=[
   {name:'Coca-Cola at 701 Bryant Street',latitude:37.777545,longitude:-122.400403,facing:212,width:70*feet,height:30*feet,aboveGrade:112*feet-15*feet},
   {name:'Anthropic at the I-80 Fourth Street bulletin',latitude:37.7795941,longitude:-122.400674,facing:200,width:(68+2/12)*feet,height:25*feet,aboveGrade:2.17},
   {name:'SpaceX at the Bryant and Seventh bulletin',latitude:37.774504,longitude:-122.404293,facing:270,width:48*feet,height:14*feet,aboveGrade:.855},
+  {name:'Palantir bridge bulletin',width:1.95,height:.69},
 ] as const;
-// Interpretive display locations on existing SoMa roofs. The inventory above
-// retains the original sites, orientation and face dimensions for provenance.
-export const displayRoofs=[
-  {id:32862467,name:'Google Community Space',x:-22.535,z:-4.870,y:1.680,yaw:1.277},
-  {id:93817368,name:'Gap headquarters, Two Folsom',x:-32.148,z:-7.690,y:4.550,yaw:1.265},
-  {id:104599975,name:'Ferry Station Post Office Building',x:-11.620,z:.430,y:.900,yaw:1.625},
-  {id:193054133,name:'Hotel Griffon',x:-18.150,z:-5.360,y:1.050,yaw:1.275},
+// Model installations face San Francisco, on outriggers outside the north
+// stiffening truss. The historic roadside addresses above identify the artwork.
+export const bridgeSignMounts=[
+  {station:30.4,scale:2.2}, {station:39.3,scale:2.15}, {station:20.3,scale:2.65},
+  {station:33.5,scale:2.6}, {station:25.87,scale:2.72},
 ] as const;
+export const palantirLines=['Reliable. Dependable.', "You're Experiencing", 'Compassionate', 'Data Monitoring'] as const;
+export const palantirCopy=palantirLines.join(' ');
+
+function karpPortrait(width:number,height:number){
+  const tones=atob(portrait.tones), cols=portrait.width, rows=portrait.height;
+  const geometry=new THREE.PlaneGeometry(width,height,cols-1,rows-1);
+  const ink=new THREE.Color('#1b3538'),paper=new THREE.Color('#f0e5c8'),color=new THREE.Color();
+  const colors=new Float32Array(tones.length*3);
+  for(let i=0;i<tones.length;i++){
+    color.copy(ink).lerp(paper,THREE.MathUtils.clamp((tones.charCodeAt(i)-12)/224,0,1));
+    color.toArray(colors,i*3);
+  }
+  return geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+}
 export const anthropicCopy='Building an equitable future, one trillion dollar IPO at a time';
 export const spaceXCopy='Fuck you';
 const paintedSteel='#71817d', darkSteel='#455952', butter='#f2d789';
@@ -39,18 +54,17 @@ function scriptLogo(width:number,height:number){
 
 export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:Font){
   const billboards=new THREE.Group();
-  billboards.name='SoMa freeway billboards';
+  billboards.name='West span billboard brackets';
   root.add(billboards);
   const unit=new THREE.BoxGeometry(1,1,1);
   const bulb=new THREE.SphereGeometry(.007,5,4);
   for(const [index,site] of approachBillboards.entries()){
-    const roof=displayRoofs[index];
-    const group=new THREE.Group(),w=site.width,h=site.height;
-    const centerHeight=roof.y+(index===2?.42:.60);
-    group.name=site.name;group.position.set(roof.x,centerHeight,roof.z);
-    group.rotation.y=roof.yaw;
-    group.userData.displayRoof=roof;
-    group.userData.location={latitude:site.latitude,longitude:site.longitude};
+    const mount=bridgeSignMounts[index],group=new THREE.Group(),w=site.width,h=site.height;
+    group.name=site.name;
+    group.position.set(.92,bridgeLayout.lowerDeck-.02,mount.station);
+    group.rotation.y=Math.PI/2;
+    group.scale.setScalar(mount.scale);
+    if('latitude' in site)group.userData.location={latitude:site.latitude,longitude:site.longitude};
     billboards.add(group);
     function box(w:number,h:number,d:number,x:number,y:number,z:number,color:string,parent=group){
       const part=mesh(unit,color,x,y,z,parent);part.scale.set(w,h,d);return part;
@@ -74,22 +88,19 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
     function panel(shape:THREE.Shape,color:string,z:number,depth=.011){
       return mesh(new THREE.ExtrudeGeometry(shape,{bevelEnabled:false,depth,curveSegments:7}),color,0,0,z,group);
     }
-    const baseY=roof.y-centerHeight;
     const bottom=-h/2;
-    const scaffold=index===1?'#c4c9b9':paintedSteel;
-    // Maintenance catwalk, lamp outriggers and the tapered steel rack visible behind the panels.
-    const back=index===1?.35:.22;
-    box(w*1.06,.039,back,-.01,bottom-.054,-back*.32,darkSteel);
+    // Paired steel cleats bear against the webs of both continuous chords.
+    const chordDepth=(.68-group.position.x)/mount.scale;
+    const lowerY=(bridgeLayout.lowerDeck-.064-group.position.y)/mount.scale;
+    const upperY=(bridgeLayout.upperDeck-.037-group.position.y)/mount.scale;
     for(const side of [-1,1]){
-      for(const fraction of index===1?[.16,.32,.47]:[.29,.45]){
-        const anchor=w*side*fraction;
-        const foot=anchor*1.06,top=anchor*.98;
-        for(const z of [-back,.016])tube([foot,baseY,z*1.25],[top,bottom+.035,z],.026,.022,scaffold);
-        tube([foot,baseY,-back*1.25],[top,bottom+.035,.016],.015,.016,scaffold);
-        tube([foot,baseY,.016],[top,bottom+.035,-back],.015,.015,scaffold);
+      const x=side*w*.34;
+      for(const y of [lowerY,upperY]){
+        box(.072,.046,.018,x,y,chordDepth,darkSteel).name='Chord mounting shoe';
+        tube([x,y,chordDepth],[x,y,-.030],.022,.021,paintedSteel);
       }
-      for(const u of [.26,.54,.79])box(w*.95,.015,.018,0,THREE.MathUtils.lerp(baseY,bottom,u),side>0?.013:-back,scaffold);
-      tube([side*w*.44,baseY,-back],[side*w*.07,bottom,-back],.017,.017,scaffold);
+      tube([x,upperY,chordDepth],[x,bottom,-.03],.022,.021,paintedSteel);
+      tube([x,Math.min(lowerY,bottom),-.033],[x,Math.max(upperY,h*.43),-.033],.025,.025,paintedSteel);
     }
     if(index===0){
       function boomerang(inset=0){
@@ -153,6 +164,22 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
         for(let u=-w*.468;u<w*.47;u+=.027)nightLight(box(.004,h-.038,.008,u,0,.044,'#a34849',face),.33,.043,.041);
         nightLight(mesh(scriptLogo(w*.929,h*.67),'#f6e9cc',0,-h*.065,.054,face),.87,.81,.68).name='Coca-Cola script';
         nightLight(text('Enjoy',w*.18,h*.137,-w*.10,h*.324,.062,'#f5e5c6',face,{italic:.28}),.76,.69,.56);
+      }
+    }else if(index===4){
+      box(w,h,.030,0,0,0,darkSteel);
+      box(w-.022,h-.022,.014,0,0,.019,'#172e33');
+      const print=mesh(karpPortrait(w*.32,h*.91),'#ffffff',-w*.323,0,.032,group);
+      print.name='Alex Karp portrait';
+      print.userData.credit=portrait.author+' / '+portrait.license;
+      const face=print.material as THREE.MeshStandardMaterial;
+      print.material=face.clone();
+      (print.material as THREE.MeshStandardMaterial).vertexColors=true;
+      nightLight(print,.052,.061,.057);
+      const x=w*.166;
+      nightLight(text('PALANTIR',w*.39,h*.093,x,h*.374,.032,'#a7c6bb'),.20,.26,.24);
+      for(const [i,line] of palantirLines.entries()){
+        const y=h*(.17-i*.183);
+        nightLight(text(line,w*.60,h*.132,x,y,.032,'#f4e8ca'),.51,.48,.39);
       }
     }else{
       const warm=index===2;

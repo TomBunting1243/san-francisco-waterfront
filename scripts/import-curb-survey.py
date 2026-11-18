@@ -1,0 +1,160 @@
+"""Rebuild waterfront curb faces from cached SFMTA curbs/ROW and SF Public Works ramp inventory.
+Run: survey-env/bin/python scripts/import-curb-survey.py <reference-survey>
+"""
+import json, math, sys
+from pathlib import Path
+from shapely import STRtree, set_precision
+from shapely.affinity import affine_transform
+from shapely.geometry import LineString, Point, Polygon, box, shape
+from shapely.geometry.polygon import orient
+from shapely.ops import unary_union, polygonize, nearest_points
+
+D=Path(__file__).resolve().parents[1]/'public/data'
+S=Path(sys.argv[1])
+def read(p): return json.loads(p.read_text())
+sf=read(D/'sf-waterfront.json')
+lat,lon=sf['origin']; east=111320*math.cos(math.radians(lat))
+a,b,c,d=-.03552029735*east,.04836012986*111320,.04836012986*east,.03552029735*111320
+transform=[a,b,c,d,-lon*a-lat*b,-lon*c-lat*d]
+def projected(name):
+    for f in read(S/name)['features']:
+        if f['geometry']:
+            yield f['properties'],affine_transform(shape(f['geometry']),transform)
+def pieces(g,kind):
+    if g.is_empty:return []
+    if g.geom_type==kind:return [g]
+    return [p for child in getattr(g,'geoms',[]) for p in pieces(child,kind)]
+def ring(r):return [[round(x,3),round(z,3)] for x,z in r.coords[:-1]]
+def plan(p):
+    p=orient(p)
+    return [ring(r) for r in (p.exterior,*p.interiors)]
+def tangent(line,t):
+    a,b=line.interpolate(max(0,t-.018)),line.interpolate(min(line.length,t+.018))
+    dx,dz=b.x-a.x,b.y-a.y
+    length=max(1e-9,math.hypot(dx,dz));return dx/length,dz/length
+
+market=read(D/'market-street.json'); landscape=read(D/'waterfront-landscape.json')
+roadlines=[LineString(r['p']) for r in sf['roads'] if len(r['p'])>1 and r['kind'] not in ('pedestrian','platform','street_lamp')]
+roadIndex=STRtree(roadlines)
+focus=unary_union([box(-101,-15,26,2),LineString([(-1.5,-9),(-8.2,-54)]).buffer(2.1)])
+row=unary_union([p for v,p in projected('row.geojson') if p.intersects(focus) and v['LAYER'] in ('STREETS','PRIVATE','Streets_Pedestri')]).buffer(.04)
+motor=unary_union([r.buffer(1.26) for r in roadlines if r.intersects(focus.buffer(2))])
+buildings=unary_union([Polygon(b['p']).buffer(.025) for b in sf['buildings'] if len(b['p'])>2])
+parks=unary_union([Polygon(p['p']).buffer(-.035) for p in sf['parks'] if len(p['p'])>2])
+rails=[LineString(p) for p in read(D/'embarcadero-tracks.json')['tracks']]+[LineString(p) for _,_,p in market['tracks']]
+trackCut=unary_union([l.buffer(.088) for l in rails])
+platforms=unary_union([Polygon(p).buffer(.025) for _,_,p in market['platforms']])
+allowed=focus.intersection(row).intersection(motor).difference(unary_union([buildings,parks,trackCut,platforms]))
+source=[(pr,set_precision(g,.001)) for pr,g in projected('curbs.geojson') if not pr['INT_Z'] and pr['STATUS']=='Active' and pr['CBB_TYPE'] in ('BLK','ISL') and g.intersects(focus.buffer(4))]
+islands=list(polygonize(unary_union([g for pr,g in source if pr['CBB_TYPE']=='ISL'])))
+median=next(p for p in islands if p.covers(Point(0,-4.46)))
+plantingIsland=next(p for p in islands if p.covers(Point(4.0556,-3.2556)))
+plazaIslands=unary_union([median,plantingIsland])
+allIslands=unary_union(islands)
+# Marked crossing centerlines sometimes stop short of the independent curb
+# trace. Extend the observed approach tangent by 2.5 m to find its curb cut.
+def crosswalk(points):
+    line=LineString(points);ax,az=tangent(line,0);bx,bz=tangent(line,line.length)
+    a,b=points[0],points[-1]
+    return LineString([(a[0]-ax*.15,a[1]-az*.15),*points,(b[0]+bx*.15,b[1]+bz*.15)])
+paths=[crosswalk(p) for _,p in market['crossings']]
+paths += [LineString(r['p']) for r in landscape['paths'] if r.get('layer','0') in ('0','') and r['kind'] in ('footway','pedestrian','path') and len(r['p'])>1]
+pathIndex=STRtree(paths)
+# Many DPW records at the same intersection share a single point, regardless of
+# corner. Only use an individually resolved location to create an additional cut.
+ramps={}
+for pr,pt in projected('waterfront-curb-ramps.geojson'):
+    if focus.covers(pt) and pr['crexist']=='1':
+        ramps.setdefault((round(pt.x,2),round(pt.y,2)),[]).append((pr,pt))
+unique=[entries[0][1] for entries in ramps.values() if len(entries)==1]
+rampIndex=STRtree(unique)
+slabs=read(D/'survey-blocks.json')['streets']
+walks=unary_union([Polygon(v[0],v[1:]) for v in slabs['sidewalk']])
+out=[]; cutWalk=[]; lipCuts=[]; mapped=[]
+for props,src in source:
+    for line in pieces(src.intersection(allowed),'LineString'):
+        line=line.simplify(.002)
+        if line.length<.035:continue
+        mid=line.interpolate(.5,normalized=True); road=roadlines[roadIndex.nearest(mid)]
+        dx,dz=tangent(line,line.length*.5); nx,nz=-dz,dx
+        fwd=Point(mid.x+nx*.045,mid.y+nz*.045);rev=Point(mid.x-nx*.045,mid.y-nz*.045)
+        island=props['CBB_TYPE']=='ISL'
+        if island and allIslands.contains(fwd)!=allIslands.contains(rev):sign=-1 if allIslands.contains(fwd) else 1
+        elif walks.contains(fwd)!=walks.contains(rev):sign=-1 if walks.contains(fwd) else 1
+        else:
+            near=road.interpolate(road.project(mid));sign=1 if (near.x-mid.x)*nx+(near.y-mid.y)*nz>=0 else -1
+        isMedian=island and mid.distance(plazaIslands.boundary)<.014
+        openings=[]
+        for j in pathIndex.query(line.buffer(.04)):
+            path=paths[j]
+            for pt in pieces(line.intersection(path),'Point'):
+                t=line.project(pt);u=path.project(pt);t1,t2=tangent(line,t);p1,p2=tangent(path,u)
+                if abs(t1*p2-t2*p1)>.44:openings.append((t,.098))
+        for j in rampIndex.query(line.buffer(.105)):
+            pt=unique[j]
+            if line.distance(pt)<.105:openings.append((line.project(pt),.054))
+        # Crossings stop at mapped paths and at independently located existing ramps.
+        stations={0.,line.length}
+        stations.update(line.project(Point(v)) for v in line.coords)
+        for t,w in openings:
+            mapped.append([round(line.interpolate(t).x,3),round(line.interpolate(t).y,3)])
+            stations.update(max(0,min(line.length,t+v)) for v in (-w-.058,-w,w,w+.058))
+        points=[]
+        for t in sorted(stations):
+            p=line.interpolate(t);dx,dz=tangent(line,t)
+            factor=min([1.]+[max(0,min(1,(abs(t-k)-w)/.058)) for k,w in openings])
+            pt=[round(p.x,3),round(p.y,3),round(-dz*sign,3),round(dx*sign,3),round(factor,2)]
+            if not points or pt[:2]!=points[-1][:2]:points.append(pt)
+        if len(points)<2:continue
+        out.append([props['OBJECTID'],int(isMedian),points])
+        for v,w in zip(points,points[1:]):
+            def pos(p,dist):return (p[0]+dist*p[2],p[1]+dist*p[3])
+            back=.157 if min(v[4],w[4])<1 else .031
+            poly=Polygon([pos(v,.004),pos(w,.004),pos(w,-back),pos(v,-back)]).buffer(.0008)
+            cutWalk.append(poly)
+        lipCuts.append(line.buffer(.031))
+def overrides(arr,mask):
+    out={}
+    for i,rings in enumerate(arr):
+        p=Polygon(rings[0],rings[1:])
+        if p.intersects(mask):
+            result=p.difference(mask)
+            out[str(i)]=[plan(q) for q in pieces(set_precision(result,.001),'Polygon') if q.area>.00015]
+    return out
+walkCut=unary_union(cutWalk+[plazaIslands.buffer(.001)])
+curbCut=unary_union(lipCuts+[plazaIslands.buffer(.025),trackCut.intersection(focus)])
+data={'sources':['https://services.sfmta.com/arcgis/rest/services/ROW/rightofway/MapServer/1','https://data.sf.gov/d/ch9w-7kih','https://sfpublicworks.org/services/permits/street-improvement'],
+      'median':ring(median.exterior),'plantingIsland':ring(plantingIsland.exterior),'lines':out,'ramps':sorted(set(map(tuple,mapped))),
+      'overrides':{'curb':overrides(slabs['curb'],curbCut),'sidewalk':overrides(slabs['sidewalk'],walkCut)}}
+# Split the surveyed island at its actual outline, the pedestrian band and
+# ramp grade breaks. No paving triangle can bridge a street or rail opening.
+from shapely.ops import triangulate
+axis=lambda z:-.13+(z+1.813)*.177
+def strip(near,far,w):
+    return Polygon([(axis(near)-w,near),(axis(near)+w,near),(axis(far)+w,far),(axis(far)-w,far)])
+def tris(p):
+    return [ring(t.exterior) for t in triangulate(p) if p.covers(t)]
+def grid(region):
+    out=[]
+    x0,y0,x1,y1=region.bounds
+    for i in range(math.floor(x0/.17),math.ceil(x1/.17)):
+        for j in range(math.floor(y0/.10),math.ceil(y1/.10)):
+            for poly in pieces(region.intersection(box(i*.17,j*.10,(i+1)*.17,(j+1)*.10)),'Polygon'):
+                out.extend(tris(poly))
+    return out
+medianBand=plazaIslands.intersection(strip(-2.9,-6,.81))
+gates=[]
+for path in paths:
+    for pt in pieces(plazaIslands.boundary.intersection(path),'Point'):
+        if abs(pt.x-axis(pt.y))<.65:gates.append([round(pt.x,3),round(pt.y,3)])
+data['medianGates']=gates
+data['medianPaving']=[t for part in pieces(medianBand,'Polygon') for t in grid(part)]
+data['medianSlab']=[t for poly in pieces(plazaIslands.difference(medianBand),'Polygon') for t in tris(poly)]
+# Keep high plaza brick outside the graded former street entrance.
+west=strip(-6.249,-9.066,1.23)
+park=Polygon(next(v['p'] for v in sf['parks'] if v['name']=='Embarcadero Plaza'))
+data['westCut']=ring(west.exterior)
+data['westPark']=[plan(p) for p in pieces(park.difference(west),'Polygon')]
+data['westFlanks']=grid(west.difference(strip(-6.249,-9.066,.92)).intersection(park))
+(D/'curb-survey.json').write_text(json.dumps(data,separators=(',',':'))+'\n')
+print('curb runs / stations / crossing centres',len(out),sum(len(v[2]) for v in out),len(data['ramps']))

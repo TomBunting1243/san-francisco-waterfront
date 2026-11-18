@@ -15,6 +15,16 @@ Downtown roof surfaces are derived from the public USGS 2023 San Francisco 3DEP 
 
 Shoreline geometry comes from NOAA’s Continually Updated Shoreline Product (https://www.fisheries.noaa.gov/inport/item/60812). Street boundaries and curbs come from the SFMTA Right of Way service (https://services.sfmta.com/arcgis/rest/services/ROW/rightofway/MapServer). Footprints and median heights come from San Francisco’s building survey (https://data.sf.gov/d/ynuv-fyni). Tree species were matched to San Francisco Public Works Street Tree List (https://data.sf.gov/d/tkzw-k3nq). Field interpretation and dates are recorded in references/WATERFRONT-REFERENCE-AUDIT.md.
 
+The plaza tree wells use San Francisco’s 2024 eight-centimeter orthophotography. Additional bench locations come from OpenStreetMap contributors under ODbL 1.0. Roof colors are summarized from USDA NAIP 2022 imagery hosted by the California Department of Fish and Wildlife at https://gis.wildlife.ca.gov/images/rest/services/Base_Remote_Sensing/NAIP_2022/ImageServer .
+
+## Weather
+
+Local precipitation samples use the Iowa Environmental Mesonet NEXRAD national composite and reflectivity scale (https://mesonet.agron.iastate.edu/docs/nexrad_composites/ and https://mesonet.agron.iastate.edu/GIS/rasters.php?rid=2).
+
+## Alex Karp portrait
+
+“Alex-karp.jpg” by Benamischarfstein (https://commons.wikimedia.org/wiki/File:Alex-karp.jpg) is licensed under Creative Commons Attribution-ShareAlike 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). The cropped, duotone portrait in public/data/approach-karp.json is adapted from that photograph and distributed under the same license.
+
 ## Helvetiker / MAGENTA font
 
 Copyright (c) 2004 by MAGENTA Ltd. All Rights Reserved.

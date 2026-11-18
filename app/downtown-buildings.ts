@@ -1,13 +1,25 @@
 import * as THREE from 'three';
+import observedRoofs from '../public/data/roof-finishes.json' with {type:'json'};
 import survey from '../public/data/downtown-roofs.json' with {type:'json'};
+import {surveyedRoofPitch,surveyedPitchGeometry} from './surveyed-roof-pitch.ts';
 import {footprintGeometry} from './sf-map.ts';
 
 type Building={id:number;p:number[][];h:number;measured:boolean;glass:boolean;parent?:number;part?:boolean;minH?:number};
 type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
-type RoofStep=[number,number[][][]];
+type RoofPlan=number[][][];
+type RoofStep=[number,RoofPlan];
+type Setback=[number,RoofPlan[]];
+const setbacks=survey.setbacks as unknown as Record<string,Setback[]>;
 const roofs:Record<string,[number,RoofStep[]]>=survey.roofs as unknown as Record<string,[number,RoofStep[]]>;
 const profiles=survey.profiles as unknown as Record<string,[number,number,string,string]>;
 const noProfile:[number,number,string,string]=[0,0,'',''];
+
+function roofPrism([outer,...holes]:RoofPlan,height:number){
+  const ring=(points:number[][])=>points.map(([x,z])=>new THREE.Vector2(x,-z));
+  const outline=new THREE.Shape(ring(outer));
+  for(const hole of holes)outline.holes.push(new THREE.Path(ring(hole)));
+  return new THREE.ExtrudeGeometry(outline,{depth:height,bevelEnabled:false}).rotateX(-Math.PI/2);
+}
 
 // The older backdrop used one small detached plane per selected window and
 // stopped adding panes below a height/distance threshold. Each real wall now
@@ -17,7 +29,9 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
   const scan=roofs[b.id],bottom=b.minH||0;
   const compatible=!framedWall&&scan&&scan[0]>bottom+.10&&(!b.measured&&!hasParts&&!b.part||
     Math.abs(scan[0]-nominal)<Math.max(.19,.19*nominal));
-  const top=compatible?scan[0]:nominal;
+  const layers=compatible&&!hasParts&&!b.part&&bottom===0?setbacks[b.id]:undefined;
+  const pitch=!layers?.length&&!framedWall&&!hasParts&&!b.part?surveyedRoofPitch(b,nominal):undefined;
+  const top=pitch?.eave??(compatible?scan[0]:nominal);
   const height=top-bottom;
   if(height<=.025)return;
   const warehouse=use==='PDR';
@@ -32,41 +46,51 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
   const glass=['#7e9395','#869b9e','#809197','#8e9d9e'],stucco=['#c5bca8','#cac1ae','#b9bdaf','#b9b3a8'];
   const palette=warehouse||cladding==='brick'?loft:early?stone:glazed?glass:stucco;
   const color=framedWall??palette[Math.abs(b.id)%palette.length];
-  const geo=footprintGeometry(b.p,height),positions=geo.getAttribute('position'),normals=geo.getAttribute('normal');
-  const grid=new Float32Array(positions.count*4),colors=new Float32Array(positions.count*3);
-  const faceColor=new THREE.Color(color),roofColor=new THREE.Color(warehouse?'#b2ac9b':early?'#aca99b':'#b1b5af');
+  const observed=compatible&&!hasParts&&!b.part?(observedRoofs.finishes as Record<string,string>)[b.id]:undefined;
+  const faceColor=new THREE.Color(color),roofColor=new THREE.Color(observed??(warehouse?'#b2ac9b':early?'#aca99b':'#b1b5af'));
   const bay=warehouse?.36:early?.18:glazed?.115:home?.21:.23;
-  // ExtrudeGeometry emits two triangles per straight wall. Normalize each
-  // edge independently so its first and last openings both have a full jamb.
-  for(let i=0;i<positions.count;){
-    if(Math.abs(normals.getY(i))>.5){
-      roofColor.toArray(colors,i*3);grid[i*4+2]=-1;i++;continue;
+  function drawSection(geo:THREE.BufferGeometry,layerBase:number){
+    const positions=geo.getAttribute('position'),normals=geo.getAttribute('normal');
+    const grid=new Float32Array(positions.count*4),colors=new Float32Array(positions.count*3);
+    // ExtrudeGeometry emits two triangles per straight wall. Normalize each
+    // edge independently so its first and last openings both have a full jamb.
+    for(let i=0;i<positions.count;){
+      if(Math.abs(normals.getY(i))>.5){
+        roofColor.toArray(colors,i*3);grid[i*4+2]=-1;i++;continue;
+      }
+      const start=i,end=Math.min(i+6,positions.count),nx=normals.getX(i),nz=normals.getZ(i);
+      let low=Infinity,high=-Infinity;
+      for(let k=start;k<end;k++){
+        const along=positions.getX(k)*nz-positions.getZ(k)*nx;
+        low=Math.min(low,along);high=Math.max(high,along);
+      }
+      const width=high-low,count=Math.max(1,Math.round(width/bay));
+      for(;i<end;i++){
+        const along=positions.getX(i)*nz-positions.getZ(i)*nx,up=(positions.getY(i)+layerBase-bottom)/height*floors;
+        grid.set([(along-low)/Math.max(width,.00001)*count,up,width>.075&&height>.14?style:-1,Math.abs(b.id)%89],i*4);
+        faceColor.toArray(colors,i*3);
+      }
     }
-    const start=i,end=Math.min(i+6,positions.count),nx=normals.getX(i),nz=normals.getZ(i);
-    let low=Infinity,high=-Infinity;
-    for(let k=start;k<end;k++){
-      const along=positions.getX(k)*nz-positions.getZ(k)*nx;
-      low=Math.min(low,along);high=Math.max(high,along);
-    }
-    const width=high-low,count=Math.max(1,Math.round(width/bay));
-    for(;i<end;i++){
-      const along=positions.getX(i)*nz-positions.getZ(i)*nx,up=positions.getY(i)/height*floors;
-      grid.set([(along-low)/Math.max(width,.00001)*count,up,width>.075&&height>.14?style:-1,Math.abs(b.id)%89],i*4);
-      faceColor.toArray(colors,i*3);
-    }
+    geo.setAttribute('facadeGrid',new THREE.BufferAttribute(grid,4));
+    geo.setAttribute('color',new THREE.BufferAttribute(colors,3));geo.userData.paintVertices=true;
+    mesh(geo,'#ffffff',0,layerBase,0).name='Mapped downtown facade '+b.id;
   }
-  geo.setAttribute('facadeGrid',new THREE.BufferAttribute(grid,4));
-  geo.setAttribute('color',new THREE.BufferAttribute(colors,3));geo.userData.paintVertices=true;
-  mesh(geo,'#ffffff',0,bottom,0).name='Mapped downtown facade '+b.id;
+  if(layers?.length){
+    drawSection(footprintGeometry(b.p,layers[0][0]-bottom),bottom);
+    for(let i=0;i<layers.length;i++){
+      const [base,plans]=layers[i],upper=layers[i+1]?.[0]??top;
+      for(const plan of plans)drawSection(roofPrism(plan,upper-base),base);
+    }
+  }else drawSection(footprintGeometry(b.p,height),bottom);
   // No fixtures are invented for an unsampled roof. Children already supplying
   // a mapped superstructure also take precedence over the point-cloud contours.
+  if(pitch){
+    mesh(surveyedPitchGeometry(b.p,pitch,faceColor,roofColor),'#ffffff',0,0,0).name='Surveyed pitched roof '+b.id;
+    return;
+  }
   if(!compatible||hasParts)return;
-  for(const [rise,[outer,...holes]] of scan[1]){
-    const outline=new THREE.Shape(outer.map(([x,z])=>new THREE.Vector2(x,-z)));
-    for(const hole of holes)outline.holes.push(new THREE.Path(hole.map(([x,z])=>new THREE.Vector2(x,-z))));
-    const raised=new THREE.ExtrudeGeometry(outline,{depth:rise,bevelEnabled:false});
-    raised.rotateX(-Math.PI/2);
-    mesh(raised,early?'#aeab9a':'#a5ada9',0,top,0).name='LiDAR roof terrace '+b.id;
+  for(const [rise,rings] of scan[1]){
+    mesh(roofPrism(rings,rise),early?'#aeab9a':'#a5ada9',0,top,0).name='LiDAR roof terrace '+b.id;
   }
 }
 

@@ -225,6 +225,14 @@ test('adaptive quality backs off under sustained load and avoids rapid oscillati
   assert.equal(level,1,'cooldown prevents immediate quality bounce');
   for(let i=0;i<120;i++)level=quality.sample(16,20000+i*16);
   assert.equal(level,2);
+  const slow=createQualityMonitor(2),idle=createQualityMonitor(2);
+  for(let i=0;i<120;i++)assert.equal(idle.sample(1000/30,1000+i*1000/30,true),2);
+  for(let i=0;i<24;i++)level=slow.sample(140,1000+i*140,true);
+  assert.equal(level,1,'repeated long frames in the stationary city lower its GPU load');
+  const {drawingPixelRatio}=await import('../app/city-runtime.ts');
+  assert.equal(drawingPixelRatio(390,844,3,false,false,0),3);
+  assert.ok(drawingPixelRatio(390,844,3,false,false,1)<2.5);
+  assert.equal(drawingPixelRatio(1024,768,1,false,false,1),1);
   assert.equal(edgeOrbit(.99,.9),0);assert.equal(edgeOrbit(.5,.5),0);assert.ok(edgeOrbit(.99,.5)>0);
   for(let i=0;i<22;i++)for(let t=0;t<100;t+=.1){const delta=walkingTime(t+.01,i)-walkingTime(t,i);assert.ok(delta>=-1e-10&&delta<=.0100001,'no jumps or reverse steps around pauses');}
 });
@@ -532,9 +540,13 @@ test('Rincon Park and ferry routes stay continuous and meet the built walking su
   const scene=createLandscape();
   scene.root.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.25);
+  const paving=scene.root.getObjectByName('Market granite and herringbone promenade');
+  assert.ok(paving);
+  paving.geometry.computeBoundingBox();
+  const walkable=[...scene.architectureChunks,paving];
   const assertGround=p=>{
     ray.ray.origin.set(p.x,p.y+.223,p.z);
-    const chunks=scene.architectureChunks.filter(mesh=>{
+    const chunks=walkable.filter(mesh=>{
       const b=mesh.geometry.boundingBox;
       return p.x>=b.min.x&&p.x<=b.max.x&&p.z>=b.min.z&&p.z<=b.max.z;
     });

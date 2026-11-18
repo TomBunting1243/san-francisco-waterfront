@@ -1,5 +1,7 @@
+import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
+import {createMarketPaving} from './market-paving.ts';
 import {addMarketStreet} from './market-street.ts';
-import {waterfrontPalm} from './waterfront-trees.ts';
+import {addPlazaBenches,southPlazaTop} from './plaza-survey.ts';
 import * as THREE from 'three';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
@@ -272,55 +274,24 @@ export function ferryHall(font:Font) {
 
 export function ferryPublicRealm() {
   const {root,box,mesh,slab,line}=builders('Ferry plaza and Market Street');
-  const paving='#c4b8a3', edge='#ddd0b7', metal='#586f70';
-  // Harry Bridges Plaza occupies the median between the two mapped boulevard carriageways.
-  const roads=sfMap.roads.filter(r=>r.name==='The Embarcadero');
-  const boulevardAt=(x:number)=>{
-    const values=roads.flatMap(r=>r.p.slice(1).flatMap(([bx,bz],i)=>{
-      const [ax,az]=r.p[i];
-      if(ax===bx||x<Math.min(ax,bx)||x>Math.max(ax,bx))return [];
-      return [az+(bz-az)*(x-ax)/(bx-ax)];
-    }));
-    return [Math.min(...values)+.52,Math.max(...values)-.53];
-  };
-  const frontRows=Array.from({length:27},(_,i)=>-6.5+i*.5).map(x=>{
-    const [a,b]=boulevardAt(x);
-    return {x,a,b};
-  }).filter(({a,b})=>b>a+.14);
-  slab([...frontRows.map(({x,a})=>[x,a]),...frontRows.slice().reverse().map(({x,b})=>[x,b])],.119,.15,paving);
-  for(let i=1;i<frontRows.length;i++){
-    const a=frontRows[i-1],q=frontRows[i];
-    for(const k of ['a','b'] as const)line([a.x,a[k]],[q.x,q[k]],.123,.046,.019,edge);
-    line([q.x,q.a+.039],[q.x,q.b-.039],.120,.008,.009,'#a99d87');
-  }
-  // A widened pedestrian route meets Market at the terminal and stays clear of both palm rows.
-  const spine=[[-.13,-1.813],[-.25,-2.31],[-.49,-3.05],[-.68,-4.6],[-.93,-6.48],[-1.36,-8.87],[-1.63,-10.1]];
-  for(let i=1;i<spine.length;i++)line(spine[i-1],spine[i],.129,i<3?.98:1.14,.018,'#d7c9ae');
+  const metal='#586f70';
+  root.add(createMarketPaving());
   addMarketStreet(mesh,root);
   // The Ferry Building's forecourt has its own single-head plaza lights.
   for(const z of [-2.05,-4.1,-7.45])for(const side of [-1,1]){
     const streetX=-.13+z*.133;
-    const x=streetX+side*(z>-10?.83:.90), y=z>-6.3?.135:.106;
+    const x=streetX+side*(z>-10?.83:.90), y=harryBridgesGround(x,z)??(z>-3?.031:westMarketGround(x,z));
     mesh(new THREE.CylinderGeometry(.018,.035,.64,7),metal,x,y+.32,z);
     box(.067,.082,.064,x,y+.049,z,metal);
     box(.039,.068,.041,x,y+.64,z,'#e8d4a6');
     mesh(new THREE.ConeGeometry(.039,.045,8),metal,x,y+.693,z);
   }
-  for(const [x,z] of [[-2.5,-4.45],[1.77,-4.45],[-4.20,-4.32],[3.49,-4.31],[-5.83,-4.15],[5.16,-4.15]]){
-    const ground=.12, h=.85;
-    waterfrontPalm(mesh,x,ground,z,Math.round(x*719),h,.27);
-    slab([[x-.15,z-.15],[x+.15,z-.15],[x+.15,z+.15],[x-.15,z+.15]],ground+.022,.039,'#a59b83');
-  }
-  for(const [x,z] of [[-3.39,-4.82],[2.66,-4.81],[-4.81,-4.72],[4.37,-4.67]]){
-    box(.285,.014,.077,x,.183,z,'#ae9875');
-    box(.284,.046,.012,x,.215,z-.037,'#ae9875');
-    for(const offset of [-.105,.105])box(.015,.058,.058,x+offset,.148,z,metal);
-  }
+  addPlazaBenches(mesh,root);
   // The granite map occupies the plaza between the hall and Agriculture Building.
   // Its north–south axis fits between the two facades. The charcoal stone traces
   // the Bay from Alviso through San Pablo Bay; metal dots identify ferry landings.
   const forecourt=[[-9.83,-.69],[-6.26,-1.20],[-6.26,1.64],[-7.05,2.14],[-8.65,2.14],[-8.65,1.77],[-9.83,1.77]];
-  slab(forecourt,.088,.030,'#c1baa9').name='South terminal granite plaza';
+  slab(forecourt,southPlazaTop,.030,'#c1baa9').name='South terminal granite plaza';
   const paper=(lng:number,lat:number)=>[-8.14+(lat-37.80)*3.66,.43+(lng+122.29)*2.93];
   const shore=[
     [-122.50,37.82],[-122.48,37.83],[-122.48,37.84],[-122.47,37.86],[-122.44,37.87],[-122.46,37.89],
@@ -335,28 +306,28 @@ export function ferryPublicRealm() {
     [-122.24,37.59],[-122.30,37.60],[-122.36,37.62],[-122.35,37.65],[-122.38,37.68],[-122.37,37.71],
     [-122.38,37.74],[-122.39,37.77],[-122.39,37.79],[-122.41,37.81],[-122.46,37.81],[-122.50,37.81],
   ];
-  slab(shore.map(([lo,la])=>paper(lo,la)),.089,.002,'#848e89').name='Bay inlay';
+  slab(shore.map(([lo,la])=>paper(lo,la)),southPlazaTop+.001,.002,'#848e89').name='Bay inlay';
   for(const island of [[[-122.43,37.86],[-122.42,37.87],[-122.41,37.86],[-122.43,37.85]],
-    [[-122.37,37.83],[-122.36,37.82],[-122.36,37.81],[-122.37,37.81]]])slab(island.map(([lo,la])=>paper(lo,la)),.090,.001,'#c9c1ae');
+    [[-122.37,37.83],[-122.36,37.82],[-122.36,37.81],[-122.37,37.81]]])slab(island.map(([lo,la])=>paper(lo,la)),southPlazaTop+.002,.001,'#c9c1ae');
   const terminal=paper(-122.3935,37.7955);
   for(const [lo,la] of [[-122.34,38.10],[-122.36,37.91],[-122.28,37.795],[-122.30,37.79],[-122.25,37.74],[-122.38,37.66]]){
-    const dest=paper(lo,la);line(terminal,dest,.090,.005,.001,'#b29c75');
-    mesh(new THREE.CylinderGeometry(.016,.016,.0015,10),'#c2a46c',dest[0],.091,dest[1]);
+    const dest=paper(lo,la);line(terminal,dest,southPlazaTop+.002,.005,.001,'#b29c75');
+    mesh(new THREE.CylinderGeometry(.016,.016,.0015,10),'#c2a46c',dest[0],southPlazaTop+.003,dest[1]);
   }
   // Sawn stone joints cross the darker map and continue to the restaurant entrance.
   for(let i=0;i<11;i++){
     const x=-9.76+i*.335;
-    line([x,-.62-(x+9.76)*.14],[x,x<-8.65?1.74:1.63],.092,.004,.001,'#a39d8d');
+    line([x,-.62-(x+9.76)*.14],[x,x<-8.65?1.74:1.63],southPlazaTop+.004,.004,.001,'#a39d8d');
   }
-  for(let z=-.58;z<1.74;z+=.302)line([-9.81,z],[-6.28,z],.092,.005,.001,'#a6a191');
-  slab([[-10.48,1.15],[-9.75,1.15],[-9.75,1.96],[-10.48,1.96]],.089,.025,'#b6afa1').name='Pier 2 entrance landing';
-  for(const z of [1.28,1.48,1.68,1.88])line([-10.46,z],[-9.76,z],.091,.007,.002,'#a99c87');
+  for(let z=-.58;z<1.74;z+=.302)line([-9.81,z],[-6.28,z],southPlazaTop+.004,.005,.001,'#a6a191');
+  slab([[-10.48,1.15],[-9.75,1.15],[-9.75,1.96],[-10.48,1.96]],southPlazaTop+.001,.025,'#b6afa1').name='Pier 2 entrance landing';
+  for(const z of [1.28,1.48,1.68,1.88])line([-10.46,z],[-9.76,z],southPlazaTop+.003,.007,.002,'#a99c87');
   for(const [x,z,len] of [[-9.46,-.44,.64],[-6.62,-.64,.59],[-6.61,.78,.43]]){
-    box(.18,.071,len,x,.123,z,'#b4ac9a');
-    for(let slat=0;slat<3;slat++)box(.024,.012,len,x-.056+slat*.028,.165,z,'#a39174');
-    box(.062,.013,len-.04,x+.052,.165,z,'#757e64');
+    box(.18,.071,len,x,.141,z,'#b4ac9a');
+    for(let slat=0;slat<3;slat++)box(.024,.012,len,x-.056+slat*.028,.183,z,'#a39174');
+    box(.062,.013,len-.04,x+.052,.183,z,'#757e64');
     for(let k=0;k<6;k++){
-      const stem=mesh(new THREE.ConeGeometry(.018,.091+k%3*.013,5),'#829077',x+.05,.205,z+(k/5-.5)*(len-.12));
+      const stem=mesh(new THREE.ConeGeometry(.018,.091+k%3*.013,5),'#829077',x+.05,.223,z+(k/5-.5)*(len-.12));
       stem.rotation.z=(k%3-1)*.23;
     }
   }

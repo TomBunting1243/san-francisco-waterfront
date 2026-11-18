@@ -1,3 +1,4 @@
+import {addSurveyCurbs,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
 
@@ -115,9 +116,10 @@ export function addSurveyBlocks(mesh:Surface){
     if(!tile)tiles.set(key,tile=new Tile());
     return tile;
   }
+  addSurveyCurbs(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
-    for(const polygon of polygons)at(polygon).top(polygon,height,color);
+    for(const [i,polygon] of polygons.entries())for(const piece of replacementPavement(kind,i,polygon))at(piece).top(piece,height,color);
   }
   const masonry=['#c0b59f','#b8b5a2','#c6b39e','#abae9f'];
   for(const [i,[height,plan]] of (survey.buildings as [number,Plan][]).entries()){

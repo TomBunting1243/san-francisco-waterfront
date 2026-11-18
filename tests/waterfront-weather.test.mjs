@@ -27,12 +27,12 @@ test('NOAA Pier 17 and Pier 1 units and the NWS valid-hour forecast compose once
   const f=setup();
   assert.equal(f.calls,0);
   const [a,b]=await Promise.all([f.read(),f.read()]);
-  assert.deepEqual(a,b);assert.equal(f.calls,3);
+  assert.deepEqual(a,b);assert.equal(f.calls,4);
   assert.equal(a.visibilityKm,4.89);assert.equal(a.windKph,6.48);assert.equal(a.windFromDegrees,288);
   assert.equal(a.station,'9414296+9414311');assert.equal(a.observedAt,'2026-11-18T19:18:00.000Z');
   assert.equal(a.cloudCover,.98);assert.equal(a.rain,.66);
   assert.ok(a.fog>0&&a.fog<.5);assert.ok(a.cloudKnown&&a.rainKnown);
-  await f.read();assert.equal(f.calls,3);
+  await f.read();assert.equal(f.calls,4);
 });
 
 test('Each product expires independently across reloads, missing feeds and forecast-window boundaries',async()=>{
@@ -73,5 +73,41 @@ test('Empty offline result resolves within the abort budget and backs off after 
   const read=createWaterfrontWeatherReader({...f.options,timeoutMs:10,request:(_url,{signal})=>new Promise((_resolve,reject)=>{
     calls++;signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
   })});
-  assert.equal(await read(),null);assert.equal(await read(),null);assert.equal(calls,3);
+  assert.equal(await read(),null);assert.equal(await read(),null);assert.equal(calls,4);
+});
+
+
+test('a fresh local radar echo sets rain strength even during a forecast gap and expires independently',async()=>{
+  const f=setup();f.data.sky.properties.weather.values[0].value=[];
+  let observed=true;
+  const read=createWaterfrontWeatherReader({...f.options,radar:async()=>observed?{at:initial-8*minute,value:.94}:undefined});
+  assert.equal((await read()).rain,.94);assert.equal((await read()).rainSource,'radar');
+  observed=false;f.time+=18*minute;assert.equal((await read()).rainSource,'forecast');assert.equal((await read()).rain,0);
+});
+
+test('the Christmas override changes at Pacific midnight, including visitors in other time zones',async()=>{
+  const {harborChristmasSnow}=await import('../app/waterfront-weather.ts');
+  for(const [at,expected] of [['2026-12-24T07:59:59Z',false],['2026-12-24T08:00:00Z',true],['2026-12-26T07:59:59Z',true],['2026-12-26T08:00:00Z',false]])
+    assert.equal(harborChristmasSnow(new Date(at)),expected);
+});
+
+test('the radar palette resolves the actual harbor sample; missing or unknown colors fall back',async()=>{
+  const {radarStrength}=await import('../app/waterfront-radar.ts');
+  const lake=[8,102,11,255,50,115,8,255,8,98,10,255,9,115,12,255,10,119,13,255,9,94,9,255,11,136,15,255,11,132,14,255,10,119,13,255];
+  assert.ok(radarStrength(lake)>.60&&radarStrength(lake)<.75);assert.equal(radarStrength(Array(36).fill(0)),null);
+});
+
+test('sunset light follows the western sun through twilight',async()=>{
+  const {pacificLighting}=await import('../app/lighting.ts');
+  assert.ok(pacificLighting(new Date('2026-11-21T00:49:00Z')).sunset>.8);
+  assert.equal(pacificLighting(new Date('2026-11-20T15:00:00Z')).sunset,0);
+  assert.equal(pacificLighting(new Date('2026-11-21T06:00:00Z')).sunset,0);
+});
+
+test('a clear day casts shadows and a solid cloud deck or a sun below the horizon removes the shadow pass',async()=>{
+  const {directSunVisibility}=await import('../app/lighting.ts');
+  assert.equal(directSunVisibility(30,.1,0),1);
+  assert.equal(directSunVisibility(30,.99,0),0);
+  assert.equal(directSunVisibility(-3,.1,0),0);
+  assert.ok(directSunVisibility(1,.85,.3)>0&&directSunVisibility(1,.85,.3)<.1);
 });

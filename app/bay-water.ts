@@ -23,13 +23,15 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
   profiles.minFilter=profiles.magFilter=THREE.LinearFilter;
   profiles.needsUpdate=true;
   const horizon={value:new THREE.Color('#e2dfcc')};
+  const sunset={value:new THREE.Vector3()};
+  const sun={value:new THREE.Vector4()};
   const wind={value:new THREE.Vector2(.188,.982)},chop={value:.5};
   material.addEventListener('dispose',()=>profiles.dispose());
   material.onBeforeCompile=shader=>{
     shader.uniforms.harborTime=time;
     shader.uniforms.hullShadows={value:hulls};shader.uniforms.bayNight=night;
     shader.uniforms.shoreProfiles={value:profiles};
-    shader.uniforms.bayHorizon=horizon;
+    shader.uniforms.bayHorizon=horizon;shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
     shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
     shader.vertexShader='uniform float harborTime; varying vec2 baySurface;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       baySurface=vec2(position.x,-position.y);
@@ -39,7 +41,8 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.fragmentShader=`
       uniform float harborTime;
       uniform sampler2D shoreProfiles;
-      uniform vec3 bayHorizon;
+      uniform vec3 bayHorizon, sunsetGlitter;
+      uniform vec4 waterfrontSun;
       uniform vec3 hullShadows[4];
       uniform float bayNight;
       uniform vec2 bayWind;
@@ -82,6 +85,19 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       float bank=max(reflectedBank(mirrorRay,-1.5,1./6.,wobble),max(
         reflectedBank(mirrorRay,-14.,.5,wobble*1.6),reflectedBank(mirrorRay,-39.,5./6.,wobble*2.1)));
       diffuseColor.rgb *= mix(vec3(1.),vec3(.63,.72,.76),bank*.76);
+      if(waterfrontSun.w>.01){
+        // Small crests catch a narrow band of daylight around the solar reflection.
+        // It travels across the bay with the same vector that lights the buildings.
+        float sunPath=pow(max(0.,dot(mirrorRay,waterfrontSun.xyz)),46.);
+        float facets=smoothstep(.18,.86,ripple)*mix(.28,1.,detail);
+        diffuseColor.rgb+=vec3(.49,.43,.29)*sunPath*facets*waterfrontSun.w*(1.-bank*.82);
+      }
+      if(sunsetGlitter.z>.005){
+        vec2 toward=normalize(mirrorRay.xz+vec2(.00001));
+        float align=max(0.,dot(toward,sunsetGlitter.xy));
+        float path=pow(align,22.)*(.36+.64*smoothstep(-.48,.8,ripple));
+        diffuseColor.rgb+=vec3(.51,.153,.044)*sunsetGlitter.z*path*(1.-bank*.82);
+      }
       // Low, feathered contact beneath the vessels is evaluated at their current pose.
       for(int i=0;i<4;i++) {
         vec3 hull=hullShadows[i];vec2 off=p-hull.xy;
@@ -133,6 +149,6 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       float distanceMist=smoothstep(38.,420.,length(vViewPosition));
       gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist*.97);`);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v4';
-  return {bayHorizon:horizon,bayWind:wind,bayChop:chop};
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v5';
+  return {baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

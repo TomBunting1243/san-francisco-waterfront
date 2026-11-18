@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import {treeWell} from './tree-wells.ts';
 import data from '../public/data/market-street.json' with {type:'json'};
 import {footprintGeometry} from './sf-map.ts';
 import {streetcarTrack} from './streets.ts';
 import {waterfrontLandscape} from './waterfront-gardens.ts';
-import {waterfrontPalm} from './waterfront-trees.ts';
+import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
 
 type MeshFactory=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent?:THREE.Group)=>THREE.Mesh;
 type Point=[number,number];
@@ -19,18 +20,6 @@ const marketX=(z:number)=>.15*z+.019;
 export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
   const cube=new THREE.BoxGeometry(1,1,1), shaft=new THREE.CylinderGeometry(.70,1,1,8);
   const orb=new THREE.SphereGeometry(1,8,6);
-  // A softly folded envelope for each pollarded crown. The same geometry is
-  // reused on the block; light filters through the elevated tips and outer edges.
-  const leaf=new THREE.IcosahedronGeometry(1,1),vertices=leaf.getAttribute('position');
-  const tones=new Float32Array(vertices.count*3),tonal=new THREE.Color();
-  for(let i=0;i<vertices.count;i++){
-    const x=vertices.getX(i),y=vertices.getY(i),z=vertices.getZ(i);
-    const bulge=1+.077*Math.sin(3.4*x+2.7*y)*Math.cos(3*z-1.9*x),lit=(y+1)/2;
-    vertices.setXYZ(i,x*bulge,y*(.97+.06*Math.cos(4*x))+x*.075,z*bulge);
-    tonal.setRGB(.72+.28*lit,.79+.21*lit,.74+.22*lit).toArray(tones,i*3);
-  }
-  leaf.setAttribute('color',new THREE.BufferAttribute(tones,3));leaf.userData.paintVertices=true;
-  const up=new THREE.Vector3(0,1,0);
   const steel='#536568',bronze='#655e4e',warmGlass='#ead9ab';
   const part=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number)=>mesh(g,c,x,y,z,root);
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,ry=0){
@@ -110,23 +99,11 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
   for(const [id,[x,z],species,dbh] of records.trees){
     if(planted.some(p=>Math.hypot(p[0]-x,p[1]-z)<.095))continue;
     planted.push([x,z]);
-    const phase=id*2.329, h=.06*Math.min(12.5,Math.max(3.5,3+Math.sqrt(dbh||9)*1.45)),r=h*.30;
-    if(species.includes('Washingtonia')||species.includes('Phoenix')){
-      waterfrontPalm((g,c,u,v,w)=>part(g,c,u,v,w),x,.049,z,id,h,r*.8);continue;
-    }
-    mast(x,z,Math.max(.007,dbh*.0254*.03),h*.79,.048,'#7f7964').name='Surveyed Market tree';
-    const pigments=['#778c68','#8b9d72','#87986f','#9caa7a'];
-    for(let j=0;j<4;j++){
-      const angle=phase+j*2.4,spread=j===3?0:r*.47;
-      if(j<3){
-        const delta=new THREE.Vector3(Math.sin(angle)*spread,h*.25,Math.cos(angle)*spread);
-        const branch=part(shaft,'#817d6b',x+delta.x/2,.05+h*.43+delta.y/2,z+delta.z/2);
-        branch.scale.set(.0065,delta.length(),.0065);
-        branch.quaternion.setFromUnitVectors(up,delta.normalize());
-      }
-      const crown=part(leaf,pigments[(id+j)%4],x+Math.sin(angle)*spread,.05+h*(j===3?.87:.69)+.025*Math.sin(angle),z+Math.cos(angle)*spread);
-      crown.scale.set(r*(j===3?.72:.85),h*(j===3?.17:.22),r*.82);crown.rotation.y=angle;
-    }
+    const h=.06*Math.min(12.5,Math.max(3.5,3+Math.sqrt(dbh||9)*1.45));
+    const trunkRadius=dbh>0?dbh*.0254*.03:undefined;
+    treeWell(part,id,x,.045,z,-Math.atan(.15));
+    if(/Washingtonia|Phoenix/.test(species))waterfrontPalm(part,x,.049,z,id,h,h*.24,trunkRadius,species);
+    else waterfrontTree(part,x,.049,z,id,h,species,undefined,trunkRadius);
   }
   // Three opal globes, the middle one raised, on cast-iron trolley poles.
   // The city designation documents the fitting; the spacing is interpreted.

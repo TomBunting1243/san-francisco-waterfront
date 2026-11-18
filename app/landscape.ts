@@ -1,3 +1,7 @@
+import {westGradeCut,westParkPlans,westMarketGround} from './curb-survey.ts';
+import {createCanopyMaterial} from './canopy-pigment.ts';
+import {createFerryMarket} from './ferry-market.ts';
+import {southPlazaTop} from './plaza-survey.ts';
 import {ferryClockTower} from './ferry-clock-tower.ts';
 export {setFerryClockTime} from './ferry-clock-tower.ts';
 import {downtownBuilding,applyDowntownGlazing} from './downtown-buildings.ts';
@@ -28,6 +32,7 @@ import {createDoradoFerry} from './dorado-ferry.ts';
 import {createDaySailer} from './sailing.ts';
 import {configureBayWater} from './bay-water.ts';
 import {bakeBlocks} from './city-blocks.ts';
+import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
 import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
@@ -45,6 +50,9 @@ import {buildApproachRoad} from './approach-road.ts';
 import {buildApproachBlocks} from './approach-blocks.ts';
 import {hillsCoffeeTubes} from './coffee-neon.ts';
 import {buildApproachBillboards} from './approach-billboards.ts';
+import {addOneMarketTower} from './one-market-towers.ts';
+import {addFolgerBuilding} from './folger-building.ts';
+import {addMarketHistoricFrontage} from './market-historic-frontages.ts';
 import {addBridgeDeck,bridgeLaneCenters} from './bridge-deck.ts';
 import {addBridgeAnchorages} from './bridge-anchorage.ts';
 import {sfMap,mappedBuildings,footprintGeometry,center} from './sf-map.ts';
@@ -107,7 +115,10 @@ export function createLandscape() {
     linePath(road.p,width,.04,'#889b9a');
     if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
   });
-  sfMap.parks.forEach(park=>{if(park.p.length>3&&park.name!=='Rincon Park')mesh(footprintGeometry(park.p,.07),park.name==='Embarcadero Plaza'?'#b7896f':'#89a66c',0,.04,0);});
+  sfMap.parks.forEach(park=>{
+    if(park.name==='Embarcadero Plaza'){for(const [outer] of westParkPlans)mesh(footprintGeometry(outer,.07),'#b7896f',0,.04,0);}
+    else if(park.p.length>3&&park.name!=='Rincon Park')mesh(footprintGeometry(park.p,.07),'#89a66c',0,.04,0);
+  });
   sfMap.piers.filter(p=>p.closed&&p!==pierThreeFloat&&p!==fixedFerryApron&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,.18),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,-.12,0));
   const southernWaterfront=createSouthBeach(font,waterTime);
   root.add(southernWaterfront.root);
@@ -161,7 +172,8 @@ export function createLandscape() {
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;
     }
-    if(addHyattRegency(b,root,windowPositions))return;
+    if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
+    if(addFolgerBuilding(b,root,windowPositions)||addHyattRegency(b,root,windowPositions))return;
     if(addFinancialDistrictBuilding(b,root,windowPositions))return;
     const harbor=harborBuilding(b,font);
     if(harbor){root.add(harbor.root);windowPositions.push(...harbor.windows);return;}
@@ -176,7 +188,7 @@ export function createLandscape() {
     const h=(!reference&&!hasNeighborhoodDetail(b)&&!hasShorelineFacade(b)&&!characterBuildings.has(b.name)&&!detailedWaterfrontNames.has(b.name)?surveyedHeight(b.id):undefined)??b.h;
     const background=backgroundFrontage(b,h,font);
     if(background){root.add(background.root);windowPositions.push(...background.windows);return;}
-    const ribbed=b.name.includes('Embarcadero Center')||['Spear Tower','Steuart Tower'].includes(b.name);
+    const ribbed=b.name.includes('Embarcadero Center');
     const hotel=b.name.includes('Hyatt Regency');
     const historic=['Southern Pacific Building','The Audiffred Building','Ferry Station Post Office Building','Pier 1'].includes(b.name);
     const color=hasNeighborhoodDetail(b)?neighborhoodColor(b):referenceColor(b)??characterColors[b.name]??(b.name==='Southern Pacific Building'?'#ad765d':b.name==='The Audiffred Building'?'#b57e62':historic?'#d3c4a9':ribbed||hotel?'#d4cdb9':b.id===28240176?'#66828b':h>8?['#8ba8af','#7496a5','#b3bbb6','#a8b4b3'][family%4]:['#e1c193','#caab95','#d3ccac','#9fbab0','#cf9e87'][family%5]);
@@ -192,7 +204,7 @@ export function createLandscape() {
     if(detailedWaterfrontNames.has(b.name)){const detail=waterfrontLandmark(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
     if(characterBuildings.has(b.name)){const detail=buildingCharacter(b,detailedBuildings,font);root.add(detail.root);windowPositions.push(...detail.windows);}
     if(reference){const detail=referenceArchitecture(b,detailedBuildings,font);root.add(detail.root);windowPositions.push(...detail.windows);}
-    if(['Spear Tower','Steuart Tower'].includes(b.name)||b.id===944095688)root.add(modernBuildingAccents(b,detailedBuildings));
+    if(b.id===944095688)root.add(modernBuildingAccents(b,detailedBuildings));
     if(historic&&!detailedWaterfrontNames.has(b.name)&&!characterBuildings.has(b.name)){
       const cornice=b.p.map(([x,z])=>[cx+(x-cx)*1.018,cz+(z-cz)*1.018]);
       mesh(footprintGeometry(cornice,.065),'#e1d5bd',0,h-.02,0);
@@ -300,7 +312,7 @@ export function createLandscape() {
   }
   const updateApproach=buildApproachRoad(mesh,root);
   buildApproachBlocks(mesh,root);
-  buildApproachBillboards(mesh,root,font);
+  buildApproachBillboards(mesh,bridge,font);
   // Carry the viaduct from its west-span anchorage to the rising tunnel cut.
   for(const deck of [deckLow,deckHigh]){
     box(1.4,.15,10.2,0,deck,bridgeEnd+5,'#91a1a0',bridge);
@@ -393,16 +405,17 @@ export function createLandscape() {
     }
     for(const y of [.079,.099])box(.254,.015,.010,0,y,-.041,'#a89170',g);
   }
-  waterfrontBench(-37.70,.11,.45,-.13);
-  for(const [u,v] of [[376,279],[450,283],[520,272]]){
-    const [x,z]=rinconPoint(u,v);waterfrontBench(x,.11,z,.11);
-  }
   // Embarcadero Plaza: the historic brick room at the foot of Market Street.
   const plaza=sfMap.parks.find(p=>p.name==='Embarcadero Plaza')!;
   for(let x=-7.5;x<7.2;x+=.32)for(let z=-11.1;z<-5.3;z+=.32){
     if(![[-.15,-.15],[.15,-.15],[-.15,.15],[.15,.15]].every(([dx,dz])=>insidePier(x+dx,z+dz,plaza.p)))continue;
     const i=Math.round(x/.32),j=Math.round(z/.32);
     const pigment=['#b5866d','#b88a70','#b1836b','#bb8e73'][Math.abs(i*7+j*3)%4];
+    if(x>-3.3&&x<.8&&z>-9.3&&z< -6.0){
+      const tile=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>[x+.1555*a,z+.1555*b]);
+      for(const p of cutPavingAtBasin(tile,westGradeCut))mesh(footprintGeometry(p,.018),pigment,0,.121,0);
+      continue;
+    }
     if(x<3.0||x>6.35||z< -9.55||z> -6.65){box(.311,.018,.311,x,.13,z,pigment);continue;}
     const tile=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([dx,dz])=>[x+.1555*dx,z+.1555*dz]);
     for(const part of cutPavingAtBasin(tile,fountainPavingCut))mesh(footprintGeometry(part,.018),pigment,0,.121,0);
@@ -421,7 +434,7 @@ export function createLandscape() {
     const form=box(.32,.44,.10,x,y,0,'#efe6cd',art);form.rotation.z=a;
     for(const dx of [-.1,.02]){const stripe=box(.018,.38,.018,x+dx,y,.065,'#42565a',art);stripe.rotation.z=a;}
   }
-  for(const [x,z] of [[-5.26,-7.12],[-3.02,-7.09],[-1.02,-7.46],[2.22,-8.74]])residentPositions.push({x,z,y:.139});
+  for(const [x,z] of [[-5.26,-7.12],[-3.02,-7.09],[-1.02,-7.46],[2.22,-8.74]])residentPositions.push({x,z,y:westMarketGround(x,z)});
   // Visitors gather on the grass, clear of the shared route, furnishings and sculpture.
   for(const [u,v] of [[350,222],[376,213],[396,236],[424,221],[474,230],[502,219],[556,225]]){
     const [x,z]=rinconPoint(u,v);residentPositions.push({x,z,y:knollHeight(x,z)});
@@ -458,7 +471,7 @@ export function createLandscape() {
   root.add(harborPublicPiers(sfMap.piers,font));
   root.add(ferryPublicRealm());
   // People meet on the granite paving or pause outside the restaurant threshold.
-  for(const [x,z] of [[-9.83,1.51],[-9.67,1.48],[-9.18,.61],[-8.21,.23],[-7.57,1.25]])residentPositions.push({x,z,y:.088});
+  for(const [x,z] of [[-9.83,1.51],[-9.67,1.48],[-9.18,.61],[-8.21,.23],[-7.57,1.25]])residentPositions.push({x,z,y:southPlazaTop});
 
   buildFerryTerminal(mesh,root);
   for(const entry of ferryConnections)root.add(ferryPortal(entry,font));
@@ -484,32 +497,7 @@ export function createLandscape() {
     const operator=lettering('SAN FRANCISCO BAY FERRY',.059,-.36,1.066,side*.762,'#476570',ferry);
     operator.rotation.y=side<0?Math.PI:0;
   }
-  // Market canvas shares one ridge per stall. Seams run down the pitch to the
-  // scalloped edge; each fabric strip follows the same roof plane as its neighbour.
-  const fruitColors=['#a95840','#969856','#ca944f'];
-  for(const [stall,x] of [-3.57,-3.06,-2.55,-.15,.36,.87].entries()){
-    const canopy=new THREE.Group();canopy.scale.setScalar(.52);canopy.position.set(x,.096,1.84);root.add(canopy);
-    const w=.456,run=.149,rise=.090,eave=.308;
-    for(const side of [-1,1])for(const dx of [-.194,.194]){
-      box(.009,eave,.009,dx,eave/2,side*.129,'#7e8071',canopy);
-    }
-    const fabric=['#9e6151','#9b7357','#6f8982'][stall%3];
-    for(let stripe=0;stripe<7;stripe++){
-      const xx=(stripe-3)*w/7,color=stripe%2?'#e7ddc4':fabric;
-      for(const side of [-1,1]){
-        const leaf=box(w/7,.006,Math.hypot(run,rise),xx,eave+rise/2,side*run/2,color,canopy);
-        leaf.rotation.x=side*Math.atan2(rise,run);
-        box(w/7,.032,.006,xx,eave-.015,side*run,color,canopy);
-      }
-    }
-    box(.38,.015,.15,0,.119,.046,'#ac9069',canopy);
-    for(const xx of [-.149,.149])for(const zz of [-.012,.102])box(.011,.114,.012,xx,.057,zz,'#837b67',canopy);
-    for(let bin=0;bin<3;bin++){
-      const bx=(bin-1)*.115;
-      box(.103,.023,.09,bx,.137,.046,'#967f5e',canopy);
-      for(let k=0;k<8;k++)mesh(new THREE.IcosahedronGeometry(.016+(k%3)*.001,0),fruitColors[(bin+stall)%3],bx+(k%4-1.5)*.021,.155,.046+(k<4?-.017:.010),canopy);
-    }
-  }
+  const ferryMarket=createFerryMarket();root.add(ferryMarket.root);
   waterfrontBench(-26.917,.11,.125,.11);
   for(const x of [-21,31,34]){
     const edge=seawallAt(x);
@@ -578,7 +566,7 @@ export function createLandscape() {
   const fireboat=createFireboat();root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
-  const moving=new Set<THREE.Object3D>([rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,seaLion,...cyclists,...ferries,...cars,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([root.getObjectByName('Market granite and herringbone promenade')!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,seaLion,...cyclists,...ferries,...cars,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -588,7 +576,11 @@ export function createLandscape() {
   const architectureMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02,side:THREE.FrontSide});
   const facadeMaterial=architectureMaterial.clone();
   applyDowntownGlazing(facadeMaterial,nightInk);
-  const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.geometry.hasAttribute('facadeGrid')),architectureMaterial),
+  const leafSun={value:new THREE.Vector3()};
+  const canopyMaterial=createCanopyMaterial(architectureMaterial,leafSun);
+  const treeBatches=bakeTreeBatches(staticMeshes,canopyMaterial);
+  const treeDraw=createTreeDraw(treeBatches,canopyMaterial);if(treeDraw)root.add(treeDraw);
+  const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.hasAttribute('facadeGrid')),architectureMaterial),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
   const illuminatedArchitecture=architectureMaterial.clone();
   for(const chunk of architectureChunks)if(chunk.geometry.hasAttribute('signLight'))chunk.material=illuminatedArchitecture;
@@ -655,6 +647,8 @@ export function createLandscape() {
   pigment.wrapS=pigment.wrapT=THREE.RepeatWrapping;pigment.generateMipmaps=true;
   pigment.minFilter=THREE.LinearMipmapLinearFilter;pigment.magFilter=THREE.LinearFilter;pigment.needsUpdate=true;
   architectureMaterial.addEventListener('dispose',()=>pigment.dispose());
+  const seaMist={value:new THREE.Vector2()};
+  const rainOnStone={value:0};
   const edgeFogColor={value:new THREE.Color('#d6e4e6')};
   const hazeMaterials=new Set<THREE.MeshStandardMaterial|THREE.MeshBasicMaterial>([architectureMaterial,windowMaterial,waterMaterial]);
   root.traverse(o=>{if(o instanceof THREE.Mesh){for(const mat of Array.isArray(o.material)?o.material:[o.material])if(mat instanceof THREE.MeshStandardMaterial||mat instanceof THREE.MeshBasicMaterial)hazeMaterials.add(mat);}});
@@ -666,7 +660,7 @@ export function createLandscape() {
     const previousCacheKey=mat.customProgramCacheKey();
     mat.onBeforeCompile=(shader,renderer)=>{
       previousCompile.call(mat,shader,renderer);
-      shader.uniforms.edgeFogColor=edgeFogColor;
+      shader.uniforms.edgeFogColor=edgeFogColor;shader.uniforms.seaMistBank=seaMist;shader.uniforms.rainOnStone=rainOnStone;
       shader.uniforms.pigmentSheet={value:pigment};shader.uniforms.nightInk=nightInk;
       const towerCenter=new THREE.Vector2(hall.towerX,hall.towerZ);shader.uniforms.ferryTowerCenter={value:towerCenter};
       shader.vertexShader='varying vec3 pigmentPosition; varying vec3 harborPosition;\n'+shader.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
@@ -680,7 +674,7 @@ export function createLandscape() {
         shader.vertexShader='attribute vec3 signLight; varying vec3 nightSignLight;\n'+
           shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nnightSignLight=signLight;');
       }
-      shader.fragmentShader='uniform float nightInk; uniform vec2 ferryTowerCenter; uniform sampler2D pigmentSheet; varying vec3 pigmentPosition; uniform vec3 edgeFogColor; varying vec3 harborPosition;\n'+shader.fragmentShader.replace('#include <fog_fragment>',`
+      shader.fragmentShader='uniform float rainOnStone; uniform vec2 seaMistBank; uniform float nightInk; uniform vec2 ferryTowerCenter; uniform sampler2D pigmentSheet; varying vec3 pigmentPosition; uniform vec3 edgeFogColor; varying vec3 harborPosition;\n'+shader.fragmentShader.replace('#include <fog_fragment>',`
         float value=dot(gl_FragColor.rgb,vec3(.24,.61,.15));
         ${washSurface?`
         // Oblique coordinates span quay paving, wall faces and roofs continuously.
@@ -695,6 +689,16 @@ export function createLandscape() {
         gl_FragColor.rgb*=mix(vec3(1.),vec3(.89,.96,1.07),shade*(.56+.44*sheet.r)*(1.-nightInk*.6));
         float sunlit=smoothstep(.59,.92,value)*(1.-nightInk);
         gl_FragColor.rgb+=vec3(.022,.012,.001)*sunlit;
+        // Rain darkens paving and leaves a broken reflection of the silver sky along the quay.
+        if(rainOnStone>.005 && harborPosition.y>-.055 && harborPosition.y<.19){
+          float upFacing=smoothstep(.89,.995,inverseTransformDirection(normal,viewMatrix).y);
+          float green=diffuseColor.g-max(diffuseColor.r,diffuseColor.b);
+          float paved=upFacing*(1.-smoothstep(.008,.035,green));
+          float damp=paved*rainOnStone;
+          float grazing=1.-abs(normalize(cameraPosition-harborPosition).y);
+          float sheen=smoothstep(.35,.72,sheet.r)*grazing*grazing*.24;
+          gl_FragColor.rgb=mix(gl_FragColor.rgb,gl_FragColor.rgb*.74+edgeFogColor*sheen,damp);
+        }
         `:''}
         vec3 P=harborPosition;
         // Warm floodlighting on the Ferry Building and clock; pale concrete takes ink in shadow.
@@ -710,6 +714,12 @@ export function createLandscape() {
         float edgeHaze=max(boundary*smoothstep(18.,112.,sightline)*${mat===waterMaterial||mat.transparent?'1.0':'.51'},
           smoothstep(42.,180.,sightline)*mix(.15,.075,nightInk));
         gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,edgeHaze);
+        if(seaMistBank.x>.005){
+          float bank=texture2D(pigmentSheet,harborPosition.xz*.006+vec2(seaMistBank.y*.00048,0.)).r;
+          float below=1.-smoothstep(.2,5.4,harborPosition.y+(bank-.5)*5.);
+          float depth=smoothstep(12.,104.,sightline);
+          gl_FragColor.rgb=mix(gl_FragColor.rgb,edgeFogColor,seaMistBank.x*below*depth*(.20+.34*bank));
+        }
         #include <fog_fragment>`);
       if(mat===illuminatedArchitecture)shader.fragmentShader='varying vec3 nightSignLight;\n'+shader.fragmentShader;
     };
@@ -728,7 +738,7 @@ export function createLandscape() {
     const target=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),hitMaterial);target.position.set(x,y,z);target.userData.landmark=name;root.add(target);hitTargets.push(target);
   }
   const relief=createBayRelief();root.add(relief.root,createUrbanContext());
-  const result={ root, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, bridgeLightMaterial, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bridgeLightMaterial, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   cityTemplate=result;
   return result;
 }
@@ -744,6 +754,8 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
     let copy=materialCopies.get(mat);if(!copy){copy=mat.clone();copy.onBeforeCompile=mat.onBeforeCompile;copy.customProgramCacheKey=mat.customProgramCacheKey;materialCopies.set(mat,copy);}return copy;
   }
   function copyMesh(mesh:THREE.Mesh){const m=mesh.clone();m.geometry=mesh.geometry;m.userData.sharedGeometry=true;m.material=Array.isArray(mesh.material)?mesh.material.map(copiedMaterial):copiedMaterial(mesh.material);return m;}
+  const treeBatches=source.treeBatches.filter(t=>t.high.boundingBox!.intersectsBox(bounds)).map(t=>{const mesh=copyMesh(t.mesh);return {...t,mesh};});
+  const treeDraw=source.treeDraw&&createTreeDraw(treeBatches,copiedMaterial(source.treeDraw.material));if(treeDraw)root.add(treeDraw);
   const architectureChunks=source.architectureChunks.filter(m=>m.geometry.boundingBox!.intersectsBox(bounds)).map(m=>{const copy=copyMesh(m);root.add(copy);return copy;});
   // Only window instances inside the vignette are copied to its renderer.
   const original=source.root.children.find(o=>o instanceof THREE.InstancedMesh&&o.material===source.windowMaterial) as THREE.InstancedMesh;
@@ -775,6 +787,10 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   source.root.traverse(o=>{if(o instanceof THREE.Mesh&&o.material===source.coffeeMaterial&&variant==='street'){const copy=copyMesh(o);copy.matrix.copy(o.matrixWorld);copy.matrix.decompose(copy.position,copy.quaternion,copy.scale);root.add(copy);}});
   // The plaza shares the fountain geometry while following its own pausable clock.
   if(variant==='plaza'){
+    const paving=source.root.getObjectByName('Market granite and herringbone promenade') as THREE.Mesh;
+    const walk=copyMesh(paving);
+    paving.matrixWorld.decompose(walk.position,walk.quaternion,walk.scale);
+    root.add(walk);
     const glass=source.root.getObjectByName('Sinbad display glass') as THREE.Mesh;
     const glazing=copyMesh(glass);glass.matrixWorld.decompose(glazing.position,glazing.quaternion,glazing.scale);root.add(glazing);
     const surface=source.root.getObjectByName(fountainWaterName)!;
@@ -790,7 +806,8 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
     const parent=new THREE.Group();parent.matrix.copy(minute.parent!.matrixWorld);parent.matrix.decompose(parent.position,parent.quaternion,parent.scale);root.add(parent);
     const minuteCopy=copyMesh(minute),hourCopy=copyMesh(hour);parent.add(minuteCopy,hourCopy);return {minute:minuteCopy,hour:hourCopy,angle};
   }):[];
-  return {...source,root,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
+  const ferryMarket=variant==='plaza'?createFerryMarket():source.ferryMarket;if(variant==='plaza')root.add(ferryMarket.root);
+  return {...source,root,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
     streetcarGlazing:copiedMaterial(source.streetcarGlazing) as THREE.MeshStandardMaterial,streetcarLamp:copiedMaterial(source.streetcarLamp) as THREE.MeshStandardMaterial,
     coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cyclists,hitTargets:[],
     seaLion:new THREE.Group(),sealFlippers:[]};

@@ -24,6 +24,17 @@ export function harborSunDirection(azimuth:number,altitude:number):[number,numbe
 }
 
 /** SunCalc 2 reports degrees. Clock formatting always uses Pacific time, with DST. */
+export function sunsetWeight(altitude:number,azimuth:number){
+  if(azimuth<=180)return 0;
+  // Afterglow builds before the solar disc reaches the water and fades through civil twilight.
+  return clamp((altitude+8)/6)*clamp((14-altitude)/10);
+}
+
+/** A continuous loss of cast-shadow contrast as the marine layer covers the sun. */
+export function directSunVisibility(altitude:number,cloud:number,fog:number){
+  return clamp(altitude/3)*clamp((.98-cloud)/.30)*(1-fog)**2;
+}
+
 export function pacificLighting(date = new Date()) {
   const { altitude, azimuth } = getPosition(date,37.7955,-122.3937);
   const next = stops.findIndex(stop=>altitude<stop.altitude);
@@ -35,7 +46,7 @@ export function pacificLighting(date = new Date()) {
   const parts=pacificClock.formatToParts(date);
   const hours=Number(parts.find(p=>p.type==='hour')!.value),minutes=Number(parts.find(p=>p.type==='minute')!.value);
   return {
-    altitude,azimuth,night,hours,minutes,direction:harborSunDirection(azimuth,altitude),
+    altitude,azimuth,night,hours,minutes,sunset:sunsetWeight(altitude,azimuth),direction:harborSunDirection(azimuth,altitude),
     sky:mixColor(a.sky,b.sky,blend),water:mixColor(a.water,b.water,blend),sun:mixColor(a.sun,b.sun,blend),
     ambient:2.10-night*1.39,sunIntensity:.15+3.04*clamp((altitude+4)/30),
     phase:altitude>=10?'day':altitude>=0?'golden-hour':altitude>=-6?'twilight':'night',
