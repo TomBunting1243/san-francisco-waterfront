@@ -66,3 +66,35 @@ test('the tower window openings start above the commercial terraces and face out
     }
   }
 });
+
+test('Osha opens onto the plaza on the street level, with a clear approach between patio tables',()=>{
+  const g=model.root.getObjectByName('Osha Thai · street-level plaza entrance');
+  const sign=g.getObjectByName('Osha Thai lettering');
+  const board=g.getObjectByName('Osha Thai signboard');
+  assert.ok(sign && board);
+  const publicSide=g.localToWorld(new THREE.Vector3(0,.14,.68));
+  const inward=new THREE.Vector3(0,0,-1).transformDirection(g.matrixWorld);
+  const forward=new THREE.Raycaster(publicSide,inward);
+  const hits=forward.intersectObject(g).filter(h=>h.object.name==='Recessed glass door');
+  // Test the left leaf itself rather than the narrow gap between leaves.
+  forward.ray.origin.copy(g.localToWorld(new THREE.Vector3(-.025,.14,.68)));
+  assert.equal(forward.intersectObject(g)[0].object.name,'Recessed glass door');
+  assert.equal(hits.length,0);
+  assert.ok(sign.getWorldPosition(new THREE.Vector3()).y<centerLobby);
+  assert.ok(forward.ray.direction.z<0,'door and sign must face toward the Ferry Building');
+  assert.equal(model.root.getObjectsByProperty('name','Osha Thai lettering').length,1);
+});
+
+test('plaza dining terraces have masonry supports through both levels and the Tulip rises above them',()=>{
+  const wings=model.root.getObjectsByProperty('name','Supported precast balcony');
+  assert.equal(wings.length,4);
+  for(const g of wings) {
+    const post=g.getObjectByName('Precast arcade pier');
+    const bounds=new THREE.Box3().setFromObject(post);
+    assert.ok(Math.min(Math.abs(bounds.min.y-.075),Math.abs(bounds.min.y-centerLobby))<.001);
+    assert.ok(bounds.max.y-bounds.min.y>.24);
+  }
+  const ribs=model.root.getObjectsByProperty('name','Tulip petal rib');
+  assert.equal(ribs.length,16);
+  assert.ok(new THREE.Box3().setFromObject(ribs[0]).max.y>1.30);
+});

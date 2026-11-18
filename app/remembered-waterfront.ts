@@ -7,8 +7,10 @@ import {createFountainWater} from './fountain-flow.ts';
 
 type XYZ=[number,number,number];
 
-const fountainSite=[4.65,.135,-8.12] as const;
-const fountainYaw=-.12;
+// Register the two 1969 concrete screens to their three endpoints in the 2024 SF ortho.
+// Retain the drawing’s 4 ft 6 in module and the remembered working fountain.
+const fountainSite=[5.26,.118,-8.22] as const;
+const fountainYaw=.171;
 const fountainBasin=basinOutline;
 const poolOutline=fountainBasin.map(([x,z])=>[x*.907,z*.907]);
 export const fountainPavingCut=fountainBasin.map(([x,z])=>[
@@ -91,19 +93,24 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   const pool=mesh(footprintGeometry(poolOutline,.054),'#60928d',0,basinHeight-.054,0,fountain);
   pool.name='Sunken fountain pool';
 
-  // A stepped concrete ledge descends from the brick surface to the catch basin.
-  const bankLevels=[[1,.022],[.976,.010],[.948,-.002],[.920,basinHeight]];
+  // Continuous mitred treads and risers form the basin edge. Each corner shares
+  // its exact plan vertex with the next side, including the sloping east bank.
+  const bankLevels=[[1,.022],[.974,.012],[.941,.001],[.907,basinHeight]];
   for(let i=1;i<bankLevels.length;i++){
-    const [before,upper]=bankLevels[i-1],[after,lower]=bankLevels[i];
+    const [outside,upper]=bankLevels[i-1],[inside,lower]=bankLevels[i];
+    const positions:number[]=[];
+    const triangle=(a:XYZ,b:XYZ,c:XYZ)=>positions.push(...a,...b,...c);
     for(let j=0;j<fountainBasin.length;j++){
-      const [x,z]=fountainBasin[j],[qx,qz]=fountainBasin[(j+1)%fountainBasin.length];
-      const ax=x*before,az=z*before,bx=qx*before,bz=qz*before;
-      const width=Math.hypot((before-after)*x,(before-after)*z)+.024;
-      const centerX=(ax+bx)/2, centerZ=(az+bz)/2;
-      const size=Math.hypot(bx-ax,bz-az)+width*.17;
-      const band=box(size,upper-lower+.008,width,centerX,(upper+lower)/2,centerZ,cement[i%cement.length],fountain);
-      band.rotation.y=-Math.atan2(bz-az,bx-ax);
+      const a=fountainBasin[j],b=fountainBasin[(j+1)%fountainBasin.length];
+      const at=(p:number[],scale:number,y:number):XYZ=>[p[0]*scale,y,p[1]*scale];
+      const outerA=at(a,outside,upper),outerB=at(b,outside,upper);
+      const innerA=at(a,inside,upper),innerB=at(b,inside,upper);
+      const lowA=at(a,inside,lower),lowB=at(b,inside,lower);
+      triangle(outerA,innerB,outerB);triangle(outerA,innerA,innerB);
+      triangle(innerA,lowB,innerB);triangle(innerA,lowA,lowB);
     }
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    g.computeVertexNormals();mesh(g,cement[i%cement.length],0,0,0,fountain).name='Mitred fountain basin coping';
   }
   // Pedestals thread between the columns and the two galleries, from side to side.
   const padTrace=[[491,655],[519,623],[545,593],[578,566],[602,535],[615,499],
@@ -409,7 +416,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   // Palomino's red horse and capitals looked out over its Hills Plaza terrace.
   const palomino=group('Palomino',[-38.74,.10,-6.36]);
   palomino.rotation.y=.148;
-  const terra='#ae7459', red='#ae4338', navy='#658083';
+  const terra='#ae7459', red='#ae4338';
   box(1.56,.44,.097,0,.257,-.016,terra,palomino);
   box(1.60,.051,.105,0,.513,-.019,'#c19473',palomino);
   for(const y of [.061,.123,.185,.247,.309,.372,.437])box(1.55,.006,.008,0,y,.035,'#be9478',palomino);
@@ -472,35 +479,60 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
     for(const [dx,dz] of [[-.023,-.01],[.013,.012],[.028,-.016]])box(.009,.006,.009,x+dx,.245,.53+dz,'#acaf90',palomino);
   }
 
-  // The former Pancho Villa lease transferred to the Grill in the same south bulkhead bay.
-  const grill=group('Pier One Southwestern Grill',[10.151,.074,-1.47]);
-  grill.rotation.y=-Math.PI/2;
-  const limestone='#d0c3a9', reveal='#aa9b86';
+  // Pier 1, south bulkhead. The period exterior and doorway photographs place
+  // the two neon words behind the middle transom, under four six-light windows.
+  const taqueria=group('Pancho Villa Taqueria at Pier 1',[10.151,.074,-1.47]);
+  taqueria.rotation.y=-Math.PI/2;
+  const limestone='#d4c8b1',doorSash='#363831';
   const arch=new THREE.Shape();
-  arch.moveTo(-.267,0);
-  arch.lineTo(.267,0);
-  arch.lineTo(.267,.24);
-  arch.quadraticCurveTo(0,.49,-.267,.24);
-  arch.closePath();
-  const glassArch=new THREE.ExtrudeGeometry(arch,{depth:.016,bevelEnabled:false,curveSegments:12});
-  mesh(glassArch,'#527073',0,.012,.031,grill);
-  // A shallow segmental head and four six-light upper windows mark the existing bulkhead façade.
-  const head=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.265,.252,.052),new THREE.Vector3(0,.502,.052),new THREE.Vector3(.265,.252,.052));
-  mesh(new THREE.TubeGeometry(head,20,.021,5,false),limestone,0,0,0,grill);
-  for(const x of [-.267,.267])box(.034,.251,.049,x,.127,.039,limestone,grill);
-  for(const x of [-.140,0,.14])box(.013,.245,.025,x,.137,.051,reveal,grill);
-  box(.526,.011,.024,0,.221,.057,reveal,grill);
-  box(.266,.055,.023,0,.137,.057,'#688383',grill);
-  for(const x of [-.034,.034])box(.012,.042,.015,x,.125,.071,'#d9bf7d',grill);
-  for(const x of [-.225,-.076,.076,.225]){
-    storefront(x,.022,.684,.105,.136,limestone,grill);
-    box(.104,.009,.018,x,.666,.070,limestone,grill);
-    box(.104,.009,.018,x,.707,.070,limestone,grill);
+  arch.moveTo(-.267,0);arch.lineTo(.267,0);arch.lineTo(.267,.31);
+  arch.quadraticCurveTo(0,.405,-.267,.31);arch.closePath();
+  mesh(new THREE.ExtrudeGeometry(arch,{depth:.012,bevelEnabled:false,curveSegments:14}),'#58716a',0,.012,.032,taqueria);
+  const head=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.267,.326,.054),new THREE.Vector3(0,.422,.054),new THREE.Vector3(.267,.326,.054));
+  mesh(new THREE.TubeGeometry(head,16,.012,6,false),limestone,0,0,0,taqueria);
+  for(const x of [-.271,.271])box(.021,.323,.038,x,.1615,.053,limestone,taqueria);
+  for(const x of [-.092,.092])box(.011,.343,.012,x,.177,.057,doorSash,taqueria);
+  box(.534,.019,.013,0,.241,.059,doorSash,taqueria);
+  // The dark paired door has a shallow kick plate and narrow brass pulls.
+  for(const x of [-.045,.045]){
+    box(.082,.135,.009,x,.084,.063,'#727865',taqueria);
+    box(.082,.016,.01,x,.022,.069,doorSash,taqueria);
+    box(.003,.032,.007,x*.23,.081,.075,'#d3bd8c',taqueria);
   }
-  box(.49,.094,.019,0,.476,.054,navy,grill);
-  sign('PIER ONE',.053,.479,.069,.455,cream,grill);
-  sign('SOUTHWESTERN GRILL',.025,.444,.069,.455,cream,grill);
-  outdoorTable(-.435,.39,.012,'#b77051',grill,false);
-  outdoorTable(.355,.44,.012,'#b77051',grill,false);
+  for(const x of [-.224,-.075,.075,.224]){
+    const pane=box(.080,.122,.010,x,.545,.052,'#aaa68c',taqueria);
+    pane.userData.signLight=[.18,.115,.042];
+    for(const dx of [-.043,0,.043])box(.004,.13,.009,x+dx,.545,.060,doorSash,taqueria);
+    for(const dy of [-.063,-.021,.021,.063])box(.089,.005,.009,x,.545+dy,.060,doorSash,taqueria);
+  }
+  const transom=box(.175,.096,.008,0,.3,.052,'#738b77',taqueria);
+  transom.userData.signLight=[.06,.07,.035];
+  const letters=sign('TAQUERIA',.020,.32,.061,.156,'#9edab4',taqueria);
+  letters.userData.signLight=[.16,.62,.32];
+  // Sloped connected tube strokes of the red script, drawn on the transom.
+  const script=group('Pancho Villa script neon',[0,.269,.064],taqueria);
+  const strokes=[
+    [[0,0],[2,7],[4,12],[7,12],[8,10],[6,7],[3,6]],
+    [[4,2],[7,6],[9,6],[8,2],[10,5],[11,5],[10,2],[14,6],[14,4],[13,2],[16,4],[18,8],[20,12],[18,8],[15,2],[19,6],[18,2],[21,5],[23,6],[24,5],[22,2],[20,3],[25,6]],
+    [[27,9],[30,12],[29,7],[29,2],[33,8],[36,12]],
+    [[32,3],[35,6],[34,2],[37,5],[40,11],[41,12],[40,8],[36,2],[39,4],[43,11],[44,12],[43,8],[39,2],[42,4],[45,6],[47,6],[45,2],[48,5],[47,2],[50,4]],
+  ];
+  for(const points of strokes){
+    const curve=new THREE.CatmullRomCurve3(points.map(([x,y])=>new THREE.Vector3((x-25)*.0032,y*.0031,0)));
+    const tube=mesh(new THREE.TubeGeometry(curve,points.length*2,.00095,4,false),'#de6752',0,0,0,script);
+    tube.userData.signLight=[.84,.095,.034];
+  }
+  // Square black café tables and spindle-back chairs in the close exterior.
+  for(const [x,z] of [[-.22,.24],[.16,.26],[-.39,.37]]){
+    box(.047,.003,.047,x,.046,z,doorSash,taqueria);
+    box(.005,.044,.005,x,.023,z,doorSash,taqueria);
+    for(const side of [-1,1]){
+      const seat=z+side*.043;
+      box(.027,.003,.026,x,.027,seat,doorSash,taqueria);
+      for(const dx of [-.010,0,.010])box(.002,.026,.002,x+dx,.040,seat+side*.012,doorSash,taqueria);
+      box(.027,.003,.003,x,.053,seat+side*.012,doorSash,taqueria);
+      for(const dx of [-.010,.010])for(const dz of [-.009,.009])box(.002,.026,.002,x+dx,.013,seat+dz,doorSash,taqueria);
+    }
+  }
   return root;
 }

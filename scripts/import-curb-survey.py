@@ -58,6 +58,10 @@ def crosswalk(points):
     a,b=points[0],points[-1]
     return LineString([(a[0]-ax*.15,a[1]-az*.15),*points,(b[0]+bx*.15,b[1]+bz*.15)])
 paths=[crosswalk(p) for _,p in market['crossings']]
+# Extend the independently traced 2024 paint bar lines to the gutter.
+for stripes in read(D/'promenade-crossings.json')['crossings']:
+    def middle(bar):return tuple(sum(p[k] for p in bar)/len(bar) for k in (0,1))
+    paths.append(crosswalk([middle(stripes[0]),middle(stripes[-1])]))
 paths += [LineString(r['p']) for r in landscape['paths'] if r.get('layer','0') in ('0','') and r['kind'] in ('footway','pedestrian','path') and len(r['p'])>1]
 pathIndex=STRtree(paths)
 # Many DPW records at the same intersection share a single point, regardless of

@@ -21,6 +21,8 @@ const stations = [
 // San Francisco Bay Ferry fleet particulars for both Mavrik sister ships.
 export const doradoDimensions={length:42*.06,beam:10.5*.06,draft:1.4*.06};
 const deckScale=.27,waterline=-.20,keel=-.748;
+const boardingSill=.529, boardingLedgeThickness=.027;
+export const doradoBoardingFreeboard=(boardingSill+boardingLedgeThickness/2-waterline)*deckScale;
 export const doradoWake={
   stern:-2.59*doradoDimensions.length/5.31,
   hullOffset:.562*doradoDimensions.beam/1.62,
@@ -115,7 +117,7 @@ export function createDoradoFerry(mesh:FerryMesh,name:string) {
     // Narrow boarding cut with dark weather stripping and a deck-level ledge.
     box(.16,.286,.027,.44,.68,z*1.014,'#b3beb6');
     box(.009,.261,.029,.50,.683,z*1.033,darkSeam);
-    box(.205,.027,.075,.44,.529,z*1.025,roof);
+    box(.205,boardingLedgeThickness,.075,.44,boardingSill,z*1.025,roof);
   }
   const bowGlass=box(.036,.270,1.22,1.76,.905,0,cabin);
   bowGlass.rotation.z=-.27;

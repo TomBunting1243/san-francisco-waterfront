@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {footprintGeometry,sfMap} from './sf-map.ts';
-import {waterSurface} from './water-surface.ts';
+import {harborDatum,waterSurface} from './water-surface.ts';
 
 type Building={id:number;p:number[][];h:number;parent?:number};
 type Point=[number,number];
@@ -243,18 +243,19 @@ export function mooredVessel(b:Building,font:Font){
   }
   if(belle){
     const plan=pierThreeFloat.p.map(([x,z]):Point=>{const a=worldPoint(x,0,z);return [a.x,a.z];});
-    slab(plan,-.039,.145,'#7d8175','Pier 3 boarding float');
-    slab(plan,.106,.014,'#bbad95','Float deck');
-    gangway(worldPoint(19.99,waterSurface.level+.12,8.72),worldPoint(19.50,.068,7.06),.155,'Pier 3 boarding gangway');
-    gangway(worldPoint(20.16,waterSurface.level+.12,9.07),v(-mainWidth*.493,freeboard+.018,-.80),.124,'Boarding brow');
+    const deck=harborDatum.pierThreeFreeboard;
+    slab(plan,-.049,deck-.014+.049,'#7d8175','Pier 3 boarding float');
+    slab(plan,deck-.014,.014,'#bbad95','Float deck');
+    gangway(worldPoint(19.99,waterSurface.level+deck,8.72),worldPoint(19.50,harborDatum.pierDeck,7.06),.155,'Pier 3 boarding gangway');
+    gangway(worldPoint(20.16,waterSurface.level+deck,9.07),v(-mainWidth*.493,freeboard+.018,-.80),.124,'Boarding brow');
   }else{
-    gangway(v(-.13,freeboard+story+.015,2.05),worldPoint(19.49,.068,6.62),.123,'Pier 3 boarding gangway');
+    gangway(v(-.13,freeboard+story+.015,2.05),worldPoint(19.49,harborDatum.pierDeck,6.62),.123,'Pier 3 boarding gangway');
   }
   // Fine, slack breast lines run outside the hull; heavy fenders separate
   // the ship's side from the float and wharf.
   for(const sign of [-1,1]){
     const s=v(-mainWidth*.425,freeboard+.07,sign*(belle?1.74:1.62));
-    const e=worldPoint(19.54,.075,frame.z+sign*(belle?2.10:2.02));
+    const e=worldPoint(19.54,harborDatum.pierDeck+.015,frame.z+sign*(belle?2.10:2.02));
     const mid=s.clone().lerp(e,.5);mid.y-=.055;
     rod(s,mid,.0045,'#8f846b');rod(mid,e,.0045,'#8f846b');
     mesh(new THREE.CylinderGeometry(.037,.035,.12,8),'#565c56',-mainWidth*.49,freeboard-.009,sign*.92,'Fender');

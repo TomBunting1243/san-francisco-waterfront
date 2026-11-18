@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {FacadePanels} from './facade-panels.ts';
 import {footprintGeometry} from './sf-map.ts';
 
 type Building = {id:number;p:number[][]};
@@ -30,28 +31,7 @@ function divideRun(points:number[][],bays:number){
   return result;
 }
 
-// All opaque panels share one indexed geometry, including real reveals at the entrance
-// and across the residential levels. Palette values are converted to linear vertex color.
-class Facade {
-  positions:number[]=[];colors:number[]=[];indices:number[]=[];
-  palette=new Map<string,THREE.Color>();
-  quad(a:Point,b:Point,c:Point,d:Point,tint:string){
-    let color=this.palette.get(tint);
-    if(!color){color=new THREE.Color(tint);this.palette.set(tint,color);}
-    const n=this.positions.length/3;
-    for(const p of [a,b,c,d]){this.positions.push(...p);this.colors.push(color.r,color.g,color.b);}
-    this.indices.push(n,n+1,n+2,n,n+2,n+3);
-  }
-  mesh(){
-    const g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.Float32BufferAttribute(this.positions,3));
-    g.setAttribute('color',new THREE.Float32BufferAttribute(this.colors,3));
-    g.setIndex(this.indices);g.computeVertexNormals();
-    return new THREE.Mesh(g,facadeMaterial);
-  }
-}
-
-function addBay(batch:Facade,ring:number[][],i:number,isBase:boolean,windows:NightWindow[]){
+function addBay(batch:FacadePanels,ring:number[][],i:number,isBase:boolean,windows:NightWindow[]){
   const a=ring[i],b=ring[(i+1)%ring.length];
   const dx=b[0]-a[0],dz=b[1]-a[1],length=Math.hypot(dx,dz);
   const nx=dz/length,nz=-dx/length;
@@ -131,21 +111,21 @@ const upperDeck=[[-3.24,-34.30],[-3.65,-34.06],[-3.87,-33.67],[-3.60,-31.51],
 function addRoof(group:THREE.Group,ring:number[][]){
   roofSurface(group,'388 Market roof terrace',ring,roofDeck);
   slab(group,'388 Market raised mechanical deck',upperDeck,roofDeck,6.735);
-  const batch=new Facade(),cx=-3.045,cz=-33.45,sides=28;
+  const batch=new FacadePanels(),cx=-3.045,cz=-33.45,sides=28;
   const point=(angle:number,r:number,h:number):Point=>[cx+r*Math.cos(angle),h,cz+r*.97*Math.sin(angle)];
   for(let i=0;i<sides;i++){
     const a=i*2*Math.PI/sides,b=(i+1)*2*Math.PI/sides;
     batch.quad(point(a,.66,6.735),point(a,.58,6.795),point(b,.58,6.795),point(b,.66,6.735),'#97968b');
     batch.quad(point(a,.58,6.795),point(a,.27,6.865),point(b,.27,6.865),point(b,.58,6.795),'#b1a99c');
   }
-  const cap=batch.mesh();cap.name='388 Market shallow round crown';group.add(cap);
+  const cap=batch.mesh(facadeMaterial);cap.name='388 Market shallow round crown';group.add(cap);
   const lid=Array.from({length:sides},(_,i)=>{const p=point(i*2*Math.PI/sides,.27,6.865);return [p[0],p[2]];});
   slab(group,'388 Market crown lid',lid,6.857,6.865);
 }
 
 export function addMarketFlatiron(b:Building,root:THREE.Group,windows:NightWindow[]){
   if(b.id!==podium&&b.id!==tower)return false;
-  const group=new THREE.Group(),batch=new Facade(),base=b.id===podium;
+  const group=new THREE.Group(),batch=new FacadePanels(),base=b.id===podium;
   group.name=base?'388 Market commercial base':'388 Market granite flatiron';
   root.add(group);
   const outline=b.p;
@@ -160,7 +140,7 @@ export function addMarketFlatiron(b:Building,root:THREE.Group,windows:NightWindo
     ...divideRun([...outline.slice(50,-1),...outline.slice(0,27)],15),
   ];
   for(let i=0;i<ring.length;i++)addBay(batch,ring,i,base,windows);
-  const wall=batch.mesh();wall.name=base?'388 Market recessed storefronts':'388 Market offices, mechanical band and residences';group.add(wall);
+  const wall=batch.mesh(facadeMaterial);wall.name=base?'388 Market recessed storefronts':'388 Market offices, mechanical band and residences';group.add(wall);
   if(base)roofSurface(group,'388 Market podium roof',outline,baseTop);
   else addRoof(group,ring);
   return true;

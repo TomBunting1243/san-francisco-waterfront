@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import {doradoBoardingFreeboard} from './dorado-ferry.ts';
 import {center,footprintGeometry,sfMap} from './sf-map.ts';
-import {waterSurface} from './water-surface.ts';
+import {harborDatum,waterSurface} from './water-surface.ts';
 
 type PlanPoint=[x:number,z:number];
 type TerminalMesh=(shape:THREE.BufferGeometry,color:string,x:number,y:number,z:number,parent:THREE.Group)=>THREE.Mesh;
@@ -14,7 +15,7 @@ export type FerryConnection={
   width:number;
   covered:boolean;
 };
-const apronY=.096, floatY=-.111;
+const apronY=harborDatum.ferryApron, floatY=waterSurface.level+harborDatum.ferryFloatFreeboard;
 // OpenStreetMap 780026874, 740435234, 740435237 and 780026870–72.
 // C and D board on separate spurs from the outer edge of the same apron.
 export const ferryConnections:FerryConnection[]=[
@@ -26,10 +27,32 @@ export const ferryConnections:FerryConnection[]=[
   {gate:'G',from:[-14.217,2.95],to:[-14.216,5.066],landY:apronY,deckY:floatY,width:.269,covered:true},
 ];
 const cream='#dddac3', steel='#869b99', blueSteel='#638395', gray='#a5aaa0', fender='#455e60', yellow='#cbb775';
-const boardingStops:Record<Gate,PlanPoint>={
+export const boardingStops:Record<Gate,PlanPoint>={
   B:[5.843,6.462], C:[.061,5.436], D:[-.831,9.348],
   E:[-7.819,7.08], F:[-10.811,7.135], G:[-13.831,7.137],
 };
+// The short telescoping brow retracts inside the pontoon threshold before
+// a vessel backs away. One instance per operating berth shares the same draw.
+export function createBoardingBrows(count:number){
+  const mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:'#b4b8ab',roughness:.83}),count);
+  mesh.name='Telescoping ferry boarding brows';mesh.frustumCulled=false;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const part=new THREE.Object3D();
+  function update(i:number,pose:{gate:Gate;x:number;y:number;brow:number}){
+    const [x,z]=boardingStops[pose.gate],side=Math.sign(pose.x-x);
+    if(pose.brow<=0){
+      part.position.set(x,waterSurface.level,z);part.scale.set(0,0,0);
+    }else{
+      const start=x+side*.020, end=pose.x-side*.308;
+      const rise=(pose.y-waterSurface.level)*pose.brow,run=(end-start)*pose.brow;
+      part.position.set(start+run/2,waterSurface.level+doradoBoardingFreeboard-.005+rise/2,z);
+      part.rotation.z=Math.atan2(rise,run);
+      part.scale.set(Math.hypot(run,rise),.008,.091);
+    }
+    part.updateMatrix();mesh.setMatrixAt(i,part.matrix);mesh.instanceMatrix.needsUpdate=true;
+  }
+  return {mesh,update};
+}
 function pointInPolygon(x:number,z:number,polygon:number[][]){
   let inside=false;
   for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
@@ -81,13 +104,13 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     const landing=new THREE.Group();
     landing.name=covered?`Gate ${gate} floating pontoon`:`Gate ${gate} hydraulic landing`;
     terminal.add(landing);
-    const [cx,cz]=center(plate.p.slice(0,-1)), depth=covered?.075:.094;
+    const [cx,cz]=center(plate.p.slice(0,-1)), depth=covered?.035:harborDatum.pierSlabThickness;
     const hullTint=covered?'#607679':'#677b7d';
     // A steel buoyancy box reaches below the water only where the pier is floating.
     // The Golden Gate berths use short hydraulically adjusted platforms.
     const hullOutline=plate.p.map(([x,z])=>[cx+(x-cx)*.908,cz+(z-cz)*.986]);
     if(covered){
-      const keel=waterSurface.level-.205;
+      const keel=waterSurface.level-.12;
       mesh(footprintGeometry(hullOutline,deckY-depth+.018-keel),hullTint,0,keel,0,landing).name='Floating steel hull';
     }
     mesh(footprintGeometry(plate.p,depth),covered?'#aaa99b':'#a5aba0',0,deckY-depth,0,landing).name='Boarding deck';
@@ -134,21 +157,37 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
           box(.054,.032,.109,cx+side*.410,deckY-.058,z,'#546a66',landing);
         }
       }
-      box(.20,.008,.046,stopX+(stopX>cx?-.112:.112),deckY+.004,stopZ,yellow,landing);
+      // The flat float sits below the high-freeboard ferries. A longitudinal
+      // boarding ramp rises to a short transverse brow at the service opening.
+      const side=Math.sign(stopX-cx), rampX=stopX-side*.091;
+      const sill=waterSurface.level+doradoBoardingFreeboard;
+      const rampStart=new THREE.Vector3(rampX,deckY-.006,stopZ-1.79);
+      const rampEnd=new THREE.Vector3(rampX,sill-.006,stopZ);
+      link(rampStart,rampEnd,.012,'#aab4ad',landing,.123).name='Adjustable vessel boarding ramp';
+      for(const offset of [-.057,.057]){
+        const rail=new THREE.Vector3(offset,.065,0);
+        link(rampStart.clone().add(rail),rampEnd.clone().add(rail),.007,steel,landing);
+        for(let i=0;i<=5;i++){
+          const at=rampStart.clone().lerp(rampEnd,i/5);
+          box(.008,.065,.008,at.x+offset,at.y+.0325,at.z,steel,landing);
+        }
+      }
+      box(.177,.012,.126,stopX-side*.065,sill-.006,stopZ,'#b4b8ab',landing).name='Vessel boarding threshold';
+      box(.022,.003,.127,stopX+side*.012,sill+.0015,stopZ,yellow,landing);
     }else{
       for(const [x,z] of [to,[stopX-.15,stopZ]]){
-        const cap=deckY-.067, toe=waterSurface.level-.32;
+        const cap=deckY-depth, toe=waterSurface.level-.32;
         cylinder(.031,cap-toe,x,(cap+toe)/2,z,'#778681',landing).name='Golden Gate hydraulic support';
         box(.108,.053,.123,x,cap-.012,z,'#8c9a92',landing);
       }
       const stopSign=stopX>cx?1:-1;
       for(let i=0;i<5;i++){
         const z=stopZ+(i-2)*.077,x=stopX+.043*stopSign;
-        cylinder(.024,.675,x,waterSurface.level+.079,z,'#605e4e',landing);
-        box(.036,.274,.048,x+.017*stopSign,waterSurface.level+.222,z,fender,landing);
+        cylinder(.024,deckY+.03-(waterSurface.level-.21),x,(deckY+.03+waterSurface.level-.21)/2,z,'#605e4e',landing);
+        box(.036,.14,.048,x+.017*stopSign,deckY-.043,z,fender,landing);
       }
-      box(.053,.056,.395,stopX+.042*stopSign,waterSurface.level+.068,stopZ,'#6b7e79',landing);
-      box(.086,.063,.395,stopX+.026*stopSign,waterSurface.level+.37,stopZ,'#7e887a',landing);
+      box(.053,.056,.395,stopX+.042*stopSign,waterSurface.level+.012,stopZ,'#6b7e79',landing);
+      box(.086,.063,.395,stopX+.026*stopSign,deckY+.018,stopZ,'#7e887a',landing);
       box(.091,.009,.13,stopX-stopSign*.069,deckY+.004,stopZ,yellow,landing);
     }
     // Keep the handrail outside the two threshold passages and out of the cutouts
@@ -171,8 +210,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
     }
   }
-  const boundary=fixedFerryApron.p, underside=apronY-.128;
-  mesh(footprintGeometry(boundary,.128),'#b9b8a6',0,underside,0,terminal).name='Surveyed fixed ferry apron';
+  const boundary=fixedFerryApron.p, underside=apronY-harborDatum.pierSlabThickness;
+  mesh(footprintGeometry(boundary,harborDatum.pierSlabThickness),'#b9b8a6',0,underside,0,terminal).name='Surveyed fixed ferry apron';
   const support=new THREE.Group();support.name='Fixed ferry apron piles';terminal.add(support);
   const guard=new THREE.Group();guard.name='Fixed ferry apron edge guard';terminal.add(guard);
   const tip=waterSurface.level-.32;

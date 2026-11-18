@@ -53,23 +53,51 @@ test('sunset interpolates through warmer light into night',()=>{
   assert.ok(day.sunIntensity>night.sunIntensity);
 });
 
-test('ferry lanes clear every pier and each other throughout a complete crossing',async()=>{
-  const {ferryPose}=await import('../app/motion.ts');
+// A square bounding box fills the water inside the C-shaped Ferry Plaza apron.
+// Triangulate its surveyed footprint and compare it to each rotated vessel.
+function overlapConvex(a,b){
+  for(const polygon of [a,b])for(const [i,point] of polygon.entries()){
+    const next=polygon[(i+1)%polygon.length];
+    const normal=new THREE.Vector2(point.y-next.y,next.x-point.x);
+    const u=a.map(p=>p.dot(normal)),v=b.map(p=>p.dot(normal));
+    if(Math.max(...u)<Math.min(...v)||Math.max(...v)<Math.min(...u))return false;
+  }
+  return true;
+}
+test('ferries clear the surveyed piers, bridge caissons and each other through all three berth cycles',async()=>{
+  const {ferryPose,ferryCycle}=await import('../app/motion.ts');
   const world=createLandscape();
-  const piers=sfMap.piers.filter(p=>p.closed).map(p=>new THREE.Box2().setFromPoints(p.p.map(([x,z])=>new THREE.Vector2(x,z))));
-  for(let t=0;t<=600;t+=.5){
-    const poses=[ferryPose(t,0),ferryPose(t,1)];
-    for(const [i,p] of poses.entries()){
-
-      assert.ok(Number.isFinite(p.x));
-      world.ferries[i].position.set(p.x,p.y,p.z);world.ferries[i].rotation.y=p.heading;
-      const bounds=new THREE.Box3().setFromObject(world.ferries[i]);
-      assert.ok(bounds.max.y<3.4,'Vessel must clear the underside of the bridge');
-      const hull=new THREE.Box2(new THREE.Vector2(bounds.min.x,bounds.min.z),new THREE.Vector2(bounds.max.x,bounds.max.z));
-      for(const pier of piers)assert.ok(!hull.intersectsBox(pier),'Vessel intersects a mapped pier');
-      for(const t of bridgeLayout.towers){const p=bridgePoint(0,t);assert.ok(hull.distanceToPoint(new THREE.Vector2(p.x,p.z))>1.5,'Vessel intersects a bridge caisson');}
+  const shapes=sfMap.piers.filter(p=>p.closed).flatMap(p=>{
+    const ring=p.p.map(([x,z])=>new THREE.Vector2(x,z));
+    return THREE.ShapeUtils.triangulateShape(ring,[]).map(face=>{
+      const vertices=face.map(i=>ring[i]);
+      return {vertices,box:new THREE.Box2().setFromPoints(vertices)};
+    });
+  });
+  const dimensions=world.ferries.map(vessel=>{
+    const sample=vessel.clone();sample.position.set(0,0,0);sample.rotation.set(0,0,0);
+    return new THREE.Box3().setFromObject(sample,true);
+  });
+  assert.equal(dimensions.length,3);
+  for(let t=0;t<=ferryCycle;t+=.2){
+    const hulls=[];
+    for(const [i,box] of dimensions.entries()){
+      const pose=ferryPose(t,i),s=Math.sin(pose.heading),c=Math.cos(pose.heading);
+      const {min,max}=box;
+      const hull=[[min.x,min.z],[min.x,max.z],[max.x,max.z],[max.x,min.z]].map(([x,z])=>
+        new THREE.Vector2(pose.x+c*x+s*z,pose.z-s*x+c*z));
+      const bounds=new THREE.Box2().setFromPoints(hull);
+      assert.ok(max.y+pose.y<3.4,'Mast under the bridge deck');
+      for(const pier of shapes)if(bounds.intersectsBox(pier.box)){
+        assert.ok(!overlapConvex(hull,pier.vertices),world.ferries[i].name+' at '+t);
+      }
+      for(const tower of bridgeLayout.towers){
+        const p=bridgePoint(0,tower);
+        assert.ok(bounds.distanceToPoint(new THREE.Vector2(p.x,p.z))>1.5,'Bridge caisson clearance');
+      }
+      for(const other of hulls)assert.ok(!overlapConvex(other,hull),'Two vessels overlap at '+t);
+      hulls.push(hull);
     }
-    assert.ok(Math.abs(poses[0].z-poses[1].z)>2,'Ferry shipping lanes overlap');
   }
 });
 test('birds travel, bank and flap rather than translating a static flock',async()=>{
@@ -159,10 +187,10 @@ test('ferry materials and wakes receive the same world-space haze as the waterfr
     assert.match(shader.vertexShader,/modelMatrix\*harborWorld/);
     assert.match(shader.fragmentShader,/mix\(gl_FragColor.rgb,edgeFogColor,edgeHaze\)/);
   }
-  assert.equal(world.walkerHeads.count,22+world.residentPositions.length);
+  assert.equal(world.walkerHeads.count,world.walkerCount+world.residentPositions.length);
   const matrix=new THREE.Matrix4(),position=new THREE.Vector3();
   world.residentPositions.forEach((anchor,i)=>{
-    world.walkerHeads.getMatrixAt(i+22,matrix);position.setFromMatrixPosition(matrix);
+    world.walkerHeads.getMatrixAt(i+world.walkerCount,matrix);position.setFromMatrixPosition(matrix);
     assert.ok(Math.abs(position.x-anchor.x)<.05);
     assert.ok((position.y-anchor.y)/.06>1.38 && (position.y-anchor.y)/.06<1.73);
   });
@@ -279,13 +307,13 @@ test('fireboat departs, salutes and returns without crossing piers or ferry lane
 });
 
 test('fireboat water contact matches the actual animated surface triangles',async()=>{
-  const {waterHeight,waterSurface}=await import('../app/water-surface.ts');
+  const {waterHeight,waterSurface,waveAmplitudes}=await import('../app/water-surface.ts');
   const geometry=new THREE.PlaneGeometry(waterSurface.size,waterSurface.size,waterSurface.columns,waterSurface.rows);
   const material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide}),surface=new THREE.Mesh(geometry,material);
   surface.rotation.x=-Math.PI/2;surface.position.y=waterSurface.level;surface.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(),direction=new THREE.Vector3(0,-1,0),vertices=geometry.attributes.position;
   for(const time of [0,37,68,95]){
-    for(let i=0;i<vertices.count;i++)vertices.setZ(i,Math.sin(vertices.getX(i)*.47+time*.5)*.08+Math.cos(vertices.getY(i)*.64+time*.65)*.06);
+    for(let i=0;i<vertices.count;i++)vertices.setZ(i,Math.sin(vertices.getX(i)*.47+time*.5)*waveAmplitudes.x+Math.cos(vertices.getY(i)*.64+time*.65)*waveAmplitudes.z);
     vertices.needsUpdate=true;geometry.computeBoundingSphere();geometry.computeBoundingBox();
     for(let i=0;i<12;i++){const x=-45+i*1.37,z=5+i*1.61;ray.set(new THREE.Vector3(x,10,z),direction);const hit=ray.intersectObject(surface)[0];assert.ok(hit);assert.ok(Math.abs(hit.point.y-waterHeight(x,z,time))<1e-5);}
   }
@@ -543,7 +571,9 @@ test('Rincon Park and ferry routes stay continuous and meet the built walking su
   const paving=scene.root.getObjectByName('Market granite and herringbone promenade');
   assert.ok(paving);
   paving.geometry.computeBoundingBox();
-  const walkable=[...scene.architectureChunks,paving];
+  const court=scene.root.getObjectByName('Halprin brick court');
+  assert.ok(court);court.geometry.computeBoundingBox();
+  const walkable=[...scene.architectureChunks,paving,court];
   const assertGround=p=>{
     ray.ray.origin.set(p.x,p.y+.223,p.z);
     const chunks=walkable.filter(mesh=>{

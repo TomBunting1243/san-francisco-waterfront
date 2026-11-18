@@ -5,7 +5,7 @@ import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import typeface from '../app/harbor-font.json' with {type:'json'};
 import {mooredVessel} from '../app/moored-vessels.ts';
 import {sfMap} from '../app/sf-map.ts';
-import {waterSurface,waterHeight,shelterAtVertex} from '../app/water-surface.ts';
+import {harborDatum,waterSurface,waterHeight,shelterAtVertex} from '../app/water-surface.ts';
 const font=new FontLoader().parse(typeface);
 const vector=(x,y,z)=>new THREE.Vector3(x,y,z);
 function boat(id){
@@ -38,8 +38,9 @@ test('the low freeboards clear the sheltered water and both physical hull skins 
     const ramp=root.getObjectByName('Pier 3 boarding gangway');
     const {depth}=ramp.geometry.parameters;
     const ends=[-1,1].map(i=>ramp.localToWorld(vector(0,0,i*depth/2)));
-    assert.ok(ends.some(p=>Math.abs(p.y-.068)<.001&&p.x>19.4&&p.x<19.6));
-    assert.ok(ends.some(p=>p.y<-.30));
+    assert.ok(ends.some(p=>Math.abs(p.y-harborDatum.pierDeck)<.001&&p.x>19.4&&p.x<19.6));
+    const shipEnd=waterSurface.level+(belle?harborDatum.pierThreeFreeboard:.108+.215+.015);
+    assert.ok(ends.some(p=>Math.abs(p.y-shipEnd)<.001));
   }
   assert.equal(shelterAtVertex(23.3333,12.727),.22);
   assert.equal(shelterAtVertex(35,12.727),1);
@@ -69,7 +70,7 @@ test('the normal landscape contains a single low boarding float beside Belle',as
   const {architectureChunks,pierSupports}=createLandscape();
   const x=19.91,z=10.25;
   const hits=new THREE.Raycaster(vector(x,1,z),vector(0,-1,0)).intersectObjects(architectureChunks);
-  assert.ok(hits.some(h=>Math.abs(h.point.y-(waterSurface.level+.12))<.001));
-  assert.ok(!hits.some(h=>h.point.y>-.55),'The former fixed apron must not cover the float');
+  assert.ok(hits.some(h=>Math.abs(h.point.y-(waterSurface.level+harborDatum.pierThreeFreeboard))<.001));
+  assert.ok(!hits.some(h=>h.point.y>harborDatum.pierDeck-.005),'The former fixed apron must not cover the float');
   assert.ok(!pierSupports.some(p=>p.x>19.70&&p.x<20.22&&p.z>8.73&&p.z<10.71));
 });

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {insideBuilding} from './building-character.ts';
 import {footprintGeometry} from './sf-map.ts';
+import {fourCenterRetail} from './four-center-retail.ts';
 import {waterfrontTree} from './waterfront-trees.ts';
 
 type Point=number[];
@@ -196,7 +197,10 @@ export function createEmbarcaderoCenter(areas:Area[],paths:BridgePath[],towers:T
         slab.name=height===centerLobby?'Lobby level paving':'Promenade level paving';
         for(let i=1;i<court.length;i++)rail(court[i-1],court[i],height,podium,index!==3);
       }
-      for(const [k,rect] of bounds.entries())storefront(block,rect,height,level-height-.016,height===centerPromenade&&index===0&&k===0,podium);
+      for(const [k,rect] of bounds.entries()){
+        if(index===3&&k>=2)continue;
+        storefront(block,rect,height,level-height-.016,height===centerPromenade&&index===0&&k===0,podium);
+      }
     }
     // Let street entrances and measured bridge mouths stay open on the fascia.
     for(let edge=1;edge<area.p.length;edge++){
@@ -249,12 +253,27 @@ export function createEmbarcaderoCenter(areas:Area[],paths:BridgePath[],towers:T
       }
     }
     if(index===3){
+      podium.add(fourCenterRetail(street,centerLobby,centerPromenade));
       // Portman's three-level Tulip occupies the round opening in Four EC.
       const [x,z]=courtyard;
       const form=[[.070,0],[.070,.19],[.102,.43],[.136,.57],[.209,.71],[.269,.79]]
         .map(([r,y])=>new THREE.Vector2(r,y));
       mesh(new THREE.LatheGeometry(form,20),fascia,x,street+.036,z,podium).name='The Tulip at Four Embarcadero';
-      mesh(new THREE.TorusGeometry(.258,.019,5,24),'#d1bc93',x,street+.815,z,podium).rotation.x=-Math.PI/2;
+      // The owner's photograph shows open, pointed concrete petals spreading
+      // above the promenade, with lights lining the ribs. They are visible
+      // above the eastern dining terraces from the Ferry Building.
+      // https://embarcaderocenter.com/wp-content/uploads/NEW-4EC-Tulip-2-1.jpg
+      for(let k=0;k<8;k++){
+        const angle=k*Math.PI/4,radial=(r:number,t:number,h:number)=>
+          new THREE.Vector3(x+r*Math.cos(angle)-t*Math.sin(angle),h,z+r*Math.sin(angle)+t*Math.cos(angle));
+        for(const side of [-1,1]){
+          const path=new THREE.CatmullRomCurve3([
+            radial(.13,.065*side,.57),radial(.19,.095*side,.90),radial(.33,.17*side,1.05),
+            radial(.46,.13*side,1.21),radial(.52,0,1.33),
+          ]);
+          mesh(new THREE.TubeGeometry(path,12,.018,5,false),fascia,0,0,0,podium).name='Tulip petal rib';
+        }
+      }
     }
   }
 

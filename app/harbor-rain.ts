@@ -38,7 +38,9 @@ export function createHarborRain(){
         float depth=max(.25,-view.z);
         vec2 velocity=(v.xy+v.z*view.xy/depth)*vec2(projectionMatrix[0][0],projectionMatrix[1][1])*viewport/(2.*depth);
         vec2 along=velocity/max(.001,length(velocity)),across=vec2(-along.y,along.x);
-        float streak=clamp(length(velocity)*(.048+.022*dropSeed),4.,13.+9.*rain);
+        // Expose the distance this particular drop covers in roughly 1/40 second.
+        float dropRate=.74+.53*dropSeed;
+        float streak=clamp(length(velocity)*dropRate*(.020+.008*rain),2.5,15.+10.*rain);
         float width=(.54+.45*dropSeed+.23*rain)*mix(1.14,.85,smoothstep(2.,10.,depth));
         vec2 offset=along*(position.y*.5*streak)+across*(position.x*width);
         // Flakes retain a nearly round silhouette even where they drift across the lens.
@@ -80,7 +82,8 @@ export function createHarborRain(){
     strength:number,night:number,dt:number,precipitationKind:PrecipitationKind='rain',quality=2){
     const snow=precipitationKind==='snow';
     const observed=THREE.MathUtils.clamp(amount,0,1);
-    const stepTime=THREE.MathUtils.clamp(dt,0,.12);
+    const seconds=Number.isFinite(dt)?Math.max(0,dt):0;
+    const stepTime=snow?Math.min(seconds,.12):seconds;
     if(snow||observed>.004)clock+=stepTime;
     // A burst crosses the harbor roughly once a minute during already-heavy rain.
     const gust=snow?0:THREE.MathUtils.smoothstep(observed,.63,.92)*Math.max(0,Math.sin(clock*.11+.4*Math.sin(clock*.19)))**4;
@@ -97,6 +100,7 @@ export function createHarborRain(){
     const fall=uniforms.fall.value.set(-windFrom.x*drift,snow?-.095:-.55-.13*rain-.10*gust,-windFrom.y*drift);
     uniforms.snow.value=snow?1:0;uniforms.rain.value=rain;uniforms.night.value=night;uniforms.viewport.value.set(width,height);
     if(!cameraMoving&&!stepTime&&count===active)return;
+    if(stepTime>1)active=0; // A long foreground stall can exhaust the entire near field.
     for(let i=0;i<count;i++){
       const step=stepTime*(.74+.53*seeds[i]);
       let respawn=i>=active;
@@ -113,7 +117,10 @@ export function createHarborRain(){
       if(respawn){
         const fresh=i>=active;
         const k=fresh?i+1:++serial+capacity+1;
-        const d=1.45+11.75*fraction(k,5)**1.45;
+        // Each rain instance keeps its depth band over its lifetime. Otherwise
+        // slow, distant drops stay on screen longer and eventually dominate the view.
+        const d=snow?1.45+11.75*fraction(k,5)**1.45
+          :1.08+(8.8-1.4*rain)*fraction(i+1,5)**2.65*(.93+.14*fraction(k,11));
         const x=(fraction(k,2)*2-1)*1.035;
         let y=(fraction(k,3)*2-1)*1.035;
         // Recycling at the top preserves the uninterrupted downward fall. Camera

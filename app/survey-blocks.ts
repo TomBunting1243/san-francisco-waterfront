@@ -1,3 +1,4 @@
+import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addSurveyCurbs,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
@@ -116,10 +117,21 @@ export function addSurveyBlocks(mesh:Surface){
     if(!tile)tiles.set(key,tile=new Tile());
     return tile;
   }
-  addSurveyCurbs(mesh);
+  const walkTiles=new Map<number,Tile>();
+  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
-    for(const [i,polygon] of polygons.entries())for(const piece of replacementPavement(kind,i,polygon))at(piece).top(piece,height,color);
+    for(const [i,polygon] of polygons.entries())for(const piece of replacementPavement(kind,i,polygon)){
+      if(kind==='sidewalk'&&piece[0].some(([x,z])=>x>=-56&&x<=30&&z>=-8&&z<=2)){
+        const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
+        if(!tile)walkTiles.set(id,tile=new Tile());
+        tile.top(piece,height,'#c4bdac');
+      }else at(piece).top(piece,height,color);
+    }
+  }
+  for(const [id,tile] of walkTiles){
+    const geometry=tile.geometry();walkPanelCoordinates(geometry);
+    mesh(geometry,'#ffffff',0,0,0).name='Promenade sidewalk slabs '+id;
   }
   const masonry=['#c0b59f','#b8b5a2','#c6b39e','#abae9f'];
   for(const [i,[height,plan]] of (survey.buildings as [number,Plan][]).entries()){

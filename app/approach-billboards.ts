@@ -3,23 +3,48 @@ import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import cocaCola from '../public/data/approach-coke.json' with {type:'json'};
 import portrait from '../public/data/approach-karp.json' with {type:'json'};
-import {bridgeLayout} from './bridge-layout.ts';
-import {type ApproachMesh} from './approach-road.ts';
+import {billboardSites} from './billboard-sites.ts';
+import {extraBillboardAds,renderBillboardEdition} from './billboard-editions.ts';
+import type {ApproachMesh} from './approach-road.ts';
 
-const feet=.3048*.06;
-export const approachBillboards=[
-  {name:'Yahoo! at 451 Sixth Street',latitude:37.7767809,longitude:-122.4032385,facing:201,width:65*feet,height:20*feet,aboveGrade:1.71},
-  {name:'Coca-Cola at 701 Bryant Street',latitude:37.777545,longitude:-122.400403,facing:212,width:70*feet,height:30*feet,aboveGrade:112*feet-15*feet},
-  {name:'Anthropic at the I-80 Fourth Street bulletin',latitude:37.7795941,longitude:-122.400674,facing:200,width:(68+2/12)*feet,height:25*feet,aboveGrade:2.17},
-  {name:'SpaceX at the Bryant and Seventh bulletin',latitude:37.774504,longitude:-122.404293,facing:270,width:48*feet,height:14*feet,aboveGrade:.855},
-  {name:'Palantir bridge bulletin',width:1.95,height:.69},
-] as const;
-// Model installations face San Francisco, on outriggers outside the north
-// stiffening truss. The historic roadside addresses above identify the artwork.
-export const bridgeSignMounts=[
-  {station:30.4,scale:2.2}, {station:39.3,scale:2.15}, {station:20.3,scale:2.65},
-  {station:33.5,scale:2.6}, {station:25.87,scale:2.72},
-] as const;
+const classicAds=['yahoo','coke','anthropic','spacex','palantir'] as const;
+type BillboardAd=typeof classicAds[number]|typeof extraBillboardAds[number];
+const ordinaryAds:BillboardAd[]=[...classicAds,...extraBillboardAds.filter(ad=>ad!=='apple'&&ad!=='all-in')];
+
+export function shuffleBillboardAds(count:number,random=Math.random,previous:readonly string[]=[]):BillboardAd[]{
+  const layout:BillboardAd[]=[];
+  const rare=(['apple','all-in'] as const).filter(()=>random()<.01);
+  while(layout.length<count){
+    const start=layout.length, bag=[...ordinaryAds];
+    for(let i=bag.length-1;i>0;i--){
+      const j=Math.floor(random()*(i+1));
+      [bag[i],bag[j]]=[bag[j],bag[i]];
+    }
+    // Swapping an accidental repeat with another unused face preserves the
+    // shuffled deck and changes the old artwork at every physical location.
+    for(let i=0;i<bag.length;i++){
+      if(bag[i]!==previous[start+i])continue;
+      const j=bag.findIndex((ad,j)=>j!==i&&ad!==previous[start+i]&&bag[i]!==previous[start+j]);
+      if(j>=0)[bag[i],bag[j]]=[bag[j],bag[i]];
+    }
+    layout.push(...bag.slice(0,count-start));
+  }
+  for(const ad of rare){
+    const slots=layout.map((_,i)=>i).filter(i=>layout[i]!=='apple'&&previous[i]!==ad);
+    if(slots.length)layout[slots[Math.floor(random()*slots.length)]]=ad;
+  }
+  return layout;
+}
+let pageAds:BillboardAd[]|undefined;
+function adsForPage(){
+  if(pageAds)return pageAds;
+  const key='portfolio-billboard-layout-v1';
+  let previous:string[]=[];
+  try{const value=JSON.parse(window.sessionStorage.getItem(key)??'[]');if(Array.isArray(value))previous=value;}catch{}
+  pageAds=shuffleBillboardAds(billboardSites.length,Math.random,previous);
+  try{window.sessionStorage.setItem(key,JSON.stringify(pageAds));}catch{}
+  return pageAds;
+}
 export const palantirLines=['Reliable. Dependable.', "You're Experiencing", 'Compassionate', 'Data Monitoring'] as const;
 export const palantirCopy=palantirLines.join(' ');
 
@@ -34,7 +59,7 @@ function karpPortrait(width:number,height:number){
   }
   return geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
 }
-export const anthropicCopy='Building an equitable future, one trillion dollar IPO at a time';
+export const anthropicCopy='Building an equitable future, one multi-trillion dollar IPO at a time';
 export const spaceXCopy='Fuck you';
 const paintedSteel='#71817d', darkSteel='#455952', butter='#f2d789';
 
@@ -52,19 +77,18 @@ function scriptLogo(width:number,height:number){
   return g;
 }
 
-export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:Font){
+export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:Font,ads:readonly BillboardAd[]=adsForPage()){
   const billboards=new THREE.Group();
-  billboards.name='West span billboard brackets';
+  billboards.name='Embarcadero and SoMa advertising sites';
   root.add(billboards);
   const unit=new THREE.BoxGeometry(1,1,1);
   const bulb=new THREE.SphereGeometry(.007,5,4);
-  for(const [index,site] of approachBillboards.entries()){
-    const mount=bridgeSignMounts[index],group=new THREE.Group(),w=site.width,h=site.height;
+  for(const [slot,site] of billboardSites.entries()){
+    const ad=ads[slot],index=classicAds.findIndex(id=>id===ad);
+    let group=new THREE.Group(),w=site.width,h=site.height;
     group.name=site.name;
-    group.position.set(.92,bridgeLayout.lowerDeck-.02,mount.station);
-    group.rotation.y=Math.PI/2;
-    group.scale.setScalar(mount.scale);
-    if('latitude' in site)group.userData.location={latitude:site.latitude,longitude:site.longitude};
+    group.position.set(site.x,site.y,site.z);group.rotation.y=site.yaw;
+    group.userData.location=site;group.userData.artwork=ad;
     billboards.add(group);
     function box(w:number,h:number,d:number,x:number,y:number,z:number,color:string,parent=group){
       const part=mesh(unit,color,x,y,z,parent);part.scale.set(w,h,d);return part;
@@ -88,19 +112,61 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
     function panel(shape:THREE.Shape,color:string,z:number,depth=.011){
       return mesh(new THREE.ExtrudeGeometry(shape,{bevelEnabled:false,depth,curveSegments:7}),color,0,0,z,group);
     }
-    const bottom=-h/2;
-    // Paired steel cleats bear against the webs of both continuous chords.
-    const chordDepth=(.68-group.position.x)/mount.scale;
-    const lowerY=(bridgeLayout.lowerDeck-.064-group.position.y)/mount.scale;
-    const upperY=(bridgeLayout.upperDeck-.037-group.position.y)/mount.scale;
-    for(const side of [-1,1]){
-      const x=side*w*.34;
-      for(const y of [lowerY,upperY]){
-        box(.072,.046,.018,x,y,chordDepth,darkSteel).name='Chord mounting shoe';
-        tube([x,y,chordDepth],[x,y,-.030],.022,.021,paintedSteel);
+    let bottom=-h/2;
+    const column=site.mounting==='column'||site.mounting==='existing column';
+    if(column){
+      if(site.mounting==='column'){
+        const outline=[[0,-.102],[.036,-.102],[.036,-.094],[.030,-.081],
+          [.030,.074],[.037,.082],[.037,.090],[.029,.106],[.013,.118],[0,.126]];
+        mesh(new THREE.LatheGeometry(outline.map(([r,y])=>new THREE.Vector2(r,y)),16),'#354c46',0,0,0,group).name='Cast-iron kiosk body';
       }
-      tube([x,upperY,chordDepth],[x,bottom,-.03],.022,.021,paintedSteel);
-      tube([x,Math.min(lowerY,bottom),-.033],[x,Math.max(upperY,h*.43),-.033],.025,.025,paintedSteel);
+      // The original Market/Steuart body is built by market-street.ts.
+      // Paper behind glass is portrait format; fit the horizontal creative
+      // between a header and footer without stretching its typography.
+      box(w+.004,h+.006,.003,0,0,.031,'#52645a').name='Kiosk poster frame';
+      box(w,h,.002,0,0,.033,'#e4d7b9');
+    }else if(site.mounting==='wall'){
+      box(w*.91,h*.84,.04,0,0,-.037,darkSteel).name='Wall mounting plate';
+    }else{
+      const heavy=slot===1,back=heavy?.35:Math.min(.22,w*.17),baseY=site.footY-site.y;
+      const scaffold=heavy?'#c4c9b9':paintedSteel;
+      box(w*1.04,.024,back,0,bottom-.018,-back*.32,darkSteel).name='Maintenance catwalk';
+      // Three address pins sit at the edge of their roofs. The face projects
+      // over the edge, but the bearing feet stay on the warehouse behind it.
+      const offset=slot<2?.25:0;
+      const spread=slot<2?.21:slot===3?.105:.45;
+      const depth=slot===3?-.16:0;
+      const baseWidth=slot===3?.14:1;
+      for(const side of [-1,1]){
+        for(const fraction of heavy?[.34,.68,1]:[.63,1]){
+          const x=w*(offset+side*fraction*spread),top=side*w*fraction*.45;
+          for(const z of [-back*baseWidth,.006]){
+            const foot=[x,baseY,z+depth];
+            tube(foot,[top,bottom+.025,z],.017,.019,scaffold);
+            box(.043,.016,.043,x,baseY,z+depth,darkSteel).name='Rack bearing foot';
+          }
+          tube([x,baseY,-back*baseWidth+depth],[top,bottom+.025,.006],.012,.012,scaffold);
+        }
+        tube([w*(offset+side*spread),baseY,-back*baseWidth+depth],[side*w*.07,bottom,-back],.014,.014,scaffold);
+        for(const t of [.27,.65])box(w*.94,.013,.014,0,THREE.MathUtils.lerp(baseY,bottom,t),side>0?.01:-back,scaffold);
+      }
+    }
+    // Keep neon, portrait relief and frame thickness in proportion on the
+    // smaller archival boards while fitting each physical cabinet.
+    const artwork=new THREE.Group();
+    artwork.name='Printed artwork';group.add(artwork);group=artwork;
+    if(column){
+      group.position.z=.035;
+      if(index<0){
+        renderBillboardEdition(ad,w,h,group,mesh,true);
+        continue;
+      }
+      group.scale.setScalar(w/1.2);
+    }else group.scale.set(w/1.2,h/.42,Math.min(w/1.2,h/.42));
+    w=1.2;h=.42;bottom=-h/2;
+    if(index<0){
+      renderBillboardEdition(ad as typeof extraBillboardAds[number],w,h,group,mesh);
+      continue;
     }
     if(index===0){
       function boomerang(inset=0){

@@ -3,7 +3,7 @@ import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import raw from '../public/data/south-beach.json' with {type:'json'};
 import {footprintGeometry,center} from './sf-map.ts';
-import {waterHeight,waterSurface} from './water-surface.ts';
+import {harborDatum,waterHeight,waterSurface,waterWaveHeight} from './water-surface.ts';
 
 export const southBeach=raw;
 type Point=number[];
@@ -170,8 +170,7 @@ function addMarinaFleet(harbor:THREE.Group,moorings:Mooring[][],waterTime:{value
       fleet.instanceMatrix.needsUpdate=true;
     }
     matchWaterline();fleet.computeBoundingBox();fleet.computeBoundingSphere();
-    // A full crest to trough can move a berth by at most .28 scene units.
-    fleet.boundingSphere!.radius+=.28;
+    fleet.boundingSphere!.radius+=2*waterWaveHeight;
     update.push(matchWaterline);
     harbor.add(fleet);
   }
@@ -247,14 +246,16 @@ export function createSouthBeach(font:Font,waterTime={value:0}){
   }
 
   const wharf=group('Brannan Street Wharf',0,0,0);
-  slab(southBeach.features.wharf,-.08,.176,'#cbbfa9',wharf);
+  const wharfTop=harborDatum.ferryApron,wharfSoffit=wharfTop-harborDatum.pierSlabThickness;
+  slab(southBeach.features.wharf,wharfSoffit,harborDatum.pierSlabThickness,'#cbbfa9',wharf);
   slab(shrink(southBeach.features.wharf,.66),.096,.011,'#869565',wharf);
   for(const e of outline(southBeach.features.wharf)){
     if(e.w>.7&&e.nz>.16){
       const g=face(e,wharf);
       for(let t=-e.w/2+.30;t<e.w/2;t+=.64){
-        box(.09,.71,.1,t,-.32,-.07,'#819083',g);
-        box(.07,.113,.127,t,-.085,-.054,steel,g);
+        const toe=waterSurface.level-.34;
+        box(.09,wharfSoffit-toe,.1,t,(wharfSoffit+toe)/2,-.07,'#819083',g);
+        box(.07,.10,.127,t,waterSurface.level,-.054,steel,g);
       }
       guardRail([[-e.w/2+.08,-.087],[e.w/2-.08,-.087]],.19,g);
     }
@@ -310,27 +311,46 @@ export function createSouthBeach(font:Font,waterTime={value:0}){
   pierShed('South Beach Harbor building',southBeach.features.harborOffice,.39);
 
   const harbor=group('South Beach Marina',0,0,0);
-  const walkHeight=waterSurface.level+.079;
+  const walkHeight=waterSurface.level+harborDatum.marinaFreeboard;
+  const fixedDeck=harborDatum.pierDeck, floatDeck=waterSurface.level+harborDatum.ferryFloatFreeboard;
   const moorings:Mooring[][]=yachtTypes.map(()=>[]);
   for(let i=1;i<southBeach.features.breakwater.length;i++){
     const [x,z]=southBeach.features.breakwater[i-1],[a,b]=southBeach.features.breakwater[i];
-    line([x,-.49,z],[a,-.49,b],.46,.76,'#8b9182',harbor);
-    line([x,-.259,z],[a,-.259,b],.379,.31,'#9aa18f',harbor);
+    line([x,fixedDeck-.407,z],[a,fixedDeck-.407,b],.46,.76,'#8b9182',harbor);
+    line([x,fixedDeck-.182,z],[a,fixedDeck-.182,b],.379,.31,'#9aa18f',harbor);
   }
-  boardwalk(southBeach.features.breakwater,.33,-.083,'#a7a99b',harbor);
-  guardRail(southBeach.features.breakwater,.064,harbor,-.13);
-  boardwalk(southBeach.features.fishingPier,.22,-.103,'#a7ad9e',harbor);
-  guardRail(southBeach.features.fishingPier,.029,harbor,.083);
-  slab(southBeach.features.oracleFloat,waterSurface.level-.036,.154,'#9ea99e',harbor).name='Oracle Park Ferry Terminal';
-  slab(southBeach.features.oracleBridge,-.16,.21,'#b2b9a9',harbor);
-  guardRail(southBeach.features.oracleFloat,waterSurface.level+.217,harbor);
+  boardwalk(southBeach.features.breakwater,.33,fixedDeck-.027,'#a7a99b',harbor);
+  guardRail(southBeach.features.breakwater,fixedDeck+.069,harbor,-.13);
+  boardwalk(southBeach.features.fishingPier,.22,fixedDeck-.027,'#a7ad9e',harbor);
+  guardRail(southBeach.features.fishingPier,fixedDeck+.069,harbor,.083);
+  slab(southBeach.features.oracleFloat,floatDeck-.13,.13,'#9ea99e',harbor).name='Oracle Park Ferry Terminal';
+  slab(southBeach.features.oracleBridge,fixedDeck-harborDatum.pierSlabThickness,harborDatum.pierSlabThickness,'#b2b9a9',harbor);
+  // The mapped shore and intermediate platforms lead to the separate
+  // China Basin float. Both spans land just inside their adjoining decks.
+  const spans=[
+    [[-111.739,fixedDeck,-45.395],[-111.69,fixedDeck,-43.72]],
+    [[-111.77,fixedDeck,-43.30],[-112.75,floatDeck,-41.87]],
+  ] as [XYZ,XYZ][];
+  for(const [a,b] of spans){
+    line([a[0],a[1]-.01,a[2]],[b[0],b[1]-.01,b[2]],.15,.02,'#a3aaa2',harbor).name='China Basin access span';
+    const dx=b[0]-a[0],dz=b[2]-a[2],d=Math.hypot(dx,dz);
+    for(const side of [-1,1]){
+      const nx=side*.068*dz/d,nz=-side*.068*dx/d;
+      line([a[0]+nx,a[1]+.064,a[2]+nz],[b[0]+nx,b[1]+.064,b[2]+nz],.008,.008,steel,harbor);
+      for(let i=0;i<=5;i++)box(.008,.064,.008,THREE.MathUtils.lerp(a[0],b[0],i/5)+nx,THREE.MathUtils.lerp(a[1],b[1],i/5)+.032,THREE.MathUtils.lerp(a[2],b[2],i/5)+nz,steel,harbor);
+    }
+  }
+  // Gap in the landside rail for the gangway.
+  const float=southBeach.features.oracleFloat;
+  guardRail([...float.slice(0,6),[-112.64,-41.86]],floatDeck+.069,harbor);
+  guardRail([[-112.82,-41.97],float[0]],floatDeck+.069,harbor);
   for(const [i,dock] of southBeach.docks.entries()){
     const wide=!!dock.name||dock.p.length>3;
     const fixed=dock.id===780006769;
-    if(fixed)slab(dock.p,-.54,.44,'#a3a590',harbor);
-    else boardwalk(dock.p,wide?.19:.061,walkHeight,wide?'#a49a7e':'#9b967e',harbor);
+    if(fixed)slab(dock.p,fixedDeck-harborDatum.pierSlabThickness,harborDatum.pierSlabThickness,'#a3a590',harbor);
+    else boardwalk(dock.p,wide?.19:.061,walkHeight-.027,wide?'#a49a7e':'#9b967e',harbor);
     const [x,z]=dock.p.at(-1)!;
-    box(.031,.33,.035,x,-.685,z,'#828b7b',harbor);
+    box(.031,.33,.035,x,walkHeight-.085,z,'#828b7b',harbor);
     if(wide||i%3!==0)continue;
     const [start,end]=berthSpan(dock.p[0],[x,z]);
     const [ax,az]=start,dx=end[0]-ax,dz=end[1]-az,length=Math.hypot(dx,dz);

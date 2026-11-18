@@ -70,3 +70,26 @@ test('a strong wet report produces short denser bursts without enabling rain for
   assert.ok(peak>baseline*1.28);
   update(0,.1);assert.equal(fx.mesh.visible,false);
 });
+
+test('rainfall projected onto a phone keeps its pace at 30 and 60 frames per second',()=>{
+  const w=390,h=844,cam=lens(w,h,36,1.49);
+  function medianDrop(fps){
+    const rain=createHarborRain(),dt=1/fps,down=[];
+    rain.update(cam,w,h,.8,wind,.6,0,0);
+    const centers=rain.mesh.geometry.attributes.dropCenter;
+    const before=new THREE.Vector3(),after=new THREE.Vector3();
+    for(let frame=0;frame<fps;frame++){
+      const previous=centers.clone();rain.update(cam,w,h,.8,wind,.6,0,dt);
+      for(let i=0;i<rain.mesh.geometry.instanceCount;i++){
+        before.fromBufferAttribute(previous,i).project(cam);after.fromBufferAttribute(centers,i).project(cam);
+        const dy=(before.y-after.y)*h/2;
+        if(dy>0&&dy<80)down.push(dy*fps);
+      }
+    }
+    rain.dispose();down.sort((a,b)=>a-b);
+    return down[Math.floor(down.length/2)];
+  }
+  const thirty=medianDrop(30),sixty=medianDrop(60);
+  assert.ok(thirty>125&&sixty>125);
+  assert.ok(Math.abs(sixty/thirty-1)<.06);
+});

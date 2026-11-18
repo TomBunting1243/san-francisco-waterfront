@@ -639,13 +639,6 @@ export function harborPublicPiers(piers:Pier[],font:Font){
     }
     if(historic){
       for(let z=.04;z<length;z+=.125)m.box(width-.015,.006,.011,x,.064,z,'#998561');
-      for(const z of [.8,2.6,4.4,6.18,8.1,9.92,11.74,13.87])for(const side of [-1,1]){
-        const px=x+side*(z===6.18||z===13.87?.41:.167);
-        m.mesh(new THREE.CylinderGeometry(.020,.035,.64,8),color,px,.39,z);
-        m.mesh(new THREE.CylinderGeometry(.038,.048,.085,8),color,px,.12,z);
-        m.mesh(new THREE.SphereGeometry(.055,9,6),'#f0d7a4',px,.745,z);
-        m.mesh(new THREE.ConeGeometry(.060,.05,8),color,px,.797,z);
-      }
       for(const z of [6.18,14.12])for(const side of [-1,1]){
         const px=x+side*.36;
         m.box(.09,.026,.35,px,.19,z,timber);

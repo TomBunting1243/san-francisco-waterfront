@@ -49,7 +49,7 @@ test('actual meshes unload, raise their canopies, stock tables, pack up and leav
 test('Saturday rear pitches remain on the fixed deck clear of the loop, with three active batches',()=>{
   const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');
   const rear=section(s.roofs,'rear'),artists=section(s.roofs,'artist');
-  assert.equal(rear.length,16);assert.equal(artists.length,1);
+  assert.equal(rear.length,16);assert.equal(artists.length,5);
   const boundary=fixedFerryApron.p.map(p=>new THREE.Vector2(...p));
   const shape=new THREE.Shape(boundary),geometry=new THREE.ShapeGeometry(shape);
   const deck=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));

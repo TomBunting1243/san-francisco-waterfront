@@ -43,3 +43,33 @@ export function dampCameraAxis(axis: CameraAxis, destination: number, dt: number
   axis.velocity = (axis.velocity - response * step) * decay;
   return axis.value;
 }
+
+// Center of travel follows the promenade. The spur follows the timber pier;
+// the wider recess at Market lets the focus enter the plaza.
+const promenadeSlices = [
+  [-53.7,-5.8,.15],[-48,-5.1,.5],[-39,-5.6,.8],[-31,-6.1,1.2],[-20,-4.8,1.3],
+  [-12,-5.6,1.5],[-7,-10.6,2.2],[5,-11.1,2.2],[10,-6.3,1.7],[18,-5.7,1.5],[27.7,-5.1,1.6],
+];
+const clampTo=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n));
+export function boundWaterfrontFocus(x:number,z:number){
+  const u=clampTo(x,promenadeSlices[0][0],27.7);
+  const i=promenadeSlices.findIndex(p=>p[0]>=u);
+  const [ax,az,aq]=promenadeSlices[Math.max(0,i-1)],[bx,bz,bq]=promenadeSlices[i];
+  const t=bx===ax?0:(u-ax)/(bx-ax);
+  const mainZ=clampTo(z,az+(bz-az)*t,aq+(bq-aq)*t);
+  const pierX=clampTo(x,26.91,27.66),pierZ=clampTo(z,-.94,14.45);
+  return Math.hypot(x-u,z-mainZ)<=Math.hypot(x-pierX,z-pierZ)?{x:u,z:mainZ}:{x:pierX,z:pierZ};
+}
+
+export function moveWaterfrontFocus(x:number,z:number,yaw:number,forward:number,strafe:number,dt:number){
+  const distance=5.2*dt/Math.max(1,Math.hypot(forward,strafe));
+  return boundWaterfrontFocus(x+distance*(strafe*Math.cos(yaw)-forward*Math.sin(yaw)),
+    z-distance*(forward*Math.cos(yaw)+strafe*Math.sin(yaw)));
+}
+
+/** As the orbit comes inland it clears the roofs. Lift the sightline so the
+ * islands stay in the frame; a deliberate downward tilt can still study the quay. */
+export function harborLookHeight(yaw:number,tilt:number,eyeRise:number,run:number,headroom:number){
+  const u=clampTo((-Math.cos(yaw)-.04)/.76,0,1),ease=u*u*(3-2*u);
+  return headroom+(eyeRise-run*Math.tan(.11+Math.max(0,tilt)*.89)-headroom)*ease;
+}

@@ -101,6 +101,7 @@ function visibleControl(label){
 const keys={
   Enter:{key:'Enter',code:'Enter',windowsVirtualKeyCode:13},
   Escape:{key:'Escape',code:'Escape',windowsVirtualKeyCode:27},
+  E:{key:'e',code:'KeyE',windowsVirtualKeyCode:69},
   ArrowRight:{key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39},
 };
 function validatePlacement(placement){
@@ -240,13 +241,18 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
   await delay(1250,undefined,{signal});
   const beforeOrbit=await scenePixels();
   await focusWorld();
-  await press('ArrowRight');
-  await press('ArrowRight');
+  await press('E');
+  await delay(140,undefined,{signal});
+  await press('E');
   await awaitScene('the rotated view',state=>state.exploring==='true');
   await waitFor('the canvas pixels to change after rotating',scenePixels,pixels=>difference(beforeOrbit,pixels)>.35);
   await press('Escape');
   await awaitScene('Escape to reset the camera after rotation',state=>state.exploring==='false');
-  console.log('Zoom, orbit, reset and speech dismissal passed.');
+  await focusWorld();await press('ArrowRight');
+  await awaitScene('travel along the waterfront',state=>state.exploring==='true');
+  await press('Escape');
+  await awaitScene('return to the Ferry Building',state=>state.exploring==='false');
+  console.log('Zoom, rotation, waterfront travel, reset and speech dismissal passed.');
 
   await clickControl('Resume landscape motion');
   await awaitScene('motion to resume',normal);

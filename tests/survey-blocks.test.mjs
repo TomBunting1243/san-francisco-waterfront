@@ -30,7 +30,13 @@ test('rendered Brannan carriageway meets its sidewalks and stops at the building
     assert.ok(Math.abs(face.point.y-y)<.0001,pixel.join(','));
   }
   assert.equal(hit(group,...plate(174,265)),undefined);
-  assert.ok(group.children.length<90);
+  const batches=prefix=>group.children.filter(m=>m.name.startsWith(prefix));
+  // The renderer handles sidewalk joints as a separate material, and paint is batched by station.
+  assert.ok(batches('Surveyed streets and buildings').length+batches('Surveyed curb faces').length<90);
+  for(const prefix of ['Promenade sidewalk slabs','Embarcadero crosswalk paint']){
+    const tiles=batches(prefix);assert.ok(tiles.length>0&&tiles.length<=9,prefix);
+    assert.equal(new Set(tiles.map(m=>m.name)).size,tiles.length);
+  }
   for(const road of outsideSurveyRoads)for(let i=1;i<road.p.length;i++){
     const [x,z]=road.p[i].map((v,j)=>(v+road.p[i-1][j])/2);
     assert.ok(x<=-111.999||x>=34.999||z<=-61.999||z>=5.999);
@@ -59,4 +65,27 @@ test('the courtyard wings have a raised open parapet and physically recessed gla
   assert.ok(Object.keys(data.fronts).length>=12);
   assert.ok(data.buildings.length>=170);
   assert.equal(surveyedHeight(32947380),3.551);
+});
+
+test('all crossing paint sits on the street or its gutter, including the bars cut by curb ramps',()=>{
+  const {group,mesh}=geometryGroup();addSurveyBlocks(mesh);group.updateMatrixWorld(true);
+  const markings=group.children.filter(m=>m.name.startsWith('Embarcadero crosswalk paint'));
+  const substrates=group.children.filter(m=>!markings.includes(m));
+  for(const m of substrates)m.geometry.computeBoundingBox();
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.12);
+  let north=false,south=false,slopingGutter=false;
+  for(const m of markings){
+    const p=m.geometry.attributes.position;
+    for(let i=0;i<p.count;i+=3){
+      for(const w of [[1/3,1/3,1/3],[.7,.2,.1]]){
+        const x=w.reduce((v,k,j)=>v+k*p.getX(i+j),0),y=w.reduce((v,k,j)=>v+k*p.getY(i+j),0),z=w.reduce((v,k,j)=>v+k*p.getZ(i+j),0);
+        const near=substrates.filter(o=>{const b=o.geometry.boundingBox;return x>=b.min.x&&x<=b.max.x&&z>=b.min.z&&z<=b.max.z;});
+        ray.ray.origin.set(x,.14,z);
+        const h=ray.intersectObjects(near,false)[0]?.point.y;
+        assert.ok(Math.abs(y-h-.00024)<.00003,`paint loses contact at (${x}, ${z}): ${h}`);
+        north||=x>22;south||=x< -46;slopingGutter||=h>.0316&&h<.032;
+      }
+    }
+  }
+  assert.ok(north&&south&&slopingGutter);
 });

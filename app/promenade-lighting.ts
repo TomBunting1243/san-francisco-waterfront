@@ -1,0 +1,112 @@
+import * as THREE from 'three';
+import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
+import shore from '../public/data/survey-shore.json' with {type:'json'};
+import {insideBuilding} from './building-character.ts';
+import {bayReliefGround} from './bay-relief.ts';
+
+const units=.06;
+const iron='#37626c',cast='#427580',pierIron='#435555',cap='#6c6760',lens='#ebdcc2';
+type Profile=[number,number][];
+
+// The PUC records fluted steel poles, not head counts. SF General Plan 10.15
+// specifies pairs between Pier 1 and Agriculture and singles outside. See
+// https://generalplan.sfplanning.org/NE_Waterfront.htm and the curb photograph
+// https://images.trvl-media.com/place/6151863/d85a7ab5-ebde-4738-b480-288445a8df95.jpg
+// Pier 7's straight iron standards carry individual capped upright lanterns:
+// https://www.afar.com/places/pier-7-san-francisco
+// 2023 USGS 1.5 m first returns cluster at 5.5–5.6, 7.1–7.3 and 3.7–3.8 m
+// above the respective curb or deck. Collar, bracket and globe profiles are
+// estimated from the photographs. All returned halos use actual lens centers.
+export function buildPromenadeLighting(root:THREE.Group):number[]{
+  const positions:number[]=[],colors:number[]=[],indices:number[]=[],halos:number[]=[];
+  const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.76});
+  const palette=new Map<string,THREE.Color>();
+  let ox=0,oz=0,ground=0,cos=1,sin=0;
+  function setOrigin(x:number,z:number,y:number,azimuth:number){
+    ox=x;oz=z;ground=y;cos=Math.cos(azimuth);sin=Math.sin(azimuth);
+  }
+  function position(u:number,h:number,v:number):[number,number,number]{
+    return [ox+units*(cos*u+sin*v),ground+h*units,oz+units*(-sin*u+cos*v)];
+  }
+  function vertex(u:number,h:number,v:number,tone:string){
+    let color=palette.get(tone);
+    if(!color){color=new THREE.Color(tone);palette.set(tone,color);}
+    positions.push(...position(u,h,v));colors.push(color.r,color.g,color.b);
+  }
+  // Hollow rotational profiles share each ring of indexed vertices. Radius and
+  // height are in metres; a horizontal offset at each ring shapes curved arms.
+  function rings(profile:Profile,tone:string,sides:number,offset:(height:number)=>number=()=>0){
+    const first=positions.length/3;
+    for(let j=0;j<profile.length;j++){
+      const [h,r]=profile[j],cx=offset(h);
+      for(let i=0;i<sides;i++){
+        const a=i*2*Math.PI/sides;
+        vertex(cx+Math.cos(a)*r,h,Math.sin(a)*r,tone);
+        if(j===0)continue;
+        const k=first+(j-1)*sides+i,next=first+(j-1)*sides+(i+1)%sides;
+        indices.push(k,k+sides,next,next,k+sides,next+sides);
+      }
+    }
+  }
+  function lantern(cx:number,top:number,pier:boolean){
+    const scale=pier?.82:1,base=top-.83*scale,at=()=>cx;
+    const section=(profile:Profile,tone:string)=>rings(profile.map(([h,r])=>[base+h*scale,r*scale]),tone,6,at);
+    section([[0,.095],[.065,.115],[.18,.137]],pier?pierIron:cast);
+    section([[.18,.125],[.56,.204],[.64,.191]],lens);
+    section([[.64,.194],[.68,.214],[.76,.090],[.77,.033],[.83,0]],pier?pierIron:cap);
+    // Four narrow face bars follow the swell of the glass bowl.
+    for(let k=0;k<4;k++){
+      const a=Math.PI/4+k*Math.PI/2,start=positions.length/3;
+      for(const [h,r] of [[.18,.127],[.35,.174],[.56,.206],[.64,.193]]){
+        for(const side of [-.032,.032])vertex(cx+Math.cos(a+side)*r*scale,base+h*scale,Math.sin(a+side)*r*scale,pier?pierIron:cap);
+      }
+      for(let j=0;j<3;j++){const i=start+j*2;indices.push(i,i+2,i+1,i+1,i+2,i+3);}
+    }
+    halos.push(...position(cx,base+.43*scale,0));
+  }
+  function pedestal(pier:boolean,height:number){
+    const tone=pier?pierIron:iron;
+    if(pier)rings([[0,.20],[.09,.20],[.10,.16]],'#aba494',6);
+    rings([[pier?.09:0,.22],[.23,.22],[.36,.151],[.68,.133],[.73,.15],[.83,.096],
+      [height-.08,.072],[height-.045,.105],[height,.088]],tone,8);
+    if(!pier){
+      // Narrow raised ribs on the fluted lower pedestal, visible at street level.
+      for(let k=0;k<8;k++){
+        const a=k*Math.PI/4,base=positions.length/3;
+        for(const [h,r] of [[.29,.171],[.37,.151],[.63,.133]]){
+          for(const t of [-.06,.06])vertex(Math.cos(a+t)*(r+.009),h,Math.sin(a+t)*(r+.009),cast);
+        }
+        indices.push(base,base+2,base+1,base+1,base+2,base+3,base+2,base+4,base+3,base+3,base+4,base+5);
+      }
+    }
+  }
+  // The city bake assigns whole source meshes to spatial tiles. Keep each
+  // pole's bounds local so a close view of Pier 7 can cull the bridge end.
+  function finish(name:string){
+    const geometry=new THREE.BufferGeometry();
+    geometry.setIndex(indices);geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    geometry.computeVertexNormals();geometry.userData.paintVertices=true;
+    const mesh=new THREE.Mesh(geometry,material);mesh.name=name;mesh.castShadow=mesh.receiveShadow=true;
+    root.add(mesh);positions.length=colors.length=indices.length=0;
+  }
+  for(const [,x,z,yaw,heads] of fixtures.curb){
+    const rincon=shore.rincon.some(([outside,...holes])=>insideBuilding(x,z,outside)&&!holes.some(h=>insideBuilding(x,z,h)));
+    setOrigin(x,z,rincon?.11:Math.max(.04,bayReliefGround(x,z)),yaw);
+    if(heads===1){pedestal(false,5.55-.83);lantern(0,5.55,false);finish('Single fluted promenade light');continue;}
+    pedestal(false,6.36);
+    rings([[6.36,.080],[6.42,.09],[6.50,.042],[6.62,0]],iron,8);
+    for(const side of [-1,1]){
+      const bend=(h:number)=>side*.37*Math.sin(Math.min(1,(h-5.71)/.55)*Math.PI/2);
+      rings([[5.71,.052],[5.87,.058],[6.04,.055],[6.17,.050],[6.27,.067],[6.32,.085]],cast,7,bend);
+      lantern(side*.37,7.15,false);
+    }
+    finish('Twin Ferry promenade light');
+  }
+  for(const [z,left,right] of fixtures.pier){
+    for(const x of [left,right]){
+      setOrigin(x,z,.060,0);pedestal(true,3.8-.83*.82);lantern(0,3.8,true);finish('Pier 7 iron lantern');
+    }
+  }
+  return halos;
+}

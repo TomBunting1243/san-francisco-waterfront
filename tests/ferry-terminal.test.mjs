@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 import {buildFerryTerminal,ferryConnections} from '../app/ferry-terminal.ts';
+import {doradoBoardingFreeboard} from '../app/dorado-ferry.ts';
 import {ferryPortal} from '../app/harbor-architecture.ts';
 
-import {waterSurface} from '../app/water-surface.ts';
+import {harborDatum,waterSurface,waterWaveHeight} from '../app/water-surface.ts';
 
 const material=new THREE.MeshStandardMaterial();
 function addMesh(geometry,color,x,y,z,parent){
@@ -63,6 +64,8 @@ test('floating platforms reach the water and retain unobstructed entrance portal
       const hullBounds=new THREE.Box3().setFromObject(hull);
       assert.ok(hullBounds.min.y<waterSurface.level);
       assert.ok(hullBounds.max.y<deckY);
+      const threshold=new THREE.Box3().setFromObject(landing.getObjectByName('Vessel boarding threshold'));
+      assert.ok(Math.abs(threshold.max.y-(waterSurface.level+doradoBoardingFreeboard))<.001);
       assert.equal(piles.length,4);
       for(const pile of piles)assert.ok(pile.position.x<hullBounds.min.x||pile.position.x>hullBounds.max.x);
     }else{
@@ -122,5 +125,17 @@ test('fixed apron piles reach the deck and through the bay without oversized or 
       const passage=new THREE.Raycaster(start,toward,0,.37);
       assert.equal(passage.intersectObject(guard,true).length,0,gate.gate+' guard crosses the boarding approach');
     }
+  }
+});
+
+test('mean harbor level, floating decks and fixed-pier soffits use the surveyed freeboard',()=>{
+  const metersPerUnit=1/.06;
+  const apronFreeboard=(harborDatum.ferryApron-waterSurface.level)*metersPerUnit;
+  assert.ok(Math.abs(apronFreeboard-(11.8*.3048-.951))<.001);
+  assert.ok(harborDatum.pierDeck-harborDatum.pierSlabThickness>waterSurface.level+waterWaveHeight);
+  for(const gate of ferryConnections.filter(gate=>gate.covered)){
+    assert.ok(Math.abs(gate.deckY-waterSurface.level-harborDatum.ferryFloatFreeboard)<1e-9);
+    const distance=Math.hypot(gate.from[0]-gate.to[0],gate.from[1]-gate.to[1]);
+    assert.ok((gate.landY-gate.deckY)/distance<1/12);
   }
 });

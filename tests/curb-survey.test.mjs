@@ -46,7 +46,7 @@ test('surveyed median, separate planting island, and curved grade preserve all t
 test('production paving descends to the actual roadway at each end, without a concealed raised slab',()=>{
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const pavement=world.root.getObjectByName('Market granite and herringbone promenade');
-  const all=[...world.architectureChunks,pavement];
+  const all=[...world.architectureChunks,pavement,world.root.getObjectByName('Halprin brick court')];
   for(let z=-9.04;z<-6.27;z+=.06){
     const x=marketAxis(z),height=down(all,x,z);
     assert.ok(Math.abs(height-westMarketGround(x,z))<.0025,`grade at ${z} = ${height}`);
@@ -56,7 +56,7 @@ test('production paving descends to the actual roadway at each end, without a co
     assert.ok(Math.abs(height-gutterTop)<.005,`raised obstacle at ${x},${z}: ${height}`);
   }
   assert.ok(Math.abs(down(all,marketAxis(-5.75),-5.75)-.031)<.001);
-  for(const [x,z,ground] of [[-5.35,-1.84,.031],[-4.48,3.96,.096],[.33,-9.52,.139]]){
-    assert.ok(Math.abs(down(all,x,z)-ground)<.001);
+  for(const [x,z,ground] of [[-5.35,-1.84,.031],[-4.48,3.96,.096],[.33,-9.52,.116],[2.22,-8.74,.12614]]){
+    assert.ok(Math.abs(down(all,x,z)-ground)<.001,`surface at (${x}, ${z})`);
   }
 });

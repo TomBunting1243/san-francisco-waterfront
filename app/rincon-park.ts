@@ -7,69 +7,124 @@ const outline=[[325,221],[337,205],[367,181],[400,168],[432,163],[464,165],[506,
   [588,214],[626,241],[604,236],[579,235],[560,237],[550,244],[534,241],[522,247],[502,251],
   [486,249],[475,254],[459,261],[438,264],[415,260],[405,255],[384,252],[363,253],[348,246],[334,235]];
 export const knollOutline=outline.map(([u,v])=>rinconPoint(u,v));
-export const knollCenter=rinconPoint(452,196);
-export const knollBase=.148;
-// A fan of planar turf facets ensures visitors, walls and the buried bow all meet the same surface.
-function radialFraction(x:number,z:number){
-  const dx=x-knollCenter[0],dz=z-knollCenter[1];
-  for(let i=0;i<knollOutline.length;i++){
-    const a=knollOutline[i],b=knollOutline[(i+1)%knollOutline.length];
-    const ax=a[0]-knollCenter[0],az=a[1]-knollCenter[1],bx=b[0]-knollCenter[0],bz=b[1]-knollCenter[1];
-    const det=ax*bz-az*bx,u=(dx*bz-dz*bx)/det,v=(ax*dz-az*dx)/det;
-    if(u>=-1e-8&&v>=-1e-8&&u+v<=1.000001)return Math.min(1,u+v);
+export const knollCenter=rinconPoint(457,190);
+export const knollBase=.110;
+// 2023 USGS San Francisco 3DEP bare-earth returns, metres. Three sampled
+// contours across the traced lawn capture the long, off-center waterfront ridge.
+const metres=[
+  [4.7,4.7,4.9,4.9,5,5.1,5,4.8,4.6,4.3,4.4,4.6,4.6,4.6,4.6,4.7,4.5,4.6,4.6,4.5,4.4,4.5,4.5,4.5,4.5,4.5,4.6],
+  [4.1,4.3,4.4,4.7,4.9,4.9,4.7,4.4,4,3.3,3.5,3.7,3.8,3.6,3.7,3.6,3.7,3.8,3.7,3.6,3.7,3.7,3.8,3.8,3.8,3.9,4.1],
+  [3.7,3.9,4.2,4.5,4.7,4.8,4.5,4,3.4,3,3.1,3.2,2.9,2.9,3.2,3.2,3.2,3.1,3.1,3.2,3.2,3.2,3.2,3.3,3.3,3.3,3.6],
+];
+type Vertex=[number,number,number];
+const grade=(m:number)=>knollBase+(m-2.9)*.06;
+const summit:Vertex=[knollCenter[0],grade(5.1),knollCenter[1]];
+const contours=[.33,.66,1].map((r,k)=>knollOutline.map(([x,z],i):Vertex=>[
+  knollCenter[0]+(x-knollCenter[0])*r,grade(metres[k][i]),knollCenter[1]+(z-knollCenter[1])*r,
+]));
+const turf:Vertex[][]=[];
+for(let i=0;i<knollOutline.length;i++){
+  const j=(i+1)%knollOutline.length;
+  turf.push([summit,contours[0][j],contours[0][i]]);
+  for(let k=1;k<3;k++){
+    const a=contours[k-1][i],b=contours[k-1][j],c=contours[k][i],d=contours[k][j];
+    turf.push([a,b,c],[b,d,c]);
   }
-  return 1;
 }
-export const knollHeight=(x:number,z:number)=>knollBase+.11*(1-radialFraction(x,z));
+export function knollHeight(x:number,z:number){
+  for(const [a,b,c] of turf){
+    const ux=b[0]-a[0],uz=b[2]-a[2],vx=c[0]-a[0],vz=c[2]-a[2],det=ux*vz-uz*vx;
+    const u=((x-a[0])*vz-(z-a[2])*vx)/det,v=(ux*(z-a[2])-uz*(x-a[0]))/det;
+    if(u>=-1e-7&&v>=-1e-7&&u+v<=1.0000001)return a[1]+(b[1]-a[1])*u+(c[1]-a[1])*v;
+  }
+  return knollBase;
+}
 export function rinconKnoll(){
-  const p:number[]=[];
+  const p=turf.flat(2);
   for(let i=0;i<knollOutline.length;i++){
-    const [ax,az]=knollOutline[i],[bx,bz]=knollOutline[(i+1)%knollOutline.length];
-    p.push(knollCenter[0],knollBase+.11,knollCenter[1],bx,knollBase,bz,ax,knollBase,az);
-    p.push(ax,knollBase,az,bx,knollBase,bz,ax,.108,az,ax,.108,az,bx,knollBase,bz,bx,.108,bz);
+    const a=contours[2][i],b=contours[2][(i+1)%knollOutline.length];
+    p.push(...a,...b,a[0],.108,a[2],a[0],.108,a[2],...b,b[0],.108,b[2]);
   }
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(p,3));geo.computeVertexNormals();return geo;
 }
 
-// OLIN's waterfront-facing photographs show two exposed recurved limbs, a silver
-// shaft, three red vanes and a black string from each limb tip to the nock.
+// Kreysler's installed views show the lower arc doubling back on itself, a
+// broad recurved upper limb, two taut cables and deeply ribbed red feathers.
+// https://www.kreysler.com/projects/all/sculpture/cupid-span
+// https://fisher.access.sfmoma.org/301/
+// The 2024 SF ortho locates the three separate ground penetrations. Heights
+// of the lower limb (3–5 m), higher tip (~15 m), and fletching (~19–20 m)
+// match the 2023 DSM. Overall envelope 64 ft x 143 ft 9 in x 17 ft.
 export function cupidsSpan(){
   const sculpture=new THREE.Group();sculpture.name="Cupid's Span";
-  function solid(g:THREE.BufferGeometry,c:string){
-    const mesh=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.78}));sculpture.add(mesh);return mesh;
-  }
+  const palette=new Map<string,THREE.MeshStandardMaterial>();
   const v=(x:number,y:number,z=0)=>new THREE.Vector3(x,y,z);
-  function rod(a:THREE.Vector3,b:THREE.Vector3,r:number,color:string){
-    const d=b.clone().sub(a),m=solid(new THREE.CylinderGeometry(r,r,d.length(),10),color);
-    m.position.copy(a).lerp(b,.5);m.quaternion.setFromUnitVectors(v(0,1),d.normalize());
+  function solid(name:string,g:THREE.BufferGeometry,color:string){
+    let m=palette.get(color);
+    if(!m){m=new THREE.MeshStandardMaterial({color,roughness:.60});palette.set(color,m);}
+    const mesh=new THREE.Mesh(g,m);mesh.name=name;sculpture.add(mesh);return mesh;
   }
-  // Flat, broad bow stave with a changing section and a darker belly.
-  function limb(points:THREE.Vector3[],wide:number){
-    const curve=new THREE.CatmullRomCurve3(points),verts:number[]=[],indices:number[]=[];
-    for(let i=0;i<=28;i++){
-      const t=i/28,c=curve.getPoint(t),d=curve.getTangent(t),normal=v(-d.y,d.x).normalize();
-      const w=wide*(1-.75*t),depth=.059*(1-.48*t);
-      for(const [s,z] of [[-1,-1],[1,-1],[1,1],[-1,1]])verts.push(c.x+normal.x*w*s,c.y+normal.y*w*s,c.z+z*depth);
-      if(i)for(let j=0;j<4;j++){const a=4*(i-1)+j,b=4*(i-1)+(j+1)%4;indices.push(a,b,a+4,b,b+4,a+4);}
+  function rod(name:string,a:THREE.Vector3,b:THREE.Vector3,r:number,color:string){
+    const d=b.clone().sub(a),m=solid(name,new THREE.CylinderGeometry(r,r,d.length(),14),color);
+    m.position.copy(a).lerp(b,.5);m.quaternion.setFromUnitVectors(v(0,1),d.normalize());return m;
+  }
+  function limb(name:string,stations:THREE.Vector3[],height:number,depth:number){
+    const curve=new THREE.CatmullRomCurve3(stations),points:number[]=[],indices:number[]=[];
+    // Bevels yield the broad warm top and shaded undercut seen on the cast ends.
+    const profile=[[-.79,-1],[.73,-1],[1,-.56],[1,.58],[.72,1],[-.79,1],[-1,.56],[-1,-.52]];
+    for(let i=0;i<=36;i++){
+      const t=i/36,center=curve.getPoint(t),tangent=curve.getTangent(t);
+      const normal=v(-tangent.y,tangent.x).normalize();
+      const h=height*(.95+.12*Math.sin(Math.PI*t)-.40*t),d=depth*(1-.41*t);
+      for(const [u,w] of profile)points.push(center.x+normal.x*u*h,center.y+normal.y*u*h,center.z+w*d);
+      if(i)for(let j=0;j<8;j++){
+        const a=(i-1)*8+j,b=(i-1)*8+(j+1)%8;indices.push(a,b,a+8,b,b+8,a+8);
+      }
     }
-    indices.push(112,113,114,112,114,115);
-    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.setIndex(indices);geo.computeVertexNormals();
-    solid(geo,'#e7a13a').material.side=THREE.DoubleSide;
+    for(let j=1;j<7;j++)indices.push(288,288+j,288+j+1);
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));g.setIndex(indices);g.computeVertexNormals();
+    solid(name,g,'#d6a04d');
+    return curve;
   }
-  const low=v(-1.304,.27),high=v(1.304,1.15),nock=v(-.11,1.06,.025);
-  limb([v(-.71,-.12),v(-.92,.17),v(-1.12,.32),low],.073);
-  limb([v(.15,-.12),v(.47,.20),v(.76,.71),v(.99,.99),high],.083);
-  rod(low,nock,.006,'#4c4a42');rod(high,nock,.006,'#4c4a42');
-  const base=v(-.02,-.10,.025),shaft=v(-.12,1.16,.025);
-  rod(base,shaft,.021,'#9ba4a4');
+  const low=limb('Low returning bow limb',[v(-.28,-.10,-.03),v(-.51,.12,-.037),v(-.79,.255,-.044),
+    v(-1.01,.273,-.05),v(-1.19,.23,-.053),v(-1.295,.183,-.055)],.068,.078);
+  const high=limb('High swept bow limb',[v(.27,-.095,-.06),v(.48,.055,-.066),v(.71,.35,-.075),
+    v(.89,.655,-.076),v(1.05,.807,-.071),v(1.22,.867,-.065),v(1.322,.868,-.061)],.086,.078);
+  const base=v(.34,-.105,-.090),tip=v(-.14,1.132,.060);
+  const axis=tip.clone().sub(base).normalize(),nock=base.clone().lerp(tip,.908);
+  rod('Continuous stainless steel shaft',base,tip,.027,'#a7b2b2');
+  rod('Low tension cable',low.getPoint(.86),nock,.0066,'#494e4b');
+  rod('High tension cable',high.getPoint(.88),nock,.0066,'#494e4b');
+  // Fan the three molded vanes around the *same* inclined shaft as the nock.
+  // Their serrated lobes and alternating ridges follow the fabricator's photograph.
+  const start=base.clone().lerp(tip,.49),run=start.distanceTo(tip),normal=v(0,0,1).addScaledVector(axis,-axis.z).normalize();
   for(let i=0;i<3;i++){
-    const vane=new THREE.Shape();
-    vane.moveTo(0,0);vane.quadraticCurveTo(.12,.035,.177,.12);vane.lineTo(.177,.42);
-    vane.lineTo(.137,.405);vane.lineTo(.155,.43);vane.lineTo(0,.365);vane.closePath();
-    const feather=solid(new THREE.ExtrudeGeometry(vane,{depth:.009,bevelEnabled:false}),'#c84d3f');
-    feather.position.set(-.087,.72,.025);feather.rotation.y=i*2*Math.PI/3;
+    const radial=normal.clone().applyAxisAngle(axis,(i*2*Math.PI/3)+.27);
+    const tangent=axis.clone().cross(radial);
+    const pts:number[]=[],cols:number[]=[],idx:number[]=[];
+    const light=new THREE.Color('#c35447'),dark=new THREE.Color('#a23b35');
+    for(let j=0;j<=48;j++){
+      const f=j/48,band=j%4;
+      const width=.154*Math.min(1,.055+f*4.7)*(band===0?.86:1)*(1-.17*f);
+      const height=f*(run-.047);
+      for(const [r,puff] of [[.013,0],[width*.55,.014],[width,0]]){
+        const p=start.clone().addScaledVector(axis,height+(r/Math.max(width,.016))*.050*f)
+          .addScaledVector(radial,r).addScaledVector(tangent,puff*(band===0?.25:1));
+        pts.push(p.x,p.y,p.z);
+        const pigment=band===0?dark:light;cols.push(pigment.r,pigment.g,pigment.b);
+      }
+      if(j)for(let k=0;k<2;k++){const a=(j-1)*3+k;idx.push(a,a+3,a+1,a+1,a+3,a+4);}
+    }
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([...pts,...pts],3));
+    geometry.setAttribute('color',new THREE.Float32BufferAttribute([...cols,...cols],3));
+    // The static-city bake uses front faces; both sides of each fin must survive it.
+    const twoSides=[...idx];
+    const offset=pts.length/3;
+    for(let j=0;j<idx.length;j+=3)twoSides.push(offset+idx[j],offset+idx[j+2],offset+idx[j+1]);
+    geometry.setIndex(twoSides);geometry.computeVertexNormals();geometry.userData.paintVertices=true;
+    const feather=solid('Ribbed red fletching',geometry,'#ffffff');feather.material.vertexColors=true;
   }
-  const [x,z]=rinconPoint(464,194);
-  sculpture.position.set(x,knollHeight(x,z),z);sculpture.rotation.y=-.285;
+  const [x,z]=rinconPoint(458,192);
+  sculpture.position.set(x,knollHeight(x,z),z);sculpture.rotation.y=-.295;
   return sculpture;
 }

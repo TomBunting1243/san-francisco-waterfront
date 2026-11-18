@@ -1,3 +1,4 @@
+import {harborDatum,waterSurface} from './water-surface.ts';
 import * as THREE from 'three';
 import data from '../public/data/survey-shore.json' with {type:'json'};
 
@@ -26,7 +27,7 @@ export function addSurveyShore(mesh:Surface,bankHeight:(x:number,z:number)=>numb
   // The clipped relief owns the surface of the mainland. Only the vertical
   // bank face, coping and individually supported aprons are built here.
   const vertices:number[]=[];
-  const bottom=-1.10;
+  const bottom=waterSurface.level-.42;
   for(const [[ax,az],[bx,bz]] of data.bankEdges){
     const steps=Math.ceil(Math.hypot(bx-ax,bz-az)/.45);
     for(let i=0;i<steps;i++){
@@ -53,13 +54,14 @@ export function addSurveyShore(mesh:Surface,bankHeight:(x:number,z:number)=>numb
     geometry.rotateX(-Math.PI/2);
     mesh(geometry,'#c3c0ae',0,-.012,0).name='Surveyed seawall coping';
   }
+  const deckUnderside=.04-harborDatum.pierSlabThickness;
   for(const rings of data.decks){
-    const geometry=new THREE.ExtrudeGeometry(shape(rings),{depth:.19,bevelEnabled:false});
+    const geometry=new THREE.ExtrudeGeometry(shape(rings),{depth:harborDatum.pierSlabThickness,bevelEnabled:false});
     geometry.rotateX(-Math.PI/2);
-    mesh(geometry,'#b7b8a9',0,-.15,0).name='Surveyed quay slab';
+    mesh(geometry,'#b7b8a9',0,deckUnderside,0).name='Surveyed quay slab';
   }
   for(const [x,z] of data.piles){
-    const bottom=-1.10,top=-.15;
+    const top=deckUnderside;
     mesh(new THREE.CylinderGeometry(.063,.071,top-bottom,8),'#82958e',x,(bottom+top)/2,z).name='Surveyed quay support';
   }
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {distantGoldenGate} from './golden-gate.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import reliefData from '../public/data/bay-relief.json' with { type: 'json' };
 import { isTidalVertex, surveyedCoastalCells } from './survey-shore.ts';
@@ -119,7 +120,10 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
   }
   // Downtown's detailed streets and landmarks share a level datum in the original map.
   const downtown = Math.min(x + 96, 67 - x, z + 99, 14 - z);
-  const blend = THREE.MathUtils.smoothstep(downtown, -9, 0);
+  // The fixed-height South Beach streets, Oracle Park and China Basin decks
+  // share this grade. Raised regional relief must not break through the field.
+  const southBeach=Math.min(x+137,-75-x,z+83,-12-z);
+  const blend = THREE.MathUtils.smoothstep(Math.max(downtown,southBeach), -9, 0);
   if (meters > 0 || y > -.04) y = THREE.MathUtils.lerp(y, -.04, blend);
   if (isTidalVertex(grid.name, row * grid.cols + col)) y = Math.max(y, -.04);
   return { x, y, z, lng, lat, meters };
@@ -504,7 +508,7 @@ export function createBayRelief() {
       if (coastal) {
         shader.vertexShader = 'varying float reliefHeight;\n' + shader.vertexShader.replace('#include <begin_vertex>', `
           #include <begin_vertex>
-          reliefHeight = position.y - (${waterSurface.level.toFixed(2)});
+          reliefHeight = position.y - (${waterSurface.level.toFixed(7)});
         `);
       }
       shader.fragmentShader = `
@@ -528,6 +532,9 @@ export function createBayRelief() {
     return mat;
   }
 
+  // The strait is west-northwest of the Ferry Building. Both the terrain's
+  // depth buffer and the same marine visibility field can hide the steel.
+  root.add(distantGoldenGate(bayReliefPosition,waterSurface.level,material({color:'#ac7969'},16)));
   const ground = material({vertexColors:true}, 85, true);
   const masonry = material({vertexColors:true}, 105);
   const concrete = material({color:'#e4dac2'}, 110);

@@ -1,11 +1,12 @@
 import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
-import {pierThreeShelter} from './water-surface.ts';
+import {pierThreeShelter,waterSurface,waveAmplitudes} from './water-surface.ts';
 import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
 import {center,mappedBuildings} from './sf-map.ts';
 
 /** Three shallow skyline strips approximate shore reflections without drawing the city a second time. */
 export function configureBayWater(material:THREE.MeshStandardMaterial, time:{value:number}, hulls:THREE.Vector3[],night:{value:number}) {
+  const ferryWakes={value:new Float32Array(hulls.length-2)};
   const columns=512, bytes=new Uint8Array(columns*3), span=256;
   for(const building of mappedBuildings) {
     const [,z]=center(building.p);
@@ -29,25 +30,27 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
   material.addEventListener('dispose',()=>profiles.dispose());
   material.onBeforeCompile=shader=>{
     shader.uniforms.harborTime=time;
-    shader.uniforms.hullShadows={value:hulls};shader.uniforms.bayNight=night;
+    shader.uniforms.hullShadows={value:hulls};shader.uniforms.ferryWakes=ferryWakes;shader.uniforms.bayNight=night;
     shader.uniforms.shoreProfiles={value:profiles};
     shader.uniforms.bayHorizon=horizon;shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
     shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
-    shader.vertexShader='uniform float harborTime; varying vec2 baySurface;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+    shader.vertexShader='uniform float harborTime; varying vec2 baySurface; varying float bayElevation;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       baySurface=vec2(position.x,-position.y);
       vec2 slip=abs(baySurface-vec2(${pierThreeShelter.x},${pierThreeShelter.z}));
       float amplitude=slip.x<${pierThreeShelter.halfX.toFixed(2)} && slip.y<${pierThreeShelter.halfZ} ? ${pierThreeShelter.strength} : 1.;
-      transformed.z += amplitude*(sin(position.x*.47+harborTime*.5)*.08 + cos(position.y*.64+harborTime*.65)*.06);`);
+      transformed.z += amplitude*(sin(position.x*.47+harborTime*.5)*${waveAmplitudes.x} + cos(position.y*.64+harborTime*.65)*${waveAmplitudes.z});
+      bayElevation=${waterSurface.level.toFixed(7)}+transformed.z;`);
     shader.fragmentShader=`
       uniform float harborTime;
       uniform sampler2D shoreProfiles;
       uniform vec3 bayHorizon, sunsetGlitter;
       uniform vec4 waterfrontSun;
-      uniform vec3 hullShadows[4];
+      uniform vec3 hullShadows[${hulls.length}];
+      uniform float ferryWakes[${hulls.length-2}];
       uniform float bayNight;
       uniform vec2 bayWind;
       uniform float bayChop;
-      varying vec2 baySurface;
+      varying vec2 baySurface; varying float bayElevation;
       float waveHash(vec2 tile){
         vec3 q=fract(vec3(tile.xyx)*vec3(.1031,.1030,.0973));
         q+=dot(q,q.yzx+33.33);
@@ -63,7 +66,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         float travel=(shoreZ-baySurface.y)/min(ray.z,-.001);
         float x=baySurface.x+ray.x*travel+wobble;
         float height=texture2D(shoreProfiles,vec2(x/256.+.5,row)).r*32.;
-        float reflectedY=ray.y*travel-.7;
+        float reflectedY=ray.y*travel+bayElevation;
         return (1.-smoothstep(height-.58,height+.58,reflectedY))*smoothstep(.15,.5,height)
           *step(0.,travel)*step(abs(x),128.)*smoothstep(.01,.16,-ray.z);
       }
@@ -77,7 +80,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       float ripple=.64*sin(windPhase)+.36*sin(crossPhase);
       float swell=sin(p.y*2.1-p.x*.71-harborTime*.65+windStrength*3.6);
       float detail=1.-smoothstep(.10,.8,fwidth(p.x)+fwidth(p.y));
-      vec3 mirrorRay=normalize(vec3(p.x-cameraPosition.x,cameraPosition.y+.7,p.y-cameraPosition.z));
+      vec3 mirrorRay=normalize(vec3(p.x-cameraPosition.x,cameraPosition.y-bayElevation,p.y-cameraPosition.z));
       // Long wind streaks shear reflected outlines along the tide. Short
       // cross-waves disturb them without punching round holes in the reflection.
       float windCrest=sin(windPhase+crossPhase*.035+.32*sin(crossPhase));
@@ -99,13 +102,13 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         diffuseColor.rgb+=vec3(.51,.153,.044)*sunsetGlitter.z*path*(1.-bank*.82);
       }
       // Low, feathered contact beneath the vessels is evaluated at their current pose.
-      for(int i=0;i<4;i++) {
+      for(int i=0;i<${hulls.length};i++) {
         vec3 hull=hullShadows[i];vec2 off=p-hull.xy;
         vec2 along=vec2(cos(hull.z),-sin(hull.z));
-        vec2 size=i<2?vec2(${(doradoDimensions.length/2).toFixed(4)},${doradoWake.halfBeam.toFixed(4)}):vec2(${daySailerContact.halfLength.toFixed(4)},${daySailerContact.halfBeam.toFixed(4)});
+        vec2 size=i<${hulls.length-2}?vec2(${(doradoDimensions.length/2).toFixed(4)},${doradoWake.halfBeam.toFixed(4)}):vec2(${daySailerContact.halfLength.toFixed(4)},${daySailerContact.halfBeam.toFixed(4)});
         vec2 local=vec2(dot(off,along),dot(off,vec2(-along.y,along.x)))/size;
         diffuseColor.rgb *= .67+.33*smoothstep(.24,1.45,dot(local,local));
-        if(i<2){
+        if(i<${hulls.length-2}){
           float aft=${doradoWake.stern.toFixed(4)}-dot(off,along);
           float width=abs(dot(off,vec2(-along.y,along.x)));
           // Foam leaves each transom at its hull center. The two
@@ -113,7 +116,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
           float spread=max(0.,aft);
           float wake=1.-smoothstep(.012,.055+spread*.038,abs(width-${doradoWake.hullOffset.toFixed(4)}-spread*.20));
           float fade=smoothstep(-.025,.10,aft)*(1.-smoothstep(2.8,7.6,aft));
-          diffuseColor.rgb+=vec3(.21,.23,.21)*wake*fade*(.6+.4*swell)*detail;
+          diffuseColor.rgb+=vec3(.21,.23,.21)*wake*fade*ferryWakes[i]*(.6+.4*swell)*detail;
         }
       }
       // Glints lie between the viewer and actual lantern positions. The virtual image
@@ -150,5 +153,5 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist*.97);`);
   };
   material.customProgramCacheKey=()=> 'bay-shore-reflections-v5';
-  return {baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
+  return {ferryWakes,baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

@@ -64,9 +64,13 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   const signLights = parts.some(mesh=>mesh.userData.signLight) ? new Uint8Array(vertices * 3) : null;
   const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
   const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
+  const printUv=parts[0].geometry.hasAttribute('billboardPrint')?new Float32Array(vertices*2):null;
+  const walkPanel=parts[0].geometry.hasAttribute('walkPanel')?new Float32Array(vertices*2):null;
   let vertex = 0, face = 0;
   for (const mesh of parts) {
     const geometry = mesh.geometry, pos = geometry.attributes.position, n = geometry.attributes.normal;
+    if(printUv)printUv.set(geometry.getAttribute('billboardPrint').array,vertex*2);
+    if(walkPanel)walkPanel.set(geometry.getAttribute('walkPanel').array,vertex*2);
     if(facadeGrid)facadeGrid.set(geometry.getAttribute('facadeGrid').array,vertex*4);
     const {r,g,b} = mesh.material.color;
     const paint = mesh.material.vertexColors || geometry.userData.paintVertices ? geometry.attributes.color : undefined;
@@ -102,6 +106,8 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   geo.setAttribute('normal',new THREE.BufferAttribute(normals,3,true));
   geo.setAttribute('color',new THREE.BufferAttribute(colors,3,true));
   if(facadeGrid)geo.setAttribute('facadeGrid',new THREE.BufferAttribute(facadeGrid,4));
+  if(printUv)geo.setAttribute('uv',new THREE.BufferAttribute(printUv,2));
+  if(walkPanel)geo.setAttribute('walkPanel',new THREE.BufferAttribute(walkPanel,2));
   if(signLights)geo.setAttribute('signLight',new THREE.BufferAttribute(signLights,3,true));
   geo.setIndex(new THREE.BufferAttribute(indices,1));
   geo.computeBoundingBox(); geo.computeBoundingSphere();

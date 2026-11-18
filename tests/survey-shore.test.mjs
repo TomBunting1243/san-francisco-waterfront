@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
 import {createLandscape} from '../app/landscape.ts';
-import {waterSurface} from '../app/water-surface.ts';
+import {waterSurface,waterWaveHeight} from '../app/water-surface.ts';
 import {bayReliefBankHeight,bayReliefGround} from '../app/bay-relief.ts';
 import {addSurveyShore} from '../app/survey-shore.ts';
 
@@ -17,12 +17,12 @@ test('assembled waterfront has clear water under pile decks and a continuous ret
     ray.far=distance;
     return ray.intersectObjects(surfaces,true)[0]?.point;
   }
-  const minWater=waterSurface.level-.14;
+  const minWater=waterSurface.level-waterWaveHeight;
   for(const [label,x,z,top] of [
     ['Ferry Building fixed apron',-4.2,3.8,.096],['Pier 7 timber deck',27.3,12.5,.06],
     ['Piers 30–32 central working apron',-75,-2,.063]]){
     assert.ok(Math.abs(hit(x,.35,z,down,.4)?.y-top)<.003,label+' retains its deck');
-    assert.equal(hit(x,-.31,z,down,-.31-minWater),undefined,label+' has clear water beneath the slab');
+    assert.equal(hit(x,waterSurface.level+waterWaveHeight,z,down,2*waterWaveHeight),undefined,label+' has clear water beneath the slab');
   }
   for(const [label,x,z] of [
     ['end of the ferry apron',-4.2,11.5],['outside Pier 7',27.8,12.5],['head of Pier 7',27,14.95],
@@ -30,7 +30,7 @@ test('assembled waterfront has clear water under pile decks and a continuous ret
     ['north piers',103,12]]){
     assert.equal(hit(x,.35,z,down,.35-minWater),undefined,label+' is open through the lowest wave');
   }
-  for(const y of [-.1,-.45,minWater-.02]){
+  for(const y of [waterSurface.level+.006,minWater-.02,minWater-.17]){
     const face=hit(-32,y,1.35,shoreward,.6);
     assert.ok(face&&Math.abs(face.z-1.051)<.004,'Rincon wall continues below tidal trough at '+y);
   }
@@ -49,9 +49,9 @@ test('assembled waterfront has clear water under pile decks and a continuous ret
     ['beyond the former inland survey extent',-60,-137],
   ]){
     const ground=bayReliefGround(x,z);
-    ray.set(new THREE.Vector3(x,-.004,z),down);ray.far=.70;
+    ray.set(new THREE.Vector3(x,ground+.05,z),down);ray.far=.10;
     const visible=ray.intersectObjects(bareGround,true)[0]?.point.y;
-    assert.ok(ground<-.02,name+' has distinct ground elevation');
+    assert.ok(ground>waterSurface.level+waterWaveHeight,name+' remains above high chop');
     assert.ok(Math.abs(visible-ground)<.012,name+' visible ground follows the elevation sampler');
   }
 });

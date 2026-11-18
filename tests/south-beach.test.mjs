@@ -6,7 +6,7 @@ import fontData from '../app/harbor-font.json' with {type:'json'};
 import {createSouthBeach,southBeach} from '../app/south-beach.ts';
 import {createLandscape} from '../app/landscape.ts';
 import {sfMap} from '../app/sf-map.ts';
-import {waterHeight,waterSurface} from '../app/water-surface.ts';
+import {harborDatum,waterHeight,waterSurface,waterWaveHeight} from '../app/water-surface.ts';
 
 test('South Beach source retains the shared coast vertex and distinct map features',()=>{
   assert.ok(southBeach.projectionMaxError<.003);
@@ -32,6 +32,24 @@ test('Oracle Park retains an open playing field and the seven floating South Bea
   const ray=new THREE.Raycaster(new THREE.Vector3(-105,5,-49.2),new THREE.Vector3(0,-1,0));
   const field=ray.intersectObject(stadium,true)[0];
   assert.ok(field.point.y>.085&&field.point.y<.11);
+  const marina=root.getObjectByName('South Beach Marina'),float=marina.getObjectByName('Oracle Park Ferry Terminal');
+  const pontoon=new THREE.Box3().setFromObject(float);
+  assert.ok(Math.abs(pontoon.max.y-waterSurface.level-harborDatum.ferryFloatFreeboard)<1e-6);
+  assert.ok(pontoon.min.y<waterSurface.level-waterWaveHeight);
+  const spans=marina.getObjectsByProperty('name','China Basin access span');
+  assert.equal(spans.length,2);
+  for(const span of spans){
+    for(const direction of [-1,1]){
+      const end=span.localToWorld(new THREE.Vector3(0,.01,direction*span.geometry.parameters.depth/2));
+      ray.ray.origin.set(end.x,1,end.z);
+      assert.ok(ray.intersectObject(marina,true).some(hit=>!spans.includes(hit.object)&&Math.abs(hit.point.y-end.y)<.001));
+    }
+  }
+  for(const dock of southBeach.docks.filter(d=>/^Dock [A-G]$/.test(d.name))){
+    const [a,b]=dock.p;
+    ray.ray.origin.set((a[0]+b[0])/2,1,(a[1]+b[1])/2);
+    assert.ok(ray.intersectObject(marina,true).some(hit=>Math.abs(hit.point.y-waterSurface.level-harborDatum.marinaFreeboard)<.0001));
+  }
 });
 
 test('the batched marina fleet follows real crests and troughs with cruiser-scale freeboard',()=>{
@@ -99,7 +117,7 @@ test('the batched marina fleet follows real crests and troughs with cruiser-scal
       }
     }
   }
-  assert.ok(highestWater>waterSurface.level+.12&&lowestWater<waterSurface.level-.12);
+  assert.ok(highestWater>waterSurface.level+.8*waterWaveHeight&&lowestWater<waterSurface.level-.8*waterWaveHeight);
 });
 
 test('the continuous city surface supports the wharf and stadium while leaving Cove and marina water open',()=>{

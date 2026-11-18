@@ -21,12 +21,12 @@ export function ferryMarketSchedule(at:Date){
 
 type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist'};
 // Leave the clock-tower entrance, ferry gates, and the pedestrian spine open.
-// Rear stalls occupy the fixed plaza only on Saturdays. One interpreted artist
-// pitch sits on the brick plaza on the north side of the foot of Market.
+// Rear stalls occupy the fixed plaza only on Saturdays. Arts vendors occupy the measured
+// edge of the brick court, along the foot of Market. Actual traders rotate.
 const sites:Site[]=[
   ...[-5.35,-4.88,-4.41,-3.64,-3.17,-2.70,-2.23,1.94,2.41,2.88,3.65,4.12,4.59,5.06].map(x=>({x,z:-1.84,floor:.031,section:'front' as const})),
   ...[3.39,3.96,4.52,5.08].flatMap(z=>[-4.97,-4.48,-3.41,-2.94].map(x=>({x,z,floor:.096,section:'rear' as const}))),
-  {x:.33,z:-9.52,floor:.139,section:'artist'},
+  ...[[.713,-8.175],[.787,-8.450],[.900,-8.713],[1.025,-8.988],[1.175,-9.238]].map(([x,z])=>({x,z,floor:.127-.0012*(x-2)+.0008*(z+8),section:'artist' as const})),
 ];
 const canvas=['#eee9d9','#e3dfca','#c7cbb7','#e9e3d0','#baccbf','#e5d2af'];
 const produce=['#af5240','#738852','#cd9c53','#9e6658'];
@@ -102,7 +102,18 @@ export function createFerryMarket(){
         for(const dx of [-.048,.048])for(const dz of [-.016,.016])
           shape(boxes,tableX+dx,tableY/2,-.031+dz,.003,tableY,.003,steel);
       }
-      if(artist&&phase>.57){
+      if(artist&&phase>.57&&i%3===1){
+        for(let k=0;k<4;k++){
+          const x=(k-1.5)*.029;
+          shape(boxes,x,.082,-.036,.025,.047,.003,wood,-.04);
+          shape(boxes,x,.082,-.039,.021,.042,.002,['#6a8d90','#c69469','#878562','#586e81'][k]);
+        }
+      }else if(artist&&phase>.57&&i%3===2){
+        for(let k=0;k<3;k++){
+          const x=(k-1)*.039;shape(boxes,x,.059,-.03,.035,.004,.029,'#595b58');
+          for(const dx of [-.008,.005])shape(rounds,x+dx,.063,-.03,.005,.002,.006,'#d0ae71');
+        }
+      }else if(artist&&phase>.57){
         const rack=.091*range(phase,.57,.81);
         for(const z of [-.04,.04])shape(boxes,-.078,rack/2,z,.003,rack,.003,steel);
         shape(boxes,-.078,rack,0,.003,.003,.084,steel);
