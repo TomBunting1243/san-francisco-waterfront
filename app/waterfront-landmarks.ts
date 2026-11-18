@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
-import {center} from './sf-map.ts';
+import {center,footprintGeometry} from './sf-map.ts';
 
 type Building={name:string;p:number[][];h:number};
 type Window={x:number;y:number;z:number;ry:number;w:number;h:number};
@@ -9,6 +9,7 @@ export const detailedWaterfrontNames=new Set(['Southern Pacific Building','The A
 
 /** Reference-derived miniatures on the mapped footprints, not surveyed replicas. */
 export function waterfrontLandmark(b:Building,font:Font){
+  if(b.name==='Southern Pacific Building'||b.name==='One Market Plaza')return oneMarket(b,font);
   const root=new THREE.Group(),windows:Window[]=[],materials=new Map<string,THREE.MeshStandardMaterial>();
   root.name=b.name+' architectural detail';
   const [cx,cz]=center(b.p),stone='#dfcdb0',ivory='#f0dfbd',glass='#35545b',metal='#527b72';
@@ -45,37 +46,6 @@ export function waterfrontLandmark(b:Building,font:Font){
     if(nx*((p[0]+q[0])/2-cx)+nz*((p[1]+q[1])/2-cz)<0){nx=-nx;nz=-nz;}
     const face=new THREE.Group();face.position.set((p[0]+q[0])/2,0,(p[1]+q[1])/2);face.rotation.y=Math.atan2(nx,nz);root.add(face);return {face,len,nx,nz};
   });
-  if(b.name==='Southern Pacific Building'){
-    const entrance=faces.filter(f=>f.len>1).sort((a,b)=>b.nz-a.nz)[0];
-    for(const {face,len} of faces){if(len<.35)continue;
-      box(len,.78,.07,0,.4,.025,stone,face);
-      for(const [y,height,depth] of [[.08,.09,.13],[.84,.07,.15],[b.h-.53,.08,.15],[b.h-.12,.10,.22],[b.h,.055,.27]])box(len+.10,height,depth,0,y,.08,ivory,face);
-      for(let y=.16;y<.77;y+=.12)box(len,.01,.012,0,y,.067,'#baa38a',face);
-      const bays=Math.max(1,Math.round(len/.40)),step=len/bays;
-      for(let i=0;i<bays;i++){
-        const x=-len/2+(i+.5)*step,w=Math.min(.24,step*.63);
-        if(face!==entrance.face)arch(x,.11,w,.36,face);
-        for(let y=1.02;y<b.h-.40;y+=.265){
-          pane(x,y,.049,w,.175,face);box(w+.065,.025,.095,x,y-.108,.077,stone,face);
-          for(const dx of [-w/2-.018,w/2+.018])box(.025,.21,.055,x+dx,y,.072,'#c79271',face);
-          box(.012,.17,.027,x,y,.083,ivory,face);
-        }
-      }
-      for(const sign of [-1,1])box(.05,b.h-.94,.09,sign*(len/2-.04),(b.h+.72)/2,.06,stone,face);
-      for(let x=-len/2+.055;x<len/2;x+=.115)box(.05,.09,.14,x,b.h-.22,.085,stone,face);
-      for(let y=.96;y<b.h-.61;y+=.14)box(len,.009,.012,0,y,.012,'#bb8469',face);
-      if(face===entrance.face){
-        const span=Math.min(len*.8,2.65),step=span/3;
-        for(let i=-1;i<=1;i++)arch(i*step,.10,step*.72,.47,face);
-        box(span,.15,.09,0,.90,.10,stone,face);text('SOUTHERN PACIFIC COMPANY',.063,0,.875,.16,face);
-        mesh(new THREE.CircleGeometry(.15,24),ivory,0,1.16,.095,face);mesh(new THREE.TorusGeometry(.16,.028,5,24),stone,0,1.16,.12,face);
-        for(let i=0;i<12;i++){const a=i*Math.PI/6;const tick=box(.011,.022,.014,Math.sin(a)*.119,1.16+Math.cos(a)*.119,.128,glass,face);tick.rotation.z=-a;}
-        const hour=box(.013,.075,.015,-.024,1.181,.139,glass,face);hour.rotation.z=.85;const minute=box(.01,.10,.015,.025,1.193,.139,glass,face);minute.rotation.z=-.55;
-        for(const x of [-span/2,span/2]){box(.13,.68,.15,x,.43,.1,ivory,face);box(.23,.08,.2,x,.79,.12,stone,face);}
-      }
-    }
-    box(1.2,.13,.8,cx,b.h+.08,cz,'#aaa38d');
-  }
   if(b.name==='The Audiffred Building'){
     for(const {face,len} of faces){if(len<.25)continue;
       for(const [y,h,d] of [[.035,.06,.11],[.32,.07,.12],[.61,.075,.15],[.68,.045,.18]])box(len+.06,h,d,0,y,.06,ivory,face);
@@ -176,6 +146,210 @@ export function waterfrontLandmark(b:Building,font:Font){
         box(.05,.47,.073,x-spacing*.47,.32,.054,stone,face);
       }
       box(len,.043,.088,0,.575,.053,ivory,face);
+    }
+  }
+  return {root,windows};
+}
+
+// The developer's history plate gives the original E plan and its three street elevations.
+// https://www.americanassetstrust.com/images/uploads/AAT/sustainability/2023_Sustainability_Report_for_American_Assets_Trust_Inc.pdf#page=41
+// Market entrance and balcony elevation by Bliss & Faville:
+// https://commons.wikimedia.org/wiki/File:A%26E_vol_LI_no_2_pg_62-1.png
+// Present roof plan: SF Public Works 2024 orthophoto, checked against USGS 2023 3DEP.
+// https://bsm.sfdpw.org/mapviewer/DotNet.aspx?Layers=1 (2024 aerial)
+// https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/ept.json
+function oneMarket(b:Building,font:Font){
+  const root=new THREE.Group(),local=new THREE.Group(),windows:Window[]=[];
+  root.name=b.name+' architectural detail';root.add(local);
+  // Origin is the mapped Spear/Market corner. +u runs to Steuart, +v to Mission.
+  local.position.set(-3.443,0,-15.222);local.rotation.y=Math.atan2(-4.891,.725);
+  const wide=Math.hypot(4.891,.725),deep=Math.hypot(4.020,.596);
+  const palette=new Map<string,THREE.MeshStandardMaterial>(),cube=new THREE.BoxGeometry(1,1,1);
+  function mesh(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent:THREE.Group,name=''){
+    if(!palette.has(c))palette.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.86}));
+    const m=new THREE.Mesh(g,palette.get(c));m.position.set(x,y,z);m.name=name;
+    m.receiveShadow=true;m.castShadow=true;parent.add(m);return m;
+  }
+  function box(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent=local,name=''){
+    const m=mesh(cube,c,x,y,z,parent,name);m.scale.set(w,h,d);return m;
+  }
+  function mass(u0:number,v0:number,u1:number,v1:number,base:number,top:number,c:string,name:string){
+    return box(u1-u0,top-base,v1-v0,(u0+u1)/2,(base+top)/2,(v0+v1)/2,c,local,name);
+  }
+  function facade(x:number,z:number,ry:number,name:string){
+    const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=ry;g.name=name;local.add(g);g.updateWorldMatrix(true,false);return g;
+  }
+  function light(g:THREE.Group,x:number,y:number,z:number,w:number,h:number){
+    const p=g.localToWorld(new THREE.Vector3(x,y,z));
+    windows.push({x:p.x,y:p.y,z:p.z,ry:local.rotation.y+g.rotation.y,w,h});
+  }
+  const brick='#ad8170',limestone='#c8b7a0',cream='#e0d1b7',glass='#536668',sash='#a49784';
+  const deck=1.642,eave=2.612;
+
+  if(b.name==='One Market Plaza'){
+    // Six-story postwar podium, separate from the historic frontage and from both towers.
+    // https://sfplanning.org/sites/default/files/za/1%20Market%20Street.pdf
+    // https://www.som.com/projects/one-market-plaza/
+    mesh(footprintGeometry(b.p,deck),'#bbbaac',0,0,0,root,'One Market Plaza podium');
+    const [cx,cz]=center(b.p);
+    for(let i=1;i<b.p.length;i++){
+      const [a,z]=b.p[i-1],[c,v]=b.p[i],dx=c-a,dz=v-z,len=Math.hypot(dx,dz);
+      const u=(a+c)/2,q=(z+v)/2;
+      const towardsMission=local.worldToLocal(new THREE.Vector3(u,0,q)).z;
+      if(len<.32||towardsMission<deep+.14)continue;
+      const sign=(dz*(u-cx)-dx*(q-cz))>0?1:-1;
+      const face=new THREE.Group();face.position.set(u,0,q);face.rotation.y=Math.atan2(sign*dz,-sign*dx);root.add(face);
+      for(let floor=0;floor<6;floor++){
+        const y=floor===0?.21:.46+(floor-1)*.257;
+        const h=floor===0?.32:.161;
+        box(len,h,.021,0,y,.012,'#68797c',face);
+        const count=Math.max(1,Math.round(len/.34));
+        for(let j=0;j<count;j++){
+          box(.016,h,.024,(j/count-.5)*len,y,.026,'#a6aca8',face);
+          const p=face.localToWorld(new THREE.Vector3(((j+.5)/count-.5)*len,y,.029));
+          windows.push({x:p.x,y:p.y,z:p.z,ry:face.rotation.y,w:len/count*.86,h:h*.83});
+        }
+      }
+      box(len,.041,.062,0,deck-.012,.012,'#dbd8c9',face);
+    }
+    for(const [u,v,r] of [[3.98,5.76,.55],[.84,8.02,.565]]){
+      mesh(new THREE.CylinderGeometry(r,r,.022,48),'#bab8aa',u,deck+.01,v,local,'Circular roof garden');
+      mesh(new THREE.CylinderGeometry(r-.022,r-.022,.016,48),'#8f9674',u,deck+.024,v,local);
+      for(let j=0;j<15;j++){
+        const angle=j*2.4,radius=r*Math.sqrt((j+.3)/17);
+        const bush=mesh(new THREE.IcosahedronGeometry(.09+(j%3)*.016,0),j%2?'#79876b':'#667c62',u+radius*Math.cos(angle),deck+.041,v+radius*Math.sin(angle),local);
+        bush.scale.y=.38;
+      }
+    }
+    for(const [u,v,length] of [[2.38,5.31,1.28],[2.38,6.5,.84],[2.38,8.11,1.34]]){
+      box(.60,.022,length,u,deck+.018,v,'#818e8d');
+      for(let j=0;j<=5;j++)box(.60,.01,.012,u,deck+.035,v+length*(j/5-.5),'#bdbeb0');
+    }
+    return {root,windows};
+  }
+
+  // Street cornice and wings are about 43.5 m above grade. Only the setback
+  // rooftop housings and the hipped central tower reach the higher survey returns.
+  mass(0,0,wide,deep,0,deck,'#b7ada0','Lower court and street base');
+  mass(0,0,wide,1.76,deck,eave,brick,'Market wing');
+  mass(0,1.76,.96,deep,deck,eave,brick,'Spear wing');
+  mass(4.04,1.76,wide,deep,deck,eave,brick,'Steuart wing');
+  for(const [a,c,d,f] of [[0,0,wide,1.76],[0,1.76,.96,deep],[4.04,1.76,wide,deep]]){
+    mass(a,c,d,f,eave,eave+.013,'#c5c2b6','Wing roof');
+  }
+  mass(.52,.80,4.49,1.70,eave+.013,2.91,'#b6b2a6','Setback mechanical floor');
+  mass(1.12,.12,4.25,.81,eave+.013,2.86,'#c7c3b7','Front roof plant');
+  mass(2.11,1.00,2.87,1.77,2.91,3.49,'#b6a48c','Central service tower');
+  for(let j=0;j<5;j++)box(.077,.23,.012,2.19+j*.146,3.26,.993,'#777971');
+  const hip=mesh(new THREE.ConeGeometry(.61,.26,4),'#928477',2.49,3.62,1.385,local,'Hipped service tower roof');
+  hip.rotation.y=Math.PI/4;
+  box(.113,.105,.127,2.49,3.79,1.385,'#b2ae9f');
+  for(const [u,v] of [[3.16,1.36],[3.37,1.36]]){
+    const vent=mesh(new THREE.CylinderGeometry(.087,.087,.04,12),'#8b8c7f',u,2.938,v,local);
+    for(let j=0;j<3;j++)box(.14,.006,.012,u,vent.position.y+.022,v,'#b4b2a3').rotation.y=j*Math.PI/3;
+  }
+  // An open well lies toward Spear. The adjoining bay toward Steuart is
+  // glazed. Its six ridges meet above the center, as seen in the City's aerial.
+  mass(2.05,1.78,4.04,deep,deck,2.55,'#b8b1a1','Atrium drum');
+  const ring=[[2.06,2.93],[2.53,1.88],[3.57,1.88],[4.03,2.93],[3.57,3.99],[2.53,3.99]];
+  const peak=new THREE.Vector3(3.046,2.805,2.935);
+  function rail(start:THREE.Vector3,end:THREE.Vector3,r:number,c:string){
+    const diff=end.clone().sub(start),mid=start.clone().lerp(end,.5);
+    const m=mesh(new THREE.CylinderGeometry(r,r,diff.length(),4),c,mid.x,mid.y,mid.z,local);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),diff.normalize());
+  }
+  for(let i=0;i<6;i++){
+    const a=new THREE.Vector3(ring[i][0],2.568,ring[i][1]),q=new THREE.Vector3(ring[(i+1)%6][0],2.568,ring[(i+1)%6][1]);
+    const geo=new THREE.BufferGeometry().setFromPoints([a,peak,q]);geo.computeVertexNormals();
+    mesh(geo,i<2?'#adc2c4':i<4?'#849da3':'#98acae',0,0,0,local,'Six-sided atrium skylight');
+    rail(a,q,.011,'#dfd9c7');rail(a,peak,.012,'#d1c5ad');
+    for(let j=1;j<5;j++){
+      rail(a.clone().lerp(q,j/5),peak,.004,'#b0afa3');
+      rail(a.clone().lerp(peak,j/5),q.clone().lerp(peak,j/5),.004,'#bdb9a8');
+    }
+  }
+  for(const [g,len] of [
+    [facade(.96,(deep+1.76)/2,Math.PI/2,'Spear light court wall'),deep-1.76],
+    [facade(1.505,1.76,0,'Market light court wall'),1.09],
+    [facade(2.05,(deep+1.78)/2,-Math.PI/2,'Atrium light court wall'),deep-1.78]
+  ] as const){
+    for(let j=0;j<Math.round(len/.22);j++)for(let floor=0;floor<4;floor++){
+      box(.115,.145,.016,(j+.5)*len/Math.round(len/.22)-len/2,1.76+floor*.219,.01,'#718180',g);
+    }
+  }
+
+  for(const [face,len,bays,market] of [
+    [facade(wide/2,0,Math.PI,'Market Street elevation'),wide,15,true],
+    [facade(0,deep/2,-Math.PI/2,'Spear Street elevation'),deep,12,false],
+    [facade(wide,deep/2,Math.PI/2,'Steuart Street elevation'),deep,12,false]
+  ] as const){
+    const step=len/bays;
+    box(len,.54,.048,0,.27,.018,limestone,face);
+    for(const [y,h,d] of [[.036,.055,.068],[.553,.04,.10],[1.955,.038,.081],[2.005,.06,.09],[2.48,.06,.086],[2.55,.062,.137],[2.603,.042,.175]]){
+      box(len+.026,h,d,0,y,.025,cream,face);
+    }
+    // Six punched-window rows sit between the two-story arcade and giant order.
+    const coords:number[]=[],colors:number[]=[];
+    function panel(x:number,y:number,w:number,h:number,z:number,color:string){
+      const lo=x-w/2,hi=x+w/2,base=y-h/2,top=y+h/2,c=new THREE.Color(color);
+      coords.push(lo,base,z,hi,base,z,hi,top,z,lo,base,z,hi,top,z,lo,top,z);
+      for(let k=0;k<6;k++)colors.push(c.r,c.g,c.b);
+    }
+    const r=step*.378,stem=.342;
+    for(let j=0;j<bays;j++){
+      const x=(j+.5)*step-len/2,entrance=market&&Math.abs(j-7)<=1;
+      const arch=new THREE.Shape();arch.moveTo(-r,.047);arch.lineTo(r,.047);arch.lineTo(r,stem);arch.absarc(0,stem,r,0,Math.PI,false);arch.closePath();
+      mesh(new THREE.ShapeGeometry(arch,12),entrance?'#3e4847':'#626f70',x,0,.046,face,entrance?'Market entrance arch':'Retail arcade opening');
+      mesh(new THREE.TorusGeometry(r+.006,.009,4,14,Math.PI),cream,x,stem,.054,face);
+      for(const side of [-1,1]){
+        box(.017,.313,.028,x+side*(r+.005),.192,.052,cream,face);
+        box(.043,.024,.038,x+side*(r+.005),stem,.054,cream,face);
+      }
+      box(.027,.037,.025,x,stem+r,.058,cream,face);
+      if(entrance){
+        box(r*1.47,.22,.017,x,.166,.059,'#8e7d68',face);
+        box(r*.98,.18,.012,x,.144,.071,glass,face);
+      }else{
+        panel(x,.217,r*1.94,.026,.061,sash);panel(x,stem,r*1.94,.013,.062,sash);
+        for(const dx of [-r*.46,0,r*.46])panel(x+dx,.204,.009,.306,.063,sash);
+        light(face,x,.13,.065,r*1.74,.13);
+      }
+      for(let col=0;col<2;col++){
+        const wx=x+(col-.5)*step*.475,win=step*.257;
+        for(let row=0;row<6;row++){
+          const y=.68+row*.23;
+          panel(wx,y,win+.016,.158,.011,'#9b8271');panel(wx,y,win,.143,.013,glass);
+          panel(wx,y+.033,win*.88,.058,.015,'#8d9b99');panel(wx,y,win,.008,.017,sash);
+          panel(wx,y-.078,win+.022,.011,.017,limestone);light(face,wx,y,.019,win*.78,.112);
+        }
+        panel(wx,2.237,win*1.27,.398,.021,glass);panel(wx,2.22,win*1.32,.081,.024,'#8d877b');
+        for(const y of [2.108,2.37])light(face,wx,y,.026,win,.112);
+        const px=wx-step*.24;
+        box(.029,.416,.036,px,2.236,.027,limestone,face);
+        for(const y of [2.046,2.439])box(.043,.027,.046,px,y,.032,cream,face);
+      }
+      for(let k=0;k<3;k++)box(.027,.038,.061,x+(k-1)*step*.31,2.511,.052,limestone,face);
+    }
+    for(const x of [-len/2+.023,-len/2+step,len/2-step,len/2-.023]){
+      box(.024,1.36,.032,x,1.252,.008,limestone,face);
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(coords,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.computeVertexNormals();
+    geo.userData.paintVertices=true;
+    const panels=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.82}));
+    panels.name='Sash, spandrels and sills';face.add(panels);
+    if(market){
+      for(const y of [.567,1.267,1.976]){
+        box(3*step,.032,.093,0,y,.063,cream,face);
+        for(let j=-2;j<=2;j++)box(.029,.047,.05,j*step*.57,y-.028,.064,limestone,face);
+      }
+      const title=new TextGeometry('SOUTHERN PACIFIC COMPANY',{font,size:.027,depth:.001,curveSegments:2});
+      title.computeBoundingBox();title.translate(-title.boundingBox!.max.x/2,0,0);
+      mesh(title,'#554f48',0,.567,.111,face);
+      mesh(new THREE.CircleGeometry(.051,20),cream,0,.636,.078,face,'Market entrance clock');
+      mesh(new THREE.TorusGeometry(.052,.007,5,20),'#6e6151',0,.636,.081,face);
+      box(.005,.032,.005,0,.651,.086,'#58594f',face);
+      box(.023,.005,.005,.009,.636,.086,'#58594f',face);
     }
   }
   return {root,windows};

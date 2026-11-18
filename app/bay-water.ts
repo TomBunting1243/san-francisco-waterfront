@@ -23,12 +23,14 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
   profiles.minFilter=profiles.magFilter=THREE.LinearFilter;
   profiles.needsUpdate=true;
   const horizon={value:new THREE.Color('#e2dfcc')};
+  const wind={value:new THREE.Vector2(.188,.982)},chop={value:.5};
   material.addEventListener('dispose',()=>profiles.dispose());
   material.onBeforeCompile=shader=>{
     shader.uniforms.harborTime=time;
     shader.uniforms.hullShadows={value:hulls};shader.uniforms.bayNight=night;
     shader.uniforms.shoreProfiles={value:profiles};
     shader.uniforms.bayHorizon=horizon;
+    shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
     shader.vertexShader='uniform float harborTime; varying vec2 baySurface;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       baySurface=vec2(position.x,-position.y);
       vec2 slip=abs(baySurface-vec2(${pierThreeShelter.x},${pierThreeShelter.z}));
@@ -40,6 +42,8 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       uniform vec3 bayHorizon;
       uniform vec3 hullShadows[4];
       uniform float bayNight;
+      uniform vec2 bayWind;
+      uniform float bayChop;
       varying vec2 baySurface;
       float waveHash(vec2 tile){
         vec3 q=fract(vec3(tile.xyx)*vec3(.1031,.1030,.0973));
@@ -57,7 +61,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         float x=baySurface.x+ray.x*travel+wobble;
         float height=texture2D(shoreProfiles,vec2(x/256.+.5,row)).r*32.;
         float reflectedY=ray.y*travel-.7;
-        return (1.-smoothstep(height-.25,height+.25,reflectedY))*smoothstep(.15,.5,height)
+        return (1.-smoothstep(height-.58,height+.58,reflectedY))*smoothstep(.15,.5,height)
           *step(0.,travel)*step(abs(x),128.)*smoothstep(.01,.16,-ray.z);
       }
     `+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
@@ -65,13 +69,16 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       float windStrength=windPatch(p*vec2(.19,.27)+vec2(harborTime*.021,0.));
       float lanes=windPatch(p*vec2(.43,1.15)-vec2(.015,.035)*harborTime);
       // Intersecting wind and tidal wavelets split crests into short strokes.
-      float windPhase=dot(p,vec2(2.3,12.))+harborTime*1.18+windStrength*8.6+lanes*2.3;
+      float windPhase=dot(p,bayWind)*mix(9.,15.4,bayChop)+harborTime*mix(.58,1.78,bayChop)+windStrength*8.6+lanes*2.3;
       float crossPhase=dot(p,vec2(9.1,-5.4))-harborTime*.87+lanes*6.8;
       float ripple=.64*sin(windPhase)+.36*sin(crossPhase);
       float swell=sin(p.y*2.1-p.x*.71-harborTime*.65+windStrength*3.6);
       float detail=1.-smoothstep(.10,.8,fwidth(p.x)+fwidth(p.y));
       vec3 mirrorRay=normalize(vec3(p.x-cameraPosition.x,cameraPosition.y+.7,p.y-cameraPosition.z));
-      float wobble=(ripple*.74+swell*.55)*detail;
+      // Long wind streaks shear reflected outlines along the tide. Short
+      // cross-waves disturb them without punching round holes in the reflection.
+      float windCrest=sin(windPhase+crossPhase*.035+.32*sin(crossPhase));
+      float wobble=(windCrest*.36+swell*.26)*detail*mix(.42,1.58,bayChop);
       float bank=max(reflectedBank(mirrorRay,-1.5,1./6.,wobble),max(
         reflectedBank(mirrorRay,-14.,.5,wobble*1.6),reflectedBank(mirrorRay,-39.,5./6.,wobble*2.1)));
       diffuseColor.rgb *= mix(vec3(1.),vec3(.63,.72,.76),bank*.76);
@@ -116,14 +123,16 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         diffuseColor.rgb+=bayNight*vec3(.56,.29,.105)*min(1.,lights)*detail;
       }
       diffuseColor.rgb*=mix(vec3(.85,.94,1.01),vec3(1.13,1.06,.93),windStrength);
-      diffuseColor.rgb*=1.+ripple*.023*detail+(.06*lanes-.03);
-      float glint=smoothstep(.53,.94,ripple)*smoothstep(.42,.68,lanes)*smoothstep(.32,.7,windStrength);
-      glint*=mix(.18,1.,smoothstep(-.15,.72,cos(crossPhase*.57-windPhase*.19)));
-      diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82);
+      diffuseColor.rgb*=1.+ripple*mix(.009,.037,bayChop)*detail+(.06*lanes-.03);
+      float feather=max(.035,.49*fwidth(windPhase));
+      float glint=smoothstep(.875-feather,.98+feather,windCrest);
+      glint*=smoothstep(.40,.71,lanes)*smoothstep(.32,.66,windStrength);
+      glint*=.32+.68*smoothstep(-.5,.78,sin(crossPhase*.44+lanes));
+      diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82)*mix(.52,1.48,bayChop);
     `).replace('#include <fog_fragment>',`#include <fog_fragment>
       float distanceMist=smoothstep(38.,420.,length(vViewPosition));
       gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist*.97);`);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v3';
-  return horizon;
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v4';
+  return {bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

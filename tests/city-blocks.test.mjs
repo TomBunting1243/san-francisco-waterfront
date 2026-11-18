@@ -3,6 +3,22 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {bakeBlocks} from '../app/city-blocks.ts';
 
+test('baking preserves native material vertex paint while unpainted materials keep their own tint',()=>{
+  const panel=new THREE.PlaneGeometry(1,1);
+  const shades=[.12,.31,.55, .14,.29,.52, .62,.64,.54, .68,.66,.56];
+  panel.setAttribute('color',new THREE.Float32BufferAttribute(shades,3));
+  const clear=new THREE.MeshStandardMaterial({vertexColors:true,color:new THREE.Color(.7,.8,.9)});
+  const solid=new THREE.MeshStandardMaterial({color:'#d3c8a9'});
+  for(const material of [clear,solid]){
+    const [batch]=bakeBlocks([new THREE.Mesh(panel,material)],clear);
+    const attr=batch.geometry.getAttribute('color'),tint=material.color.toArray();
+    for(let v=0;v<4;v++){
+      const rgb=[attr.getX(v),attr.getY(v),attr.getZ(v)];
+      for(let c=0;c<3;c++)assert.ok(Math.abs(rgb[c]-tint[c]*(material.vertexColors?shades[v*3+c]:1))<=1/255);
+    }
+  }
+});
+
 test('static districts combine nearby sparse geometry while dense buildings and long terrain stay separate',()=>{
   const paint=new THREE.MeshStandardMaterial({color:'#a38977'});
   const box=new THREE.BoxGeometry(1,1,1);

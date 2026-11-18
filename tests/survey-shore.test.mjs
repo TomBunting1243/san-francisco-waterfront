@@ -3,6 +3,8 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {createLandscape} from '../app/landscape.ts';
 import {waterSurface} from '../app/water-surface.ts';
+import {bayReliefBankHeight,bayReliefGround} from '../app/bay-relief.ts';
+import {addSurveyShore} from '../app/survey-shore.ts';
 
 test('assembled waterfront has clear water under pile decks and a continuous retaining wall at Rincon',()=>{
   const world=createLandscape();
@@ -31,5 +33,25 @@ test('assembled waterfront has clear water under pile decks and a continuous ret
   for(const y of [-.1,-.45,minWater-.02]){
     const face=hit(-32,y,1.35,shoreward,.6);
     assert.ok(face&&Math.abs(face.z-1.051)<.004,'Rincon wall continues below tidal trough at '+y);
+  }
+  // Combine the shore and terrain exactly as in the full landscape, with roads
+  // and buildings out of the way to test the surface beneath them.
+  const bareGround=world.relief.root.children.filter(group=>group.name.includes('elevation'));
+  const material=new THREE.MeshStandardMaterial();
+  addSurveyShore((geometry,_color,x,y,z)=>{
+    const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);
+    mesh.updateMatrixWorld(true);bareGround.push(mesh);return mesh;
+  },bayReliefBankHeight);
+  for(const [name,x,z] of [
+    ['North Beach below the hills',65,-88],
+    ['South of Market',-60,-119],
+    ['inland of China Basin',-155,-128],
+    ['beyond the former inland survey extent',-60,-137],
+  ]){
+    const ground=bayReliefGround(x,z);
+    ray.set(new THREE.Vector3(x,-.004,z),down);ray.far=.70;
+    const visible=ray.intersectObjects(bareGround,true)[0]?.point.y;
+    assert.ok(ground<-.02,name+' has distinct ground elevation');
+    assert.ok(Math.abs(visible-ground)<.012,name+' visible ground follows the elevation sampler');
   }
 });

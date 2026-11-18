@@ -2,10 +2,17 @@ import * as THREE from 'three';
 import data from '../public/data/survey-shore.json' with {type:'json'};
 
 type Surface=(geometry:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
-const masks=new Map(Object.entries(data.submergedVertices).map(([key,indices])=>[key,new Set(indices)]));
+type Polygon=number[][][];
+type CoastalCell=[number,Polygon[],Polygon[]];
+const masks=new Map(Object.entries(data.tidalVertices).map(([key,indices])=>[key,new Set(indices)]));
+const cuts=new Map(Object.entries(data.coastalCells).map(([key,cells])=>[key,
+  new Map((cells as CoastalCell[]).map(([index,lower,upper])=>[index,[lower,upper] as const]))]));
 
-export function replacesReliefVertex(grid:string,index:number){
+export function isTidalVertex(grid:string,index:number){
   return masks.get(grid)?.has(index)??false;
+}
+export function surveyedCoastalCells(grid:string){
+  return cuts.get(grid);
 }
 
 function shape(rings:number[][][]){
@@ -15,19 +22,25 @@ function shape(rings:number[][][]){
   return outline;
 }
 
-export function addSurveyShore(mesh:Surface){
-  for(const rings of data.land){
-    const polygon=shape(rings);
-    const upper=-.01,bottom=-1.10;
-    const geometry=new THREE.ExtrudeGeometry(polygon,{depth:upper-bottom,bevelEnabled:false});
-    geometry.rotateX(-Math.PI/2);
-    const face=new THREE.Color('#89958b'),paving=new THREE.Color('#b9bba9');
-    const normals=geometry.attributes.normal,colors=new Float32Array(normals.count*3);
-    for(let i=0;i<normals.count;i++)(normals.getY(i)>.9?paving:face).toArray(colors,i*3);
-    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
-    geometry.userData.paintVertices=true;
-    mesh(geometry,'#ffffff',0,bottom,0).name='Continuous mapped San Francisco shoreline';
+export function addSurveyShore(mesh:Surface,bankHeight:(x:number,z:number)=>number){
+  // The clipped relief owns the surface of the mainland. Only the vertical
+  // bank face, coping and individually supported aprons are built here.
+  const vertices:number[]=[];
+  const bottom=-1.10;
+  for(const [[ax,az],[bx,bz]] of data.bankEdges){
+    const steps=Math.ceil(Math.hypot(bx-ax,bz-az)/.45);
+    for(let i=0;i<steps;i++){
+      const t=i/steps,u=(i+1)/steps;
+      const a=[THREE.MathUtils.lerp(ax,bx,t),THREE.MathUtils.lerp(az,bz,t)];
+      const b=[THREE.MathUtils.lerp(ax,bx,u),THREE.MathUtils.lerp(az,bz,u)];
+      const y1=bankHeight(a[0],a[1]),y2=bankHeight(b[0],b[1]);
+      vertices.push(a[0],bottom,a[1],b[0],bottom,b[1],b[0],y2,b[1],a[0],bottom,a[1],b[0],y2,b[1],a[0],y1,a[1]);
+    }
   }
+  const bank=new THREE.BufferGeometry();
+  bank.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+  bank.computeVertexNormals();
+  mesh(bank,'#89958b',0,0,0).name='Surveyed mainland retaining faces';
   // Carry the OSM park paving down to its surveyed wall with the same finished
   // level used by the raised lawn and the accessible promenade.
   for(const rings of data.rincon){

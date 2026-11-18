@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { landmarks, type Landmark } from './landmarks';
-import { pacificLighting } from './lighting';
+import { harborSunDirection, pacificLighting } from './lighting';
+import { readWaterfrontWeather } from './waterfront-weather';
 import SceneControls from './SceneControls';
 import { ferryPose, birdPose, sailingPose } from './motion';
 import {waterHeight} from './water-surface';
@@ -49,7 +50,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     reducedMotion.current = motionQuery.matches;
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky')]).then(([THREE, { createLandscape, createCityVignette },{createHarborSky}]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky')]).then(([THREE, { createLandscape, createCityVignette, setFerryClockTime },{createHarborSky}]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
@@ -60,10 +61,10 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.04;
       renderer.domElement.setAttribute('aria-hidden', 'true'); host.appendChild(renderer.domElement);
-      const scene = new THREE.Scene(); scene.background = new THREE.Color('#d6e4e6'); scene.fog = new THREE.Fog('#d6e4e6', 250, 470);
+      const scene = new THREE.Scene(); scene.background = new THREE.Color('#d6e4e6'); scene.fog = new THREE.Fog('#d6e4e6', 118, 465);
       const sky=streetView?null:createHarborSky();if(sky)scene.add(sky.dome);
       const camera = new THREE.PerspectiveCamera(20,1,.35,1800);
-      const ambient = new THREE.HemisphereLight('#ffffff','#94a8a3',2.5); scene.add(ambient);
+      const ambient = new THREE.HemisphereLight('#d5e5f2','#99a6b5',2.1); scene.add(ambient);
       const sun = new THREE.DirectionalLight('#fff0d2',3.2); sun.position.set(-30,55,28); sun.castShadow=true;
       const shadowSize=Math.min(renderer.capabilities.maxTextureSize,streetView?2048:4096);
       sun.shadow.mapSize.set(shadowSize,shadowSize);
@@ -71,7 +72,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       sun.shadow.camera.updateProjectionMatrix();sun.shadow.radius=2.3;
       sun.target.position.set(streetView&&variant==='street'?-32:-9,0,-7);scene.add(sun.target);
       sun.shadow.normalBias=.023; sun.shadow.bias=-.00008; scene.add(sun);
-      const fill = new THREE.DirectionalLight('#c6e1ef',.5); fill.position.set(40,20,-20); scene.add(fill);
+      const fill = new THREE.DirectionalLight('#bed8e9',.4); fill.position.set(40,20,-20); scene.add(fill);
       const world = streetView?createCityVignette(variant):createLandscape(); scene.add(world.root);
       let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
@@ -95,6 +96,26 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
       const mistTint=new THREE.Color(.93,.85,.70);
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
+      const marineGray=new THREE.Color('#b4c1c4'),rainWater=new THREE.Color('#687f86'),weatherTint=new THREE.Color();
+      const coastalHorizon=new THREE.Color(),stratusHorizon=new THREE.Color();
+      const weatherTarget=new THREE.Vector4(0,0,0,465),weatherNow=weatherTarget.clone();
+      const windTarget=new THREE.Vector2(.188,.982);
+      let chopTarget=.5,nextWeatherCheck=0,weatherSettling=false;
+      function refreshWeather(){
+        void readWaterfrontWeather().then(observation=>{
+          if(disposed)return;
+          weatherTarget.set(observation?.cloudCover??0,observation?.rain??0,observation?.fog??0,
+            observation?.visibilityKm!=null?THREE.MathUtils.clamp(26+observation.visibilityKm*60,44,465):465);
+          const bearing=observation?.windFromDegrees;
+          if(bearing!=null){const [x,,z]=harborSunDirection(bearing,0);windTarget.set(x,z);}
+          else windTarget.set(.188,.982);
+          chopTarget=observation?.windKph!=null?THREE.MathUtils.clamp(observation.windKph/32,.04,1):.5;
+          host.dataset.weather=observation?'local':'unavailable';
+          if(observation){host.dataset.weatherAt=observation.observedAt;host.dataset.weatherSource=observation.station;}
+          else {delete host.dataset.weatherAt;delete host.dataset.weatherSource;}
+          weatherSettling=true;lastVisual='';requestFrame();
+        });
+      }
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
       const starData=starfieldData();
       const starGeometry=new THREE.BufferGeometry();starGeometry.setAttribute('position',new THREE.BufferAttribute(starData.positions,3));starGeometry.setAttribute('color',new THREE.BufferAttribute(starData.colors,3));
@@ -261,6 +282,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(interval&&now+.8<nextDraw){requestFrame();return;}
         nextDraw=interval?now+interval-Math.max(0,now-nextDraw)%interval:now;
         const dt=lastDraw?Math.min((now-lastDraw)/1000,.12):1/60;lastDraw=now;
+        if(presented&&now>=nextWeatherCheck){nextWeatherCheck=now+15*60_000;refreshWeather();}
+        if(weatherSettling){
+          const step=reducedMotion.current||settings.current.paused?1:1-Math.exp(-dt*1.6);
+          weatherNow.lerp(weatherTarget,step);
+          if(!streetView){world.bayChop.value=THREE.MathUtils.lerp(world.bayChop.value,chopTarget,step);world.bayWind.value.lerp(windTarget,step);}
+          weatherSettling=Math.abs(weatherNow.w-weatherTarget.w)>.01||Math.abs(weatherNow.x-weatherTarget.x)+Math.abs(weatherNow.y-weatherTarget.y)+Math.abs(weatherNow.z-weatherTarget.z)>.001||(!streetView&&
+            (Math.abs(world.bayChop.value-chopTarget)>.001||world.bayWind.value.distanceToSquared(windTarget)>.00001));
+        }
+        const cloud=weatherNow.x,rain=weatherNow.y,fog=weatherNow.z;
         // A deliberately paced idle scene is not evidence that the GPU is struggling.
         if(!streetView&&movingCamera&&!settings.current.paused&&!reducedMotion.current){const nextQuality=qualityMonitor.sample(frameMs,now);if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}}
         const config=settings.current, still=config.paused;
@@ -295,19 +325,30 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
         const shadows=!economy&&quality>0&&duskAmount<.85;
         if(renderer.shadowMap.enabled!==shadows){renderer.shadowMap.enabled=shadows;if(shadows)renderer.shadowMap.needsUpdate=true;host.dataset.shadows=String(shadows);}
-        (scene.background as InstanceType<typeof THREE.Color>).lerp(skyColor,lightEase);
-        (scene.fog as InstanceType<typeof THREE.Fog>).color.copy(scene.background as InstanceType<typeof THREE.Color>);
+        const skyBackground=scene.background as InstanceType<typeof THREE.Color>;
+        skyBackground.lerp(weatherTint.copy(skyColor).lerp(marineGray,Math.max(cloud*.63,fog*.82)*(1-duskAmount)),lightEase);
+        const marineFog=scene.fog as InstanceType<typeof THREE.Fog>;
+        marineFog.near=Math.min(118,weatherNow.w*.36)*(1-fog*.30);
+        marineFog.far=weatherNow.w;
+        coastalHorizon.copy(skyBackground).lerp(mistTint,(1-duskAmount)*.53);
+        const horizonLight=coastalHorizon.r*.2126+coastalHorizon.g*.7152+coastalHorizon.b*.0722;
+        stratusHorizon.setRGB(.94-.12*duskAmount,.98-.04*duskAmount,1.015+.045*duskAmount).multiplyScalar(horizonLight*(1-rain*.12));
+        const ceiling=Math.max(cloud,rain*.84);
+        coastalHorizon.lerp(stratusHorizon,THREE.MathUtils.smoothstep(ceiling,.18,.88));
+        marineFog.color.copy(skyBackground).lerp(coastalHorizon,Math.max(ceiling,fog));
         // Edge haze is mixed after Three's output colour-space conversion.
         world.edgeFogColor.value.copy(scene.background as InstanceType<typeof THREE.Color>);
-        if(sky)world.edgeFogColor.value.lerp(mistTint,(1-duskAmount)*.53);
+        if(sky)world.edgeFogColor.value.copy(coastalHorizon);
         world.edgeFogColor.value.convertLinearToSRGB();
         world.nightInk.value=duskAmount;world.lampGlow.opacity=duskAmount*.96;
         world.coffeeMaterial.emissiveIntensity=duskAmount*2.6;
         world.bridgeLightMaterial.opacity=duskAmount*.8;world.roadLightMaterial.opacity=duskAmount;world.streetcarGlazing.emissiveIntensity=duskAmount*.7;world.streetcarLamp.emissiveIntensity=.35+duskAmount*1.3;
         world.waterMaterial.roughness=.49+duskAmount*.18;
-        world.waterMaterial.color.lerp(waterColor,lightEase);world.windowMaterial.emissiveIntensity=duskAmount*2.15;
-        ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,lighting.ambient*.78,lightEase);
-        sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity,lightEase);sun.color.lerp(sunColor,lightEase);fill.intensity=.4+duskAmount*.25;
+        world.waterMaterial.color.lerp(weatherTint.copy(waterColor).lerp(rainWater,Math.max(cloud*.56,rain*.72)*(1-duskAmount)),lightEase);
+        world.windowMaterial.emissiveIntensity=duskAmount*2.15;
+        ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,lighting.ambient*(.78+cloud*.15),lightEase);
+        sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity*(1-Math.max(cloud*.88,fog*.79)),lightEase);
+        sun.color.lerp(sunColor,lightEase);fill.intensity=.32+duskAmount*.29;
         if(shadows&&!streetView){
           // Fixed extents avoid shadow crawl during orbit. A closer investigation can use all
           // shadow texels around the chosen address, without updating the map every frame.
@@ -320,25 +361,21 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             sun.shadow.camera.updateProjectionMatrix();renderer.shadowMap.needsUpdate=true;
           }
         }
-        const azimuth=lighting.azimuth*Math.PI/180;
-        sun.position.set(Math.sin(azimuth)*60,Math.max(5,Math.sin(lighting.altitude*Math.PI/180)*75),-Math.cos(azimuth)*60).add(sun.target.position);
+        const [sunX,sunY,sunZ]=lighting.direction;
+        sun.position.set(sunX,Math.max(.085,sunY),sunZ).normalize().multiplyScalar(86).add(sun.target.position);
         if(sky){
           sky.dome.position.copy(camera.position);
           sky.uniforms.skyTint.value.copy(scene.background as InstanceType<typeof THREE.Color>);
           sky.uniforms.sunTint.value.copy(sun.color);
-          sky.uniforms.sunDirection.value.set(Math.sin(azimuth)*Math.cos(lighting.altitude*Math.PI/180),Math.sin(lighting.altitude*Math.PI/180),-Math.cos(azimuth)*Math.cos(lighting.altitude*Math.PI/180));
+          sky.uniforms.sunDirection.value.set(sunX,sunY,sunZ);
           sky.uniforms.nightAmount.value=duskAmount;
-          world.bayHorizon.value.copy(sky.uniforms.skyTint.value).lerp(mistTint,(1-duskAmount)*.53).convertLinearToSRGB();
+          sky.uniforms.cloudCover.value=cloud;sky.uniforms.rainAmount.value=rain;
+          sky.uniforms.coastalHorizon.value.copy(coastalHorizon);
+          world.bayHorizon.value.copy(coastalHorizon).convertLinearToSRGB();
         }
         const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.closest('main')?.setAttribute('data-harbor-light',duskAmount>.55?'dark':'light');host.parentElement?.style.setProperty('--world-ink',ink);host.parentElement?.style.setProperty('--world-halo',duskAmount>.55?'#132536':'#cddbdd');lastInk=ink;}
-        starMaterial.opacity=Math.max(0,(duskAmount-.55)*1.8);stars.visible=!streetView&&starMaterial.opacity>.001;
-        world.clockHands.forEach(({minute,hour,angle})=>{
-          for(const [hand,t,length] of [[minute,lighting.minutes/60*Math.PI*2,.47],[hour,(lighting.hours%12+lighting.minutes/60)/12*Math.PI*2,.36]] as const){
-            const xx=Math.sin(t)*length/2, yy=Math.cos(t)*length/2;
-            hand.position.set(1+Math.sin(angle)*1.28+Math.cos(angle)*xx,6.15+yy,-.1+Math.cos(angle)*1.28-Math.sin(angle)*xx);
-            hand.rotation.set(0,angle,-t);
-          }
-        });
+        starMaterial.opacity=Math.max(0,(duskAmount-.55)*1.8)*(1-cloud)*(1-fog);stars.visible=!streetView&&starMaterial.opacity>.001;
+        setFerryClockTime(world.clockHands,lighting.hours,lighting.minutes);
         const motionChanged=elapsed!==lastMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         if(motionChanged||viewerChanged){
@@ -395,7 +432,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             bubble.current.style.visibility=p.visible?'visible':'hidden';
           }
         }
-        if(!streetView)world.relief.update(elapsed,duskAmount,.58,world.bayHorizon.value);
+        if(!streetView)world.relief.update(elapsed,duskAmount,.74-.2*duskAmount,world.bayHorizon.value,weatherNow.w);
         world.waterTime.value=elapsed;
         if(!streetView)world.updateMarina();
         world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,boat.rotation.y));

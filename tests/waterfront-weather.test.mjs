@@ -1,0 +1,77 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createWaterfrontWeatherReader} from '../app/waterfront-weather.ts';
+
+const minute=60_000,initial=Date.parse('2026-11-18T19:24:00Z');
+function setup(){
+  const f={time:initial,calls:0,data:{
+    visibility:{metadata:{id:'9414296'},data:[{t:'2026-11-18 19:18',v:'4.89',f:'0,0,0'}]},
+    wind:{metadata:{id:'9414311'},data:[{t:'2026-11-18 19:18',s:'1.8',d:'288.0',f:'0,0'}]},
+    sky:{properties:{updateTime:'2026-11-18T18:27:03Z',
+      skyCover:{values:[{validTime:'2026-11-18T13:00:00Z/PT6H',value:48},{validTime:'2026-11-18T19:00:00Z/PT1H',value:98}]},
+      weather:{values:[{validTime:'2026-11-18T12:00:00Z/PT9H',value:[{coverage:'definite',intensity:'moderate',weather:'rain_showers'}]}]}}}
+  }};
+  f.store=new Map();
+  f.options={now:()=>f.time,storage:{getItem:k=>f.store.get(k),setItem:(k,v)=>f.store.set(k,v)},
+    request:async url=>{
+      f.calls++;
+      const product=new URL(url).searchParams.get('product')??'sky';
+      const payload=f.data[product];
+      return new Response(JSON.stringify(payload??{}),{status:payload?200:503});
+    }};
+  f.read=createWaterfrontWeatherReader(f.options);
+  return f;
+}
+
+test('NOAA Pier 17 and Pier 1 units and the NWS valid-hour forecast compose once across callers',async()=>{
+  const f=setup();
+  assert.equal(f.calls,0);
+  const [a,b]=await Promise.all([f.read(),f.read()]);
+  assert.deepEqual(a,b);assert.equal(f.calls,3);
+  assert.equal(a.visibilityKm,4.89);assert.equal(a.windKph,6.48);assert.equal(a.windFromDegrees,288);
+  assert.equal(a.station,'9414296+9414311');assert.equal(a.observedAt,'2026-11-18T19:18:00.000Z');
+  assert.equal(a.cloudCover,.98);assert.equal(a.rain,.66);
+  assert.ok(a.fog>0&&a.fog<.5);assert.ok(a.cloudKnown&&a.rainKnown);
+  await f.read();assert.equal(f.calls,3);
+});
+
+test('Each product expires independently across reloads, missing feeds and forecast-window boundaries',async()=>{
+  const f=setup();await f.read();f.data={};f.time+=37*minute;
+  const read=createWaterfrontWeatherReader(f.options),cached=await read();
+  assert.equal(cached.windFromDegrees,288);
+  assert.equal(cached.cloudKnown,false,'19:00 one-hour cloud forecast expired');
+  assert.equal(cached.rainKnown,true,'12:00 nine-hour rain period still applies');
+  f.time+=4*minute;const forecast=await read();
+  assert.equal(forecast.station,'MTR/86,106');assert.equal(forecast.visibilityKm,null);assert.equal(forecast.windKph,null);
+  assert.equal(forecast.fog,0);assert.equal(forecast.rain,.66);assert.equal(forecast.observedAt,'2026-11-18T18:27:03.000Z');
+  f.time+=59*minute;assert.equal(await read(),null,'Expired forecast periods cannot extend a complete outage');
+});
+
+test('Flagged data, malformed numbers, stale or future times and mismatched stations are excluded',async()=>{
+  const f=setup();f.data.sky.properties.updateTime='2026-11-17T18:00:00Z';f.data.visibility.data[0].f='0,1,0';f.data.wind.data[0].s='';
+  assert.equal(await f.read(),null);
+  f.time+=minute;f.data.wind.data[0].s='0';f.data.wind.data[0].t='2026-11-18 19:50';
+  f.data.visibility.data[0].f='0,0,0';f.data.visibility.metadata.id='other';
+  assert.equal(await f.read(),null);
+  f.time+=minute;f.data.wind.data[0].t='2026-11-18 19:18';
+  const calm=await f.read();
+  assert.equal(calm.windKph,0);assert.equal(calm.windFromDegrees,null);
+  assert.equal(calm.visibilityKm,null);assert.equal(calm.cloudKnown,false);assert.equal(calm.rainKnown,false);
+});
+
+test('Low measured visibility thickens fog and forecast chances alone do not manufacture rain',async()=>{
+  const f=setup();f.data.visibility.data[0].v='0.3';
+  f.data.sky.properties.weather.values[0].value[0].coverage='slight_chance';
+  const mist=await f.read();assert.ok(mist.fog>.85);assert.equal(mist.rain,0);assert.equal(mist.rainKnown,true);
+  f.time+=11*minute;f.data.visibility.data[0]={t:'2026-11-18 19:30',v:'15',f:'0,0,0'};
+  f.data.wind.data[0].d='bad';
+  const clear=await f.read();assert.equal(clear.fog,0);assert.equal(clear.windFromDegrees,null);
+});
+
+test('Empty offline result resolves within the abort budget and backs off after failure',async()=>{
+  const f=setup();let calls=0;
+  const read=createWaterfrontWeatherReader({...f.options,timeoutMs:10,request:(_url,{signal})=>new Promise((_resolve,reject)=>{
+    calls++;signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
+  })});
+  assert.equal(await read(),null);assert.equal(await read(),null);assert.equal(calls,3);
+});

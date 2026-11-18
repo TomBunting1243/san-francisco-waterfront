@@ -4,13 +4,23 @@ const pacificClock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_A
 const stops = [
   { altitude: -18, sky: 0x132536, water: 0x234857, sun: 0xaebfd5 },
   { altitude: -6, sky: 0x536780, water: 0x496b7e, sun: 0xe2af93 },
-  { altitude: 0, sky: 0xd6b5a6, water: 0x849da8, sun: 0xffba7a },
-  { altitude: 10, sky: 0xc5d6d8, water: 0x4e929f, sun: 0xffdfb0 },
-  { altitude: 35, sky: 0xb9dce7, water: 0x4b9aa8, sun: 0xfff1d5 },
+  { altitude: 0, sky: 0xd5b7a9, water: 0x849da8, sun: 0xffba7a },
+  { altitude: 10, sky: 0xc3d3d5, water: 0x4e929f, sun: 0xffdbab },
+  { altitude: 35, sky: 0xb8d5df, water: 0x4b9aa8, sun: 0xffedcd },
 ];
 const clamp = (v:number) => Math.max(0,Math.min(1,v));
 function mixColor(a:number,b:number,t:number){
   return [16,8,0].reduce((color,shift)=>color|(Math.round(((a>>shift)&255)*(1-t)+((b>>shift)&255)*t)<<shift),0);
+}
+
+const surveyBearing=Math.atan2(.03552029735,.04836012986);
+const northX=Math.cos(surveyBearing),northZ=Math.sin(surveyBearing);
+
+/** Rotate true-north solar bearings into the same east/north basis as the city survey. */
+export function harborSunDirection(azimuth:number,altitude:number):[number,number,number]{
+  const bearing=azimuth*Math.PI/180,elevation=altitude*Math.PI/180;
+  const east=Math.sin(bearing)*Math.cos(elevation),north=Math.cos(bearing)*Math.cos(elevation);
+  return [-northZ*east+northX*north,Math.sin(elevation),northX*east+northZ*north];
 }
 
 /** SunCalc 2 reports degrees. Clock formatting always uses Pacific time, with DST. */
@@ -25,9 +35,9 @@ export function pacificLighting(date = new Date()) {
   const parts=pacificClock.formatToParts(date);
   const hours=Number(parts.find(p=>p.type==='hour')!.value),minutes=Number(parts.find(p=>p.type==='minute')!.value);
   return {
-    altitude,azimuth,night,hours,minutes,
+    altitude,azimuth,night,hours,minutes,direction:harborSunDirection(azimuth,altitude),
     sky:mixColor(a.sky,b.sky,blend),water:mixColor(a.water,b.water,blend),sun:mixColor(a.sun,b.sun,blend),
-    ambient:2.3-night*1.65,sunIntensity:.15+2.9*clamp((altitude+4)/30),
+    ambient:2.10-night*1.39,sunIntensity:.15+3.04*clamp((altitude+4)/30),
     phase:altitude>=10?'day':altitude>=0?'golden-hour':altitude>=-6?'twilight':'night',
   };
 }

@@ -85,12 +85,14 @@ extras = unary_union(extra_decks)
 # Cap only genuine seawalls. Intersect the inboard offset with solid land so
 # corner joins follow the survey and never overhang a deck or navigable water.
 caps = land.intersection(unary_union(walls).buffer(.065, cap_style="flat", join_style="mitre"))
-# Remove all four vertices of every DEM cell touching the surveyed water.
-# The detailed horizontal land and retaining face replace the coarse terrain
-# at the boundary. Precomputing the mask also keeps scene creation inexpensive.
+# Cut only the triangles that cross the surveyed water. Retaining the original
+# cell diagonals lets the runtime sample the same terrain planes on either side
+# of the join. The exact survey replaces this edge, not the entire mainland.
 water = extent.difference(land)
-masked = {}
+clipped = {}
+tide_vertices = {}
 for grid in relief["grids"]:
+    cells = []
     indices = set()
     cols, rows, step = grid["cols"], grid["rows"], grid["step"]
     for row in range(rows-1):
@@ -101,12 +103,27 @@ for grid in relief["grids"]:
             x = grid["west"]+col*step
             if x+step < -122.435 or x > -122.37:
                 continue
-            cell = Polygon([project(p) for p in [(x,y),(x+step,y),(x+step,y+step),(x,y+step)]])
-            if water.intersects(cell):
-                i = row*cols+col
+            a, b, c, d = [project(p) for p in [(x,y),(x+step,y),(x,y+step),(x+step,y+step)]]
+            cell = Polygon([a,b,d,c])
+            if not water.intersects(cell):
+                continue
+            i = row*cols+col
+            # Land outside the surveyed extent retains the source DEM.
+            cells.append([i, rings(Polygon([a,b,c]).difference(water)), rings(Polygon([b,d,c]).difference(water))])
+            if land.intersects(cell):
                 indices.update([i,i+1,i+cols,i+cols+1])
-    if indices:
-        masked[grid["name"]] = sorted(indices)
+    if cells:
+        clipped[grid["name"]] = cells
+        tide_vertices[grid["name"]] = sorted(indices)
+
+# Exclude the artificial closing edges of the import crop. The remaining
+# shoreline segments include both seawalls and the inboard edges of pile decks.
+bank_edges = []
+for r in (land.exterior, *land.interiors):
+    for a, b in zip(r.coords, list(r.coords)[1:]):
+        line = LineString([a,b])
+        if line.length > .0001 and extent.boundary.distance(line.interpolate(.5, normalized=True)) > .0007:
+            bank_edges.append([list(map(lambda v: round(v, 4), p)) for p in (a,b)])
 
 # Only support the newly baked quay surfaces; named OSM piers have their own
 # bents, and the rebuilt ferry terminal owns its apron and floating landings.
@@ -130,6 +147,6 @@ for poly in parts(extras, "Polygon"):
 
 result = dict(source="NOAA NGS CUSP N35W125; OpenStreetMap contributors",
               sourceUrl="https://nsde.ngs.noaa.gov/", land=rings(land), caps=rings(caps), rincon=rings(rincon),
-              decks=rings(extras), piles=piles, submergedVertices=masked)
+              decks=rings(extras), piles=piles, coastalCells=clipped, tidalVertices=tide_vertices, bankEdges=bank_edges)
 (DATA / "survey-shore.json").write_text(json.dumps(result, separators=(",", ":"))+"\n")
 print("Survey area, land, unmodelled decks, cap area:", extent.area, land.area, extras.area, caps.area)

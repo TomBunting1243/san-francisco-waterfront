@@ -1,3 +1,4 @@
+import {addMarketStreet} from './market-street.ts';
 import {waterfrontPalm} from './waterfront-trees.ts';
 import * as THREE from 'three';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
@@ -247,10 +248,16 @@ export function ferryHall(font:Font) {
     words.computeBoundingBox();
     const bounds=words.boundingBox!,w=bounds.max.x-bounds.min.x;
     words.translate(-(bounds.min.x+bounds.max.x)/2,-bounds.min.y,0);
-    const paintedReturns=mesh(words.clone(),'#ab6659',x,.025,.009,waterfrontSign);
-    paintedReturns.scale.x=span/w;
-    const sign=mesh(words,'#c8c5b2',x,.025,.016,waterfrontSign);sign.name=label;
-    sign.scale.x=span/w;sign.scale.z=.35;
+    // Both finishes belong to the same extrusion. A second copy of the caps
+    // used to fall inside one depth-buffer step at normal orbit distances.
+    const normals=words.getAttribute('normal');
+    const colors=new Float32Array(normals.count*3);
+    const face=new THREE.Color('#b95e50'),returns=new THREE.Color('#87594f');
+    for(let i=0;i<normals.count;i++)(normals.getZ(i)>.99?face:returns).toArray(colors,i*3);
+    words.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    words.userData.paintVertices=true;
+    const sign=mesh(words,'#ffffff',x,.025,.009,waterfrontSign);sign.name=label;
+    sign.scale.x=span/w;
     const supportBase=.952;
     box(span+.052,.016,.026,x,.013,.003,'#728881',waterfrontSign);
     for(let station=-span/2+.026;station<=span/2;station+=.195){
@@ -262,16 +269,6 @@ export function ferryHall(font:Font) {
   }
   return {root,towerX,towerZ:(porticoZ+streetZ)/2+.24};
 }
-
-const marketAt=(z:number)=>{
-  const crossings=sfMap.roads.filter(road=>road.name==='Market Street').flatMap(road=>
-    road.p.slice(1).flatMap(([bx,bz],i)=>{
-      const [ax,az]=road.p[i];
-      if(az===bz||z<Math.min(az,bz)||z>Math.max(az,bz))return [];
-      return [ax+(bx-ax)*(z-az)/(bz-az)];
-    }));
-  return crossings.length?crossings.reduce((sum,x)=>sum+x,0)/crossings.length:.152*z+.019;
-};
 
 export function ferryPublicRealm() {
   const {root,box,mesh,slab,line}=builders('Ferry plaza and Market Street');
@@ -299,24 +296,10 @@ export function ferryPublicRealm() {
   // A widened pedestrian route meets Market at the terminal and stays clear of both palm rows.
   const spine=[[-.13,-1.813],[-.25,-2.31],[-.49,-3.05],[-.68,-4.6],[-.93,-6.48],[-1.36,-8.87],[-1.63,-10.1]];
   for(let i=1;i<spine.length;i++)line(spine[i-1],spine[i],.129,i<3?.98:1.14,.018,'#d7c9ae');
-  const marketZs=[-10.11,-10.98,-12.157,-15.404,-16.185,-18.898,-21.202,-23.189,-27.636,-28.948,-31.7,-35.543];
-  const market=marketZs.map(z=>[marketAt(z),z]);
-  const sidewalkStripe=(offset:number)=>market.map(([x,z])=>[x+offset,z]);
-  for(const side of [-1,1]){
-    const curb=sidewalkStripe(side*.64), outer=sidewalkStripe(side*.97);
-    slab([...curb,...outer.reverse()],.102,.089,'#bfb6a6');
-    for(let i=1;i<curb.length;i++)line(curb[i-1],curb[i],.105,.044,.036,'#d9cdb4');
-  }
-  for(let i=1;i<market.length;i++){
-    line(market[i-1],market[i],.069,1.27,.024,'#839694');
-    for(const track of [-.27,.27])for(const offset of [-.073,.073]){
-      const a=market[i-1],b=market[i];
-      line([a[0]+track+offset,a[1]],[b[0]+track+offset,b[1]],.086,.014,.012,'#bfc4b6');
-    }
-  }
-  const lamps=[-2.05,-4.1,-7.45,-10.51,-13.1,-15.2,-17.6,-20.75,-24.1,-27.25,-30.3,-34];
-  for(const z of lamps)for(const side of [-1,1]){
-    const streetX=z>-10?-.13+z*.133:marketAt(z);
+  addMarketStreet(mesh,root);
+  // The Ferry Building's forecourt has its own single-head plaza lights.
+  for(const z of [-2.05,-4.1,-7.45])for(const side of [-1,1]){
+    const streetX=-.13+z*.133;
     const x=streetX+side*(z>-10?.83:.90), y=z>-6.3?.135:.106;
     mesh(new THREE.CylinderGeometry(.018,.035,.64,7),metal,x,y+.32,z);
     box(.067,.082,.064,x,y+.049,z,metal);

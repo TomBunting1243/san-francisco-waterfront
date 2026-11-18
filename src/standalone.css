@@ -4,3 +4,8 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 .standalone-credit{padding:12px 24px;font-size:11px;line-height:1.6;color:#29434a;background:#e3e9df}.standalone-credit a{text-decoration:underline;text-underline-offset:3px}
+@media(prefers-color-scheme:dark){
+  :root{color-scheme:dark}
+  html,body,#root,main{background:#213647}
+  .standalone-credit{color:#d7e1dd;background:#21323a}
+}

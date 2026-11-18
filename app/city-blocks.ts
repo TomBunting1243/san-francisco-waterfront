@@ -60,11 +60,13 @@ export function bakeBlocks(meshes: PaintedMesh[], material: THREE.MeshStandardMa
     const colors = new Uint8Array(vertices * 3);
     const signLights = parts.some(mesh=>mesh.userData.signLight) ? new Uint8Array(vertices * 3) : null;
     const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
+    const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
     let vertex = 0, face = 0;
     for (const mesh of parts) {
       const geometry = mesh.geometry, pos = geometry.attributes.position, n = geometry.attributes.normal;
+      if(facadeGrid)facadeGrid.set(geometry.getAttribute('facadeGrid').array,vertex*4);
       const {r,g,b} = mesh.material.color;
-      const paint = geometry.userData.paintVertices ? geometry.attributes.color : undefined;
+      const paint = mesh.material.vertexColors || geometry.userData.paintVertices ? geometry.attributes.color : undefined;
       const light = mesh.userData.signLight as [number,number,number]|undefined;
       if (signLights && light) {
         const [r,g,b]=light.map(value=>Math.round(value*255));
@@ -96,6 +98,7 @@ export function bakeBlocks(meshes: PaintedMesh[], material: THREE.MeshStandardMa
     geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
     geo.setAttribute('normal',new THREE.BufferAttribute(normals,3,true));
     geo.setAttribute('color',new THREE.BufferAttribute(colors,3,true));
+    if(facadeGrid)geo.setAttribute('facadeGrid',new THREE.BufferAttribute(facadeGrid,4));
     if(signLights)geo.setAttribute('signLight',new THREE.BufferAttribute(signLights,3,true));
     geo.setIndex(new THREE.BufferAttribute(indices,1));
     geo.computeBoundingBox(); geo.computeBoundingSphere();

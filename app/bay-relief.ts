@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import reliefData from '../public/data/bay-relief.json' with { type: 'json' };
-import { replacesReliefVertex } from './survey-shore.ts';
+import { isTidalVertex, surveyedCoastalCells } from './survey-shore.ts';
 import { waterSurface } from './water-surface.ts';
 
 type Location = readonly [longitude: number, latitude: number];
@@ -120,16 +120,41 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
   // Downtown's detailed streets and landmarks share a level datum in the original map.
   const downtown = Math.min(x + 96, 67 - x, z + 99, 14 - z);
   const blend = THREE.MathUtils.smoothstep(downtown, -9, 0);
-  if (y > -.04) y = THREE.MathUtils.lerp(y, -.04, blend);
-  if (replacesReliefVertex(grid.name, row * grid.cols + col)) y = Math.min(y, waterSurface.level - .36);
+  if (meters > 0 || y > -.04) y = THREE.MathUtils.lerp(y, -.04, blend);
+  if (isTidalVertex(grid.name, row * grid.cols + col)) y = Math.max(y, -.04);
   return { x, y, z, lng, lat, meters };
+}
+
+function reliefHeight(grid:HeightGrid,lng:number,lat:number){
+  return sample(grid, lng, lat, (col, row) => surfaceVertex(grid, col, row).y);
+}
+
+/** Height of the clipped relief along the surveyed bank, including its boundary. */
+export function bayReliefBankHeight(x:number,z:number){
+  const [lng,lat]=geographicPosition(x,z);
+  return reliefHeight(applicableGrid(lng,lat),lng,lat);
+}
+
+function withinRing(points:number[][],x:number,z:number){
+  let inside=false;
+  for(let i=0,j=points.length-1;i<points.length;j=i++){
+    const [ax,az]=points[j],[bx,bz]=points[i];
+    if((az>z)!==(bz>z)&&x<(bx-ax)*(z-az)/(bz-az)+ax)inside=!inside;
+  }
+  return inside;
 }
 
 /** Local support height for paths, footprints and the bridge abutment. */
 export function bayReliefGround(x: number, z: number) {
   const [lng, lat] = geographicPosition(x, z);
   const grid = applicableGrid(lng, lat);
-  return sample(grid, lng, lat, (col, row) => surfaceVertex(grid, col, row).y);
+  const u=THREE.MathUtils.clamp((lng-grid.west)/grid.step,0,grid.cols-1);
+  const v=THREE.MathUtils.clamp((lat-grid.south)/grid.step,0,grid.rows-1);
+  const col=Math.min(grid.cols-2,Math.floor(u)),row=Math.min(grid.rows-2,Math.floor(v));
+  const cuts=surveyedCoastalCells(grid.name)?.get(row*grid.cols+col);
+  if(cuts&&!cuts[u-col+v-row<=1?0:1].some(([outer,...holes])=>
+    withinRing(outer,x,z)&&!holes.some(ring=>withinRing(ring,x,z))))return waterSurface.level-.36;
+  return reliefHeight(grid,lng,lat);
 }
 
 class ColoredTriangles {
@@ -163,9 +188,11 @@ function landColor({lng, lat, meters, x, z}: ReturnType<typeof surfaceVertex>, c
   if (parks.some(area => contains(area, lng, lat))) color.lerp(park, .80);
   else {
     // Muted lowland tones behind the separately mapped neighborhoods.
-    if ((lng < -122.38 && lat < 37.81 && lat > 37.71) || (lng > -122.32 && lat < 37.91 && lat > 37.72)) {
-      color.lerp(built, (1 - THREE.MathUtils.smoothstep(meters, 32, 125)) * .77);
-    }
+    const westCity=(1-THREE.MathUtils.smoothstep(lng,-122.389,-122.377))*
+      THREE.MathUtils.smoothstep(lat,37.70,37.72)*(1-THREE.MathUtils.smoothstep(lat,37.804,37.826));
+    const eastCity=THREE.MathUtils.smoothstep(lng,-122.326,-122.314)*
+      THREE.MathUtils.smoothstep(lat,37.71,37.73)*(1-THREE.MathUtils.smoothstep(lat,37.90,37.92));
+    color.lerp(built,Math.max(westCity,eastCity)*(1-THREE.MathUtils.smoothstep(meters,32,125))*.77);
     if (lng > -122.38 && lng < -122.354 && lat > 37.814 && lat < 37.836 && meters < 12) {
       color.lerp(coastColor, .42);
     }
@@ -181,6 +208,8 @@ function terrain(grid: HeightGrid, material: THREE.Material) {
   const blocks = new Map<string, { index: number[]; bounds: THREE.Box3 }>();
   const position = new THREE.Vector3();
   const color = new THREE.Color();
+  const cuts=surveyedCoastalCells(grid.name),nearshore=new ColoredTriangles();
+  const shoreTint=new THREE.Color(),tintA=new THREE.Color(),tintB=new THREE.Color(),tintC=new THREE.Color();
   for (let i = 0; i < grid.cols * grid.rows; i++) {
     const point = surfaceVertex(grid, i % grid.cols, Math.floor(i / grid.cols));
     vertices.set([point.x, point.y, point.z], i * 3);
@@ -191,6 +220,36 @@ function terrain(grid: HeightGrid, material: THREE.Material) {
       const lng = grid.west + (col + .5) * grid.step, lat = grid.south + (row + .5) * grid.step;
       if (applicableGrid(lng, lat) !== grid) continue;
       const a = row * grid.cols + col, b = a + 1, c = a + grid.cols, d = c + 1;
+      const cut=cuts?.get(a);
+      if(cut){
+        for(const [half,[first,second,third]] of [[a,b,c],[b,d,c]].entries()){
+          tintA.fromArray(colors,first*3);tintB.fromArray(colors,second*3);tintC.fromArray(colors,third*3);
+          for(const [outer,...holes] of cut[half]){
+            const path=(ring:number[][])=>ring.map(([x,z])=>new THREE.Vector2(x,-z));
+            const border=path(outer),inners=holes.map(path);
+            const faces=THREE.ShapeUtils.triangulateShape(border,inners);
+            const points=[border,...inners].flat().map(({x,y})=>{
+              const z=-y,[longitude,latitude]=geographicPosition(x,z);
+              const u=(longitude-grid.west)/grid.step-col,v=(latitude-grid.south)/grid.step-row;
+              const [w1,w2,w3]=half===0?[1-u-v,u,v]:[1-v,u+v-1,1-u];
+              const height=w1*vertices[first*3+1]+w2*vertices[second*3+1]+w3*vertices[third*3+1];
+              const tint=shoreTint.copy(tintA).multiplyScalar(w1);
+              tint.r+=w2*tintB.r+w3*tintC.r;
+              tint.g+=w2*tintB.g+w3*tintC.g;
+              tint.b+=w2*tintB.b+w3*tintC.b;
+              return {x,z,height,tint:tint.clone()};
+            });
+            for(const face of faces){
+              if(face.every(i=>points[i].height<waterSurface.level-.15))continue;
+              for(const i of face){
+                const {x,z,height,tint}=points[i];
+                nearshore.vertex(x,height,z,tint);
+              }
+            }
+          }
+        }
+        continue;
+      }
       if (Math.max(vertices[a * 3 + 1], vertices[b * 3 + 1], vertices[c * 3 + 1], vertices[d * 3 + 1]) < waterSurface.level - .15) continue;
       indices.push(a, b, c, b, d, c);
       const key = Math.floor(col / blockSize) + ',' + Math.floor(row / blockSize);
@@ -208,6 +267,11 @@ function terrain(grid: HeightGrid, material: THREE.Material) {
   // Keep shared normals at tile boundaries while giving each surface tile its own culling bounds.
   const group = new THREE.Group();
   group.name = grid.name + ' elevation';
+  if(nearshore.positions.length){
+    const mesh=new THREE.Mesh(nearshore.geometry(),material);
+    mesh.name='Survey-clipped coastal terrain';
+    group.add(mesh);
+  }
   for (const { index, bounds } of blocks.values()) {
     const tile = new THREE.BufferGeometry();
     for (const [name, attribute] of Object.entries(geometry.attributes)) tile.setAttribute(name, attribute);
@@ -427,6 +491,7 @@ export function createBayRelief() {
   root.name = 'San Francisco Bay relief';
   const horizon = { value: new THREE.Color('#e2dfcc').convertLinearToSRGB() };
   const mistAmount = { value: 0 };
+  const visibilityFalloff = { value: 0 };
   const nightAmount = { value: 0 };
 
   function material(options: THREE.MeshStandardMaterialParameters, start: number, coastal = false) {
@@ -434,6 +499,7 @@ export function createBayRelief() {
     mat.onBeforeCompile = shader => {
       shader.uniforms.reliefHorizon = horizon;
       shader.uniforms.reliefMist = mistAmount;
+      shader.uniforms.reliefVisibilityFalloff = visibilityFalloff;
       shader.uniforms.reliefNight = nightAmount;
       if (coastal) {
         shader.vertexShader = 'varying float reliefHeight;\n' + shader.vertexShader.replace('#include <begin_vertex>', `
@@ -443,12 +509,13 @@ export function createBayRelief() {
       }
       shader.fragmentShader = `
         uniform vec3 reliefHorizon;
-        uniform float reliefMist, reliefNight;
+        uniform float reliefMist, reliefNight, reliefVisibilityFalloff;
         ${coastal ? 'varying float reliefHeight;' : ''}
       ` + shader.fragmentShader.replace('#include <fog_fragment>', `
         float depth = length(vViewPosition);
         float aerial = 1. - exp(-max(0.,depth - ${start.toFixed(1)}) * mix(.0009, .0022, reliefMist));
         float fade = max(aerial * mix(.89, .67, reliefNight), smoothstep(1120.,1450.,depth));
+        fade = max(fade, 1. - exp(-max(0., depth-12.) * reliefVisibilityFalloff));
         ${coastal ? `
           float lowShore = 1. - smoothstep(.06, .55, reliefHeight);
           float coastalAir = smoothstep(120., 445., depth) * lowShore;
@@ -474,9 +541,10 @@ export function createBayRelief() {
   plane.rotation.set(0, -Math.atan2(approachDirection.z, approachDirection.x),
     Math.atan2(approachDirection.y, Math.hypot(approachDirection.x, approachDirection.z)), 'YXZ');
   root.add(plane);
-  function update(time: number, night: number, mist: number, horizonColor?: THREE.Color) {
+  function update(time: number, night: number, mist: number, horizonColor?: THREE.Color, visibilityRange=465) {
     nightAmount.value = THREE.MathUtils.clamp(night, 0, 1);
     mistAmount.value = THREE.MathUtils.clamp(mist, 0, 1);
+    visibilityFalloff.value = 2.8 * Math.max(0, 1 / Math.max(28, visibilityRange) - 1 / 465);
     if (horizonColor) horizon.value.copy(horizonColor);
     const approachTime = time % 210 - 18;
     plane.visible = approachTime > 0 && approachTime < approachDuration;
