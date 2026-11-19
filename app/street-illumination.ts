@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {signalAspects} from './waterfront-signals.ts';
+export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
 
 const width=768,height=656,minX=-56,minZ=-64,pitch=.12;
@@ -39,17 +41,6 @@ export function createSignalHousings(){
     }
   }
   return a.bake('SFMTA signal standards at Mission and Washington');
-}
-
-export function signalAspects(elapsed:number):[number,number]{
-  const t=THREE.MathUtils.euclideanModulo(elapsed,64);
-  // Illustrative four-second amber and two-second all-red clearances.
-  if(t<32)return [2,0];
-  if(t<36)return [1,0];
-  if(t<38)return [0,0];
-  if(t<58)return [0,2];
-  if(t<62)return [0,1];
-  return [0,0];
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){

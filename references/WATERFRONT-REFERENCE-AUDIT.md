@@ -302,3 +302,19 @@ The opening Vallejo boat is always approaching the terminal. A visit samples the
 ### 455 Market Street
 
 At First and Market, the low Market wing and rear office tower share a deep, two-story granite arcade. Smoked-glass bays project between rose-colored piers. The roof survey places the main deck 96.36 m above the adjoining street and the tallest modeled equipment around 100.45 m. Correcting the tower’s former 160 m height lets its neighbors screen it from most waterfront viewpoints. [City architectural survey](https://sfplanning.s3.amazonaws.com/archives/CDG/docs/transit_center/Survey_A_and_B_forms.pdf) · [Owner’s photographs and floor plans](https://www.455marketstreet.com/application/files/4516/0737/4472/455_Market_-_December_2020_-_Full_Floor_Availabilities.pdf) · [USGS 3D Elevation Program](https://www.usgs.gov/3d-elevation-program)
+
+### 500 Folsom and its First Street entrances
+
+At 500 Folsom, five slightly offset volumes rise above two planted podiums. The First Street frontage has a covered pedestrian passage, a garage entrance and a blue stair joint between bronze and ivory bays. The main roof measures approximately 127.5 m above local grade, with rooftop equipment reaching 136 m. The stepped silhouette, gardens and panel fields follow the aerial and elevation survey. Balcony details on the partly hidden rear elevation are reconstructed. [Fougeron’s photographs and podium plan](https://www.fougeron.com/500-folsom-transbay-block-9-1) · [SOM’s tower photographs](https://www.som.com/projects/500-folsom-street/) · [USGS and NOAA’s 2023 elevation survey](https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/ept.json)
+
+### Traffic at Mission and Washington
+
+The main waterfront carriageways follow the same green, amber and red phases as the signal heads. Three through-lane stop positions are traced from the 2024 city aerial. At northbound Mission the crossing edge provides an estimate where the stripe is obscured. The cycle timing, traffic volume and queue lengths are illustrative. [San Francisco municipal aerial imagery](https://tile.sf.gov/) · [SFMTA signal inventory](https://data.sfgov.org/Transportation/Traffic-Signals/ybh5-27n2)
+
+### 275 Battery Street
+
+Embarcadero Center West has five stepped roof sections. The gables rise toward a broad central ridge about 128 m above the surrounding streets. Reflective glazing runs between paired warm granite piers. The deep Battery Street lobby and the smaller Sacramento Street openings occupy different depths behind the stone base. Rooflight divisions, fans and the service entrance are approximate. [Building owner’s exterior photographs](https://275batterystreet.com/) · [Owner’s floor plans](https://275batterystreet.com/wp-content/uploads/275Battery-Floorplans-Download-1.pdf) · [City field survey, page 179](https://commissions.sfplanning.org/hpcpackets/2021-002874DES.pdf#page=179)
+
+### 425 Market Street
+
+Folded aluminum spandrels shade the tower’s narrow glazed bays. The roof survey places the main deck at 151.75 m above local grade. The parapet rises to 154.55 m and the highest equipment to about 160 m. Five large cooling fans line the roof. The adjoining public garden has two granite paving colors, tree wells and seating. Furniture below the canopy and small equipment brackets follow photographic estimates. [Building manager](https://www.425marketstreet.info/main.cfm?pid=aboutprop&sid=introduction) · [SPUR’s public-space field guide, page 6](https://www.spur.org/sites/default/files/2013-10/popos-guide.pdf#page=6) · [City aerial](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167777/405236)

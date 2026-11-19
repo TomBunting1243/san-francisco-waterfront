@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
 import {streetPose} from './streets.ts';
+import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
+import {streetVehicleNose} from './street-vehicles.ts';
 import {harborDatum} from './water-surface.ts';
 import {rinconPoint} from './rincon-park.ts';
 
@@ -134,30 +136,56 @@ export function waterfrontWalker(time:number,index:number,region?:Region){
   throw new RangeError('Unknown waterfront walker');
 }
 
-// Cars share a monotonic flow within each direction. Unequal headways make
-// small groups, while the speed modulation preserves their order at wraparound.
+// Distance is measured along the scene x station; across the two signal
+// envelopes the lane gradient is under .12. The same elapsed time can be
+// sampled out of order or while paused without changing any vehicle's state.
 export const waterfrontCarCount=(region?:Region)=>region?20:56;
-const laneGap=[.61,1.02,.83,4.62,.68,1.55,5.88];
-function trafficPhases(count:number){
-  const starts:number[]=[];
-  let total=0;
-  for(let i=0;i<count;i++){starts.push(total);total+=laneGap[i%laneGap.length];}
-  return starts.map(p=>p/total);
-}
-const cityPhases=trafficPhases(waterfrontCarCount()/2),vignettePhases=trafficPhases(waterfrontCarCount('street')/2);
-// Sample the surveyed carriageways once. Animation only interpolates the two
-// adjacent stations instead of searching all road segments for every vehicle.
 const streetStart=-80,streetEnd=80,step=.10;
 const carriageways=[-1,1].map(direction=>Array.from({length:1601},(_,i)=>streetPose(streetStart+i*step,direction)));
-export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-66,-11]:region==='plaza'?[-26,37]:[streetStart,streetEnd];
+export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-26,37]:[streetStart,streetEnd];
+const reactionDelay=[0,1.12,2.6,4.05,5.42,6.85,8.28]; // response delay accumulated down a queue
+const queueSpace=[0,.65,1.33,1.98,2.71,3.36,4.06]; // allowance to the front bumper in scene units
+
+// Constant acceleration and braking meet a steady-speed middle section.
+// The final position holds until the next scheduled green departure.
+function drive(time:number,length:number,speed:number){
+  const accel=.155,brake=.195,rise=speed/accel,fall=speed/brake;
+  const end=length/speed+(rise+fall)*.5;
+  if(time<=0)return 0;
+  if(time<rise)return .5*accel*time*time;
+  if(time<end-fall)return speed*(time-.5*rise);
+  if(time<end)return length-.5*brake*(end-time)**2;
+  return length;
+}
+
 export function waterfrontCar(time:number,index:number,region?:Region){
-  const [start,end]=waterfrontRoadRange(region),span=end-start,direction=index%2?1:-1;
-  const phases=region?vignettePhases:cityPhases;
-  const u=phases[Math.floor(index/2)] + (direction>0?.16:.42)+time*(direction>0?.74:-.81)/span;
-  const cycle=u+.008*Math.sin(6*Math.PI*u+(direction>0?0:1));
-  const x=start+span*(cycle-Math.floor(cycle)),station=(x-streetStart)/step;
-  const i=Math.min(carriageways[0].length-2,Math.floor(station)),lane=carriageways[direction>0?1:0],a=lane[i],b=lane[i+1];
-  return {x,z:THREE.MathUtils.lerp(a.z,b.z,station-i),y:.04025,heading:a.heading};
+  const [start,end]=waterfrontRoadRange(region),north=Boolean(index%2),dir=north?1:-1;
+  const lines=north?roadStopLines.north:roadStopLines.south;
+  const single=region==='street';
+  const gateA=dir*(single||north?lines.mission:lines.washington);
+  const gateB=dir*(north?lines.washington:lines.mission);
+  const cycles=region?2:4,perGroup=waterfrontCarCount(region)/(2*cycles);
+  const number=Math.floor(index/2),rank=number%perGroup,pack=Math.floor(number/perGroup);
+  const release=1.0+(north?.18:.85)+reactionDelay[rank];
+  const lap=cycles*signalPeriod,phase=((time-release+pack*signalPeriod)%lap+lap)%lap;
+  // Each cutaway extends beyond its framed city blocks. An instance leaves the
+  // modeled road, stays hidden during the return to the inlet, then starts its
+  // next through trip. Never move a visible instance across the waterfront.
+  const inlet=north?start:-end,outlet=north?end:-start,transfer=6.5;
+  const circuit=outlet-inlet+transfer;
+  const fromA=single||phase<signalPeriod;
+  const from=fromA?gateA:gateB;
+  const to=fromA&&!single?gateB:gateA+circuit;
+  const speed=fromA&&!single?(north?.725:.76):region==='plaza'?.91:region==='street'?.81:.85;
+  const elapsed=fromA?phase:phase-signalPeriod;
+  const station=from+drive(elapsed,to-from,speed)-streetVehicleNose(index)-.05-queueSpace[rank];
+  const at=station-inlet;
+  const k=(at%circuit+circuit)%circuit;
+  const span=outlet-inlet,active=k<span;
+  const along=active?inlet+k:outlet-(k-span)/transfer*span;
+  const x=dir*along,u=Math.max(0,Math.min(1600,(x-streetStart)/step));
+  const i=Math.min(1599,Math.floor(u)),lane=carriageways[north?1:0],a=lane[i],b=lane[i+1];
+  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:.04025,heading:a.heading,active};
 }
 
 export function waterfrontCyclist(time:number,index:number){

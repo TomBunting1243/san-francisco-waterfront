@@ -19,10 +19,11 @@ export function createWaterfrontTraffic(paint:THREE.MeshStandardMaterial,region?
     batch.receiveShadow=true;root.add(batch);
     return batch;
   });
-  const pose=new THREE.Object3D();pose.scale.setScalar(.25);
+  const pose=new THREE.Object3D();
   function update(elapsed:number){
     for(let i=0;i<count;i++){
       const p=waterfrontCar(elapsed,i,region);
+      pose.scale.setScalar(p.active ? .25 : 0);
       pose.position.set(p.x,p.y,p.z);pose.rotation.y=p.heading;pose.updateMatrix();
       traffic[i%types].setMatrixAt(Math.floor(i/types),pose.matrix);
     }

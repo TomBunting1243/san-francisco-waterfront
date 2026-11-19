@@ -16,6 +16,9 @@ const profiles = [
 // Street and bridge vehicles both apply .25, giving the map scale of .06 units/metre.
 const metresToModel = .24;
 const roadOffset = .055;
+// The front bumper projects 0.014 m beyond the body half length. Both traffic
+// batches use quarter-scale meshes, yielding scene units here.
+export const streetVehicleNose=(index:number)=>(profiles[index%profiles.length].length/2+.014)*metresToModel*.25;
 
 class VehiclePaint {
   private readonly vertices: number[] = [];

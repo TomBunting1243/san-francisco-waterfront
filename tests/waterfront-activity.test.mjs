@@ -29,12 +29,12 @@ test('both road directions keep varied headways and move forward through the cur
     const count=waterfrontCarCount(region);
     for(const t of [0,5,22,143,9141]){
       for(const parity of [0,1]){
-        const lane=Array.from({length:count/2},(_,i)=>waterfrontCar(t,2*i+parity,region).x).sort((a,b)=>a-b);
+        const lane=Array.from({length:count/2},(_,i)=>waterfrontCar(t,2*i+parity,region)).filter(p=>p.active).map(p=>p.x).sort((a,b)=>a-b);
         const gaps=lane.slice(1).map((p,i)=>p-lane[i]);
         assert.ok(Math.min(...gaps)>.60&&Math.max(...gaps)>4*Math.min(...gaps));
         for(let i=parity;i<count;i+=2){
           const p=waterfrontCar(t,i,region),q=waterfrontCar(t+.001,i,region);
-          assert.ok((q.x-p.x)*(parity?1:-1)>0);
+          if(p.active&&q.active)assert.ok((q.x-p.x)*(parity?1:-1)>=-1e-10);
         }
       }
     }
