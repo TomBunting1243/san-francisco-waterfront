@@ -1,3 +1,4 @@
+import {transitPassenger} from './transit-passenger.ts';
 import {pccCabDoorZ} from './pcc-layout.ts';
 import * as THREE from 'three';
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
@@ -144,51 +145,8 @@ export function washingtonRiderPose(t:number,tram:WashingtonTramPose=parked){
   return {x,z,y,walking,visible:t>=-30,yaw:body.heading+turn,bodyHeading:body.heading,turn,pitch,grip};
 }
 
-// The operator's camera passes within a metre of this rider. Shape the coat,
-// jaw, cuffs and cap in the same four rigid pieces as the walking figure.
-function washingtonPassenger(){
-  const root=new THREE.Group(),torso=new StreetAssembly(),legs=new StreetAssembly(),arm=new StreetAssembly();
-  const coat='#946e50',skin='#bd906d',wool='#564941',up=new THREE.Vector3(0,1,0);
-  function rings(a:StreetAssembly,profile:number[][],depth:number,ink:string,x:number,y:number,z:number,n=8){
-    const g=new THREE.LatheGeometry(profile.map(([radius,height])=>new THREE.Vector2(radius,height)),n);
-    a.add(g.scale(1,1,depth),ink,x,y,z);
-  }
-  function sleeve(a:StreetAssembly,from:number[],to:number[],r0:number,r1:number){
-    const start=new THREE.Vector3(...from),axis=new THREE.Vector3(...to).sub(start),mid=start.addScaledVector(axis,.5);
-    const mesh=a.add(new THREE.CylinderGeometry(r1,r0,axis.length(),6,1,true),coat,mid.x,mid.y,mid.z);
-    mesh.quaternion.setFromUnitVectors(up,axis.normalize());
-  }
-  function oval(a:StreetAssembly,x:number,y:number,z:number,w:number,h:number,d:number,ink:string){
-    a.add(new THREE.SphereGeometry(1,6,3).scale(w,h,d),ink,x,y,z);
-  }
-  rings(torso,[[.143,.78],[.177,.89],[.185,1.20],[.212,1.285],[.088,1.36]],.69,coat,0,0,0);
-  rings(torso,[[.082,1.332],[.076,1.425]],.88,'#89684f',0,0,0);
-  rings(torso,[[.046,1.399],[.087,1.433],[.111,1.516],[.106,1.606],[.068,1.642]],.90,skin,0,0,.006);
-  rings(torso,[[.111,1.563],[.116,1.593],[.091,1.647],[0,1.671]],1.02,wool,0,0,-.003);
-  oval(torso,0,1.581,.081,.114,.019,.079,'#4a423c');
-  // Just a nose plane and the shadow below the cap at this scale.
-  torso.add(new THREE.ConeGeometry(.025,.067,4),'#b78967',0,1.512,.108).rotation.x=.29;
-  for(const side of [-1,1])torso.add(new THREE.PlaneGeometry(.025,.005),'#725e50',side*.047,1.544,.095).rotation.y=side*.34;
-  sleeve(torso,[.171,1.29,0],[.215,1.068,.012],.077,.056);
-  sleeve(torso,[.215,1.068,.012],[.206,.884,.055],.056,.041);
-  oval(torso,.206,.866,.060,.038,.055,.042,skin);
-  sleeve(arm,[.026,.003,0],[-.10,-.195,.107],.075,.054);
-  sleeve(arm,[-.10,-.195,.107],[-.125,-.060,.187],.054,.042);
-  oval(arm,-.125,-.05,.201,.045,.051,.04,skin);
-  legs.box(0,-.208,0,.13,.42,.15,'#4c5962');legs.box(0,-.58,0,.115,.36,.14,'#515c60');
-  legs.box(0,-.772,.045,.135,.085,.24,'#514c46');
-  const first=legs.bake('Walking leg'),second=first.clone(),gripping=arm.bake('Washington rider gripping arm');
-  first.position.set(-.083,.817,0);second.position.set(.083,.817,0);gripping.position.set(-.195,1.28,0);
-  root.add(torso.bake('Passenger in a brimmed cap'),first,second,gripping);
-  function stride(t:number,walking:boolean,grip:number){
-    first.rotation.x=walking?.37*Math.sin(5.6*t):.014;second.rotation.x=-first.rotation.x;
-    gripping.rotation.x=(1-grip)*1.18;
-  }
-  return {root,stride};
-}
-
 export function createWashingtonPlatforms(){
-  const root=new THREE.Group(),rider=washingtonPassenger();root.name='Washington F-line station';
+  const root=new THREE.Group(),rider=transitPassenger('brimmed cap');root.name='Washington F-line station';
   for(const side of sides)root.add(washingtonIsland(side));
   rider.root.name='Washington front-door passenger';rider.root.scale.setScalar(.06);root.add(rider.root);
   const basis=new THREE.Euler(0,0,0,'YXZ'),yaw=new THREE.Quaternion(),up=new THREE.Vector3(0,1,0);

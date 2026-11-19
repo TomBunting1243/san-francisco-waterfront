@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {createLandscape,createCityVignette} from '../app/landscape.ts';
-import {createStreetField,createStreetIllumination,waterfrontSignals,signalAspects} from '../app/street-illumination.ts';
+import {createStreetField,createStreetIllumination,createSignalHousings,signalLensCenter,waterfrontSignals,signalAspects} from '../app/street-illumination.ts';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
 import grades from '../public/data/promenade-light-grades.json' with {type:'json'};
 import {addSurveyBlocks} from '../app/survey-blocks.ts';
@@ -17,12 +17,40 @@ const compile=mat=>{
 };
 test('representative SFMTA heads stand on the surveyed curb; main and cross traffic clear to all red',()=>{
   const parts=[];addSurveyBlocks(g=>{const m=new T.Mesh(g,new T.MeshBasicMaterial({side:T.DoubleSide}));parts.push(m);return m;});
-  for(const head of waterfrontSignals){
+  for(const head of waterfrontSignals.filter(h=>!h.mount)){
     const hit=new T.Raycaster(new T.Vector3(head.x,.12,head.z),new T.Vector3(0,-1,0),0,.13).intersectObjects(parts)[0];
     assert.ok(hit&&Math.abs(hit.point.y-head.y)<.0003);
   }
   assert.deepEqual([0,32,36,38,58,62,64].map(signalAspects),[[2,0],[1,0],[0,0],[0,2],[0,1],[0,0],[2,0]]);
 });
+test('both Market carriageways see the main aspect from upstream, including their overhead heads',()=>{
+  const market=waterfrontSignals.filter(h=>h.mount),housing=createSignalHousings();
+  const lighting=createStreetIllumination(new T.Group(),[],new T.MeshBasicMaterial()),field=createStreetField([]);
+  const lenses=lighting.lenses,colors=lenses.geometry.attributes.color;
+  const aspectColors=['#ff4938','#ffc444','#65d98e'].map(c=>new T.Color(c));
+  for(const [heading,roadZ] of [[-Math.PI/2,-2.95],[Math.PI/2,-5.75]]){
+    const group=market.filter(h=>Math.sign(h.heading)===Math.sign(heading));
+    assert.equal(group.length,3);
+    assert.equal(group.filter(h=>h.mount.arm).length,1);
+    for(const h of group){
+      const origin=new T.Vector3(h.x+1.8*Math.sin(heading),.11,roadZ);
+      for(const [time,aspect] of [[0,2],[33,1],[39,0],[60,0]]){
+        lighting.update(time,1);
+        const center=signalLensCenter(h,aspect),delta=center.clone().sub(origin);
+        const ray=new T.Raycaster(origin,delta.clone().normalize(),0,delta.length()+.03);
+        const face=ray.intersectObject(lenses)[0],back=ray.intersectObject(housing)[0];
+        assert.ok(face&&back&&face.distance<back.distance,'clear lens ahead of casing '+[h.x,h.z,time]);
+        assert.ok(face.point.distanceTo(center)<.00002);
+        assert.ok(new T.Vector3().fromBufferAttribute(colors,face.face.a).distanceTo(new T.Vector3(...aspectColors[aspect].toArray()))<.000001);
+        if(h.mount.arm)assert.ok(center.y-.04>4.8*.06,'clear height over traffic');
+        assert.ok(channelAt(field,center.x,center.z,1)>110);
+        assert.equal(channelAt(field,center.x,center.z,2),0);
+      }
+    }
+  }
+  field.dispose();lighting.dispose();housing.geometry.dispose();
+});
+
 test('field derives from the scene globes, is local, and reaches the same shader on buildings, people and buses',()=>{
   const scene=createLandscape(),globes=scene.streetGlobes,field=createStreetField(globes);
   const visible=scene.root.getObjectByName('Waterfront streetlamp halos').geometry.getAttribute('position');
@@ -93,7 +121,16 @@ test('field derives from the scene globes, is local, and reaches the same shader
   assert.ok(market.length>=60);
   for(const [x,,z] of market)assert.ok(channelAt(field,x,z)>235);
   assert.ok(channelAt(field,14,-35)===0);
-  for(const h of waterfrontSignals)assert.ok(channelAt(field,h.x,h.z,h.axis+1)>110);
+  scene.root.updateMatrixWorld(true);
+  for(const h of waterfrontSignals){
+    const p=signalLensCenter(h);
+    assert.ok(channelAt(field,p.x,p.z,h.axis+1)>110);
+    if(h.mount){
+      const base=new T.Raycaster(new T.Vector3(h.x+.009,.14,h.z),down,0,.2)
+        .intersectObject(scene.root,true).find(hit=>hit.face?.normal.y>.7)?.point.y;
+      assert.ok(Math.abs(base-h.y)<.003,'Market pole on actual landing '+[h.x,h.z,base,h.y]);
+    }
+  }
   const light=createStreetIllumination(scene.root,globes,scene.waterMaterial);
   const receiver=[scene.architectureChunks[0].material,scene.walkers.material,scene.transit.batch.material];
   for(const m of receiver){

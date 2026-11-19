@@ -19,7 +19,7 @@ test('fitted nose matches the actual painted front bumper across all four fleet 
 test('each through lane forms a stationary queue, clears on green, and preserves bumper clearance throughout a full lap',()=>{
   const dt=.10;
   for(const region of [undefined,'street','plaza']){
-    const count=waterfrontCarCount(region),maxTime=region?128:256;
+    const count=waterfrontCarCount(region),maxTime=region==='street'?128:region==='plaza'?192:320;
     let smallest=Infinity,maxAccel=0,largestStep=0;
     const events={};
     const prev=Array.from({length:count},(_,i)=>waterfrontCar(-dt,i,region));
@@ -41,7 +41,7 @@ test('each through lane forms a stationary queue, clears on green, and preserves
             if(line<start||line>end)continue;
             const key=name+d,event=events[key]??={cross:0,queue:0};
             const before=d*(old.x-line)+nose,now=d*(p.x-line)+nose;
-            const farLine=(d>0?roadStopLines.south:roadStopLines.north)[name];
+            const farLine=name==='market'?(d>0?.57:-1.40):(d>0?roadStopLines.south:roadStopLines.north)[name];
             if(signalAspects(t)[0]!==2)assert.ok(now<=0||d*(p.x-farLine)>=nose,
               `rear still in controlled intersection at ${t}, ${name}, car ${i}`);
             if(before<0&&now>=0){
@@ -63,7 +63,7 @@ test('each through lane forms a stationary queue, clears on green, and preserves
     assert.ok(smallest>.27,`tightest bumper gap ${smallest}`);
     assert.ok(maxAccel<.197,`impulse near a signal ${maxAccel}`);
     for(const event of Object.values(events)){assert.equal(event.cross,count/2);assert.ok(event.queue>=30);}
-    assert.equal(Object.keys(events).length,region==='street'?2:4);
+    assert.equal(Object.keys(events).length,region==='street'?2:6);
     console.log(region||'whole city',{smallest,maxAccel,largestStep,events});
   }
 });
@@ -72,7 +72,7 @@ test('outer road returns stay hidden in the render batch, and re-enter at the ro
   const paint=streetVehicleMaterial(),live=createWaterfrontTraffic(paint,'plaza');
   const m=new THREE.Matrix4(),[start,end]=waterfrontRoadRange('plaza');
   let hidden=0,enters=0;
-  for(let t=0;t<128;t+=.2){
+  for(let t=0;t<192;t+=.2){
     live.update(t);
     for(let i=0;i<20;i++){
       const p=waterfrontCar(t,i,'plaza'),prev=waterfrontCar(t-.2,i,'plaza');

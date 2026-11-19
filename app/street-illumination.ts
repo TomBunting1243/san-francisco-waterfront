@@ -1,12 +1,24 @@
 import * as THREE from 'three';
+import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
 import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
 
 const width=784,height=672,minX=-56,minZ=-64,pitch=.12;
 type Axis=0|1;
-type Signal={x:number;z:number;y:number;heading:number;axis:Axis};
+type MarketMount={offset:number;rise:number;shared:boolean;arm?:boolean};
+type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount};
 const fromSouth=-Math.PI/2+.13,fromNorth=Math.PI/2+.13,fromStreet=Math.PI;
+// SFMTA 9323000 (NB) and 9323500 (SB) are separate midblock controls.
+// Their inventory points identify cabinets, not mounting positions. The shared
+// curb standards follow the 2024 city ortho and the side / mast arrangement
+// follows the Planning field photo (2014-001363COA, PDF p.26) and the 2026
+// Hyatt view by Dllu. Arm reaches and heights are scaled from the photos.
+// https://commons.wikimedia.org/wiki/File:Ferry_Building_San_Francisco_from_Hyatt_Regency_with_R-Evolution_and_Bay_Bridge_2026_dllu.jpg
+function marketHead(index:number,heading:number,offset:number,arm=false):Signal{
+  const {x,y,z}=marketPedestrianHeads[index];
+  return {x,y,z,heading,axis:0,mount:{offset,rise:arm?1.38:-.47,shared:true,arm}};
+}
 // Intersection control is documented in SFMTA inventory objects 15277 and
 // 15451. Poles are registered to the adjacent curb/refuges on the 2024 city
 // ortho; each lens faces an approaching lane. The inventory gives each intersection, not individual pole coordinates.
@@ -17,22 +29,50 @@ export const waterfrontSignals:Signal[]=[
   {x:13.825,z:-2.21,y:.0449,heading:fromSouth,axis:0},
   {x:11.13,z:-3.95,y:.045,heading:fromNorth,axis:0},
   {x:13.78,z:-3.89,y:.045,heading:fromStreet,axis:1},
+  marketHead(0,-Math.PI/2,.88),marketHead(1,-Math.PI/2,-.44),
+  marketHead(3,-Math.PI/2,-4.9,true),
+  marketHead(4,Math.PI/2,-.44),marketHead(5,Math.PI/2,.44),
+  // Separate bowed Market-side mast beyond the west crossing, city ortho
+  // pixel ~145,649 in the registered crossing crop. Base seated on the final mapped paved surface.
+  {x:-1.902,z:-6.098,y:.031,heading:Math.PI/2+.04,axis:0,
+    mount:{offset:-5.1,rise:1.38,shared:false,arm:true}},
 ];
 function location(head:Signal,x:number,y:number,z:number){
   const s=Math.sin(head.heading),c=Math.cos(head.heading);
   return new THREE.Vector3(head.x+.06*(c*x+s*z),head.y+.06*y,head.z+.06*(-s*x+c*z));
 }
 const lensY=[4.56,4.19,3.82];
+function facePoint(h:Signal,x:number,y:number,z:number){
+  return location(h,x+(h.mount?.offset??.46)-.46,y+(h.mount?.rise??0),z);
+}
+export function signalLensCenter(h:Signal,aspect=1){return facePoint(h,.46,lensY[aspect],.185);}
 export function createSignalHousings(){
   const a=new StreetAssembly();
   for(const h of waterfrontSignals){
     const component=(u:number,y:number,v:number,w:number,d:number,t:number,color:string)=>{
-      const p=location(h,u,y,v);const m=a.box(p.x,p.y,p.z,w*.06,d*.06,t*.06,color);
+      const p=facePoint(h,u,y,v);const m=a.box(p.x,p.y,p.z,w*.06,d*.06,t*.06,color);
       m.rotation.y=h.heading;
     };
-    component(0,.09,0,.29,.18,.29,'#747f77');
-    const pole=a.add(new THREE.CylinderGeometry(.0052,.0069,.286,8),'#778880',h.x,h.y+.143,h.z);pole.castShadow=true;
-    component(.24,4.19,.04,.49,.085,.11,'#53635d');
+    if(h.mount){
+      const {offset,rise,arm,shared}=h.mount;
+      const start=shared ? .191 : 0,top=(arm?4.3:4.19+rise)*.06;
+      const ink='#426673';
+      a.add(new THREE.CylinderGeometry(.0035,shared ? .0035 : .0062,top-start,9),ink,h.x,h.y+(start+top)/2,h.z);
+      const strut=(p:THREE.Vector3,q:THREE.Vector3,r:number,t:number)=>{
+        const d=q.clone().sub(p),mid=p.clone().lerp(q,.5);
+        const rod=a.add(new THREE.CylinderGeometry(t,r,d.length(),8),ink,mid.x,mid.y,mid.z);
+        rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+      };
+      if(arm){
+        const tip=location(h,offset,4.19+rise+.47,0);
+        const arc=new THREE.QuadraticBezierCurve3(location(h,0,4.2,0),location(h,offset*.39,6.15,0),tip);
+        for(let k=0;k<5;k++)strut(arc.getPoint(k/5),arc.getPoint((k+1)/5),.0040-.00033*k,.00367-.00033*k);
+      }else strut(location(h,0,4.19+rise,0),location(h,offset,4.19+rise,.01),.0024,.0024);
+    }else{
+      component(0,.09,0,.29,.18,.29,'#747f77');
+      const pole=a.add(new THREE.CylinderGeometry(.0052,.0069,.286,8),'#778880',h.x,h.y+.143,h.z);pole.castShadow=true;
+      component(.24,4.19,.04,.49,.085,.11,'#53635d');
+    }
     component(.46,4.19,.06,.46,1.28,.16,'#65594b');
     component(.46,4.19,.155,.385,1.16,.042,'#343e3d');
     for(const y of lensY){
@@ -40,7 +80,8 @@ export function createSignalHousings(){
       for(const u of [.317,.603])component(u,y+.102,.23,.027,.10,.17,'#495247');
     }
   }
-  return a.bake('SFMTA signal standards at Mission and Washington');
+  addMarketPedestrianHousings(a);
+  return a.bake('SFMTA signal standards at Mission, Market and Washington');
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
@@ -74,7 +115,7 @@ export function createStreetField(globes:number[]){
     stamp(x,y,z,Math.min(1.2,y*3.25),0);
   }
   for(const h of waterfrontSignals){
-    const p=location(h,.46,4.19,.2);stamp(p.x,p.y,p.z,.42,1+h.axis,h.heading);
+    const p=signalLensCenter(h);stamp(p.x,p.y,p.z,.42,1+h.axis,h.heading);
   }
   const texture=new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat);
   texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;texture.needsUpdate=true;
@@ -89,17 +130,19 @@ function signalLenses(){
     const base=pos.length/3;
     for(let j=0;j<=10;j++){
       const a=j*2*Math.PI/10,r=j===10?0:.144;
-      pos.push(...location(h,.46+r*Math.cos(a),y+r*Math.sin(a),.185).toArray());tints.push(0,0,0);
+      pos.push(...facePoint(h,.46+r*Math.cos(a),y+r*Math.sin(a),.185).toArray());tints.push(0,0,0);
     }
     for(let j=0;j<10;j++)indices.push(base+10,base+j,base+(j+1)%10);
   }
-  const geo=new THREE.BufferGeometry();geo.setIndex(indices);
+  const updatePedestrians=appendMarketPedestrianFaces(pos,indices,tints);
+  const geo=new THREE.BufferGeometry();geo.setIndex(indices);geo.index!.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   const color=new THREE.Float32BufferAttribute(tints,3).setUsage(THREE.DynamicDrawUsage);geo.setAttribute('color',color);
   const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({vertexColors:true,toneMapped:false}));
   mesh.name='Operating SFMTA signal lenses';
   let previous=-1;
-  function update(aspects:[number,number],enabled:boolean){
+  function update(aspects:[number,number],enabled:boolean,elapsed:number){
+    updatePedestrians(geo.index!,elapsed,enabled);
     const key=enabled?aspects[0]*3+aspects[1]:9;if(key===previous)return;previous=key;
     let offset=0;
     for(const h of waterfrontSignals)for(let i=0;i<3;i++){
@@ -211,7 +254,7 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
   function update(elapsed:number,dusk:number,enabled=true,rain=0){
     const phase=signalAspects(elapsed);night.value=enabled?THREE.MathUtils.smoothstep(dusk,.12,.92):0;
     wet.value=rain;
-    main.value.copy(colors[phase[0]]);cross.value.copy(colors[phase[1]]);lenses.update(phase,enabled);
+    main.value.copy(colors[phase[0]]);cross.value.copy(colors[phase[1]]);lenses.update(phase,enabled,elapsed);
   }
   update(0,0);
   function setCabLamp(position:THREE.Vector3,direction:THREE.Vector3,intensity:number){

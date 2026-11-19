@@ -216,6 +216,49 @@ for path in paths:
 data['medianGates']=gates
 data['medianPaving']=[t for part in pieces(medianBand,'Polygon') for t in grid(part)]
 data['medianSlab']=[t for poly in pieces(plazaIslands.difference(medianBand),'Polygon') for t in tris(poly)]
+# The narrow northbound refuge has two curb ramps facing each other across
+# a 0.365-unit island. Give the granite the actual ramp triangles, leaving
+# the curb lips/gutters and the rest of the island in their original batch.
+from shapely import constrained_delaunay_triangles
+def add_ferry_refuge(data):
+    refuge_strip=strip(-2.96,-3.51,.81)
+    refuge_path=next(stations for id,_,stations in data['lines'] if id==3833285)
+    refuge=Polygon([p[:2] for p in refuge_path]).intersection(refuge_strip)
+    data['medianPaving']=[t for t in data['medianPaving'] if not -3.51<sum(p[1] for p in t)/3<-2.96]
+    refuge_paving=[]; refuge_aprons={}; margins=[]
+    def facets(area,height):
+        result=[]
+        for polygon in pieces(area,'Polygon'):
+            for facet in constrained_delaunay_triangles(polygon).geoms:
+                if facet.area<1e-12:continue
+                result.append([[round(x,7),round(height(x,z),7),round(z,7)] for x,z in list(facet.exterior.coords)[:3]])
+        return result
+    def curb_point(p,offset,y):
+        return (p[0]+p[2]*offset,p[1]+p[3]*offset,y)
+    for index,(a,b) in enumerate(zip(refuge_path,refuge_path[1:])):
+        back=.157 if min(a[4],b[4])<1 else .031
+        def section(p):
+            top=.0315+p[4]*.1524*.06
+            return [curb_point(p,.0023,.0315),curb_point(p,0,top),curb_point(p,-.011,top),curb_point(p,-back,.040644)]
+        sa,sb=section(a),section(b)
+        for j in range(3):
+            if not Polygon([p[:2] for p in (sa[j],sb[j],sb[j+1],sa[j+1])]).intersects(refuge_strip):continue
+            for A,B,C in [(sa[j],sb[j],sb[j+1]),(sa[j],sb[j+1],sa[j+1])]:
+                tri=Polygon([p[:2] for p in (A,B,C)])
+                if tri.area<1e-12:continue
+                margins.append(tri)
+                if j!=2:continue
+                dx,dz,dy=(B[i]-A[i] for i in range(3));ex,ez,ey=(C[i]-A[i] for i in range(3))
+                def height(x,z):
+                    t=((x-A[0])*ez-(z-A[1])*ex)/(dx*ez-dz*ex)
+                    u=(dx*(z-A[1])-dz*(x-A[0]))/(dx*ez-dz*ex)
+                    return A[2]+t*dy+u*ey
+                refuge_paving.extend(facets(tri.intersection(refuge_strip),height))
+                refuge_aprons.setdefault(index,[]).extend(facets(tri.difference(refuge_strip),height))
+    refuge_paving.extend(facets(refuge.difference(unary_union(margins)),lambda x,z:.040644))
+    data['ferryRefugePaving']=refuge_paving
+    data['ferryRefugeAprons']=refuge_aprons
+add_ferry_refuge(data)
 # Keep high plaza brick outside the graded former street entrance.
 west=strip(-6.249,-9.066,1.23)
 park=Polygon(next(v['p'] for v in sf['parks'] if v['name']=='Embarcadero Plaza'))

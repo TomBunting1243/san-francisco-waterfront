@@ -6,15 +6,24 @@ export const promenadeCrossings=paint.crossings;
 type Surface=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 export function addPromenadeCrossings(mesh:Surface){
   const tiles=new Map<number,number[]>();
-  for(const crossing of promenadeCrossings)for(const triangle of crossing){
+  const tones=new Map<number,number[]>();
+  for(const [leg,crossing] of promenadeCrossings.entries())for(const triangle of crossing){
     const [a,b,c]=triangle,tile=Math.floor(a[0]/12);
     let vertices=tiles.get(tile);if(!vertices)tiles.set(tile,vertices=[]);
     const up=(b[1]-a[1])*(c[0]-a[0])-(b[0]-a[0])*(c[1]-a[1]);
-    for(const [x,z,y] of up>=0?[a,b,c]:[a,c,b])vertices.push(x,y,z);
+    let colors=tones.get(tile);if(!colors)tones.set(tile,colors=[]);
+    for(const [x,z,y] of up>=0?[a,b,c]:[a,c,b]){
+      vertices.push(x,y,z);
+      // Faded off-white thermoplastic. Broad variation survives minification;
+      // the two interruptions visible in the aerial are cuts in the paint itself.
+      const fade=leg<paint.marketStart?1:.943+.038*Math.sin(7*z+1.4*x)+.016*Math.sin(4*x-11*z);
+      colors.push(fade,fade,fade);
+    }
   }
   for(const [tile,vertices] of tiles){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.computeVertexNormals();
+    g.setAttribute('color',new THREE.Float32BufferAttribute(tones.get(tile)!,3));g.userData.paintVertices=true;
     g.userData.roadPaint='Waterfront crossings';
     mesh(g,'#e1ddcd',0,0,0).name='Embarcadero crosswalk paint '+tile;
   }

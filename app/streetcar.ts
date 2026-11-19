@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {bakeRigidChunk} from './city-blocks.ts';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {addPccBody} from './pcc-body.ts';
-export {setPccFrontDoor} from './pcc-entrance.ts';
+export {setPccFrontDoor,setPccExitDoor} from './pcc-entrance.ts';
 
 import {pccDimensions,pccTruckHalfSpacing,pccAxleHalfSpacing} from './pcc-layout.ts';
 export {pccDimensions} from './pcc-layout.ts';

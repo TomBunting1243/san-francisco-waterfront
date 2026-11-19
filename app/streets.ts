@@ -73,12 +73,16 @@ export function buildStreetcarTrack(box:TrackBox,pole:TrackPole){
       pole(new THREE.Vector3(a,y0+wireRise,b),new THREE.Vector3(x,wireY,z),.0012,'#53645e').name='Contact wire';
       nextSupport-=len;
       if(nextSupport<=0){
+        nextSupport=1.8;
+        // The two stop_position nodes sit under the Ferry Terminal roofs;
+        // the intervening rail-crossing nodes are in the pedestrian crossing.
+        // The contact wire continues across them on the span-wire system.
+        if(Math.abs(x+.228)<.012||(original===trackCenterlines[0]&&x>.70&&x<3.1)||(original===trackCenterlines[1]&&x> -3.57&&x< -1.22))continue;
         // One cantilever per track, on the outside of the pair.
         const side=original===trackCenterlines[0]?1:-1;
         const sx=x+nx*side*.25,sz=z+nz*side*.25;
         pole(new THREE.Vector3(sx,.032,sz),new THREE.Vector3(sx,wireY+.04,sz),.0055,'#345564');
         pole(new THREE.Vector3(sx,wireY+.035,sz),new THREE.Vector3(x,wireY,z),.0028,'#345564');
-        nextSupport=1.8;
       }
     }
   }

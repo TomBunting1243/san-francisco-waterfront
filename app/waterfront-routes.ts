@@ -161,7 +161,7 @@ export function waterfrontWalker(time:number,index:number,region?:Region){
   throw new RangeError('Unknown waterfront walker');
 }
 
-// Distance is measured along the scene x station; across the two signal
+// Distance is measured along the scene x station; across the signal
 // envelopes the lane gradient is under .12. The same elapsed time can be
 // sampled out of order or while paused without changing any vehicle's state.
 export const waterfrontCarCount=(region?:Region)=>region?20:56;
@@ -189,7 +189,7 @@ export function waterfrontCar(time:number,index:number,region?:Region){
   const single=region==='street';
   const gateA=dir*(single||north?lines.mission:lines.washington);
   const gateB=dir*(north?lines.washington:lines.mission);
-  const cycles=region?2:4,perGroup=waterfrontCarCount(region)/(2*cycles);
+  const packs=region?2:4,cycles=single?packs:packs+1,perGroup=waterfrontCarCount(region)/(2*packs);
   const number=Math.floor(index/2),rank=number%perGroup,pack=Math.floor(number/perGroup);
   const release=1.0+(north?.18:.85)+reactionDelay[rank];
   const lap=cycles*signalPeriod,phase=((time-release+pack*signalPeriod)%lap+lap)%lap;
@@ -198,11 +198,12 @@ export function waterfrontCar(time:number,index:number,region?:Region){
   // next through trip. Never move a visible instance across the waterfront.
   const inlet=north?start:-end,outlet=north?end:-start,transfer=6.5;
   const circuit=outlet-inlet+transfer;
-  const fromA=single||phase<signalPeriod;
-  const from=fromA?gateA:gateB;
-  const to=fromA&&!single?gateB:gateA+circuit;
-  const speed=fromA&&!single?(north?.725:.76):region==='plaza'?.91:region==='street'?.81:.85;
-  const elapsed=fromA?phase:phase-signalPeriod;
+  const leg=single?0:Math.min(2,Math.floor(phase/signalPeriod));
+  const market=dir*lines.market;
+  const from=leg===0?gateA:leg===1?market:gateB;
+  const to=single||leg===2?gateA+circuit:leg===0?market:gateB;
+  const speed=!single&&leg<2?(north?.725:.76):region==='plaza'?.91:region==='street'?.81:.85;
+  const elapsed=phase-leg*signalPeriod;
   const station=from+drive(elapsed,to-from,speed)-streetVehicleNose(index)-.05-queueSpace[rank];
   const at=station-inlet;
   const k=(at%circuit+circuit)%circuit;

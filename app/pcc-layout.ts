@@ -6,5 +6,7 @@ export const pccDimensions={
 };
 export const pccLengthScale=pccDimensions.length/3.629;
 export const pccFrontDoorX=1.521,pccFrontLeafWidth=.410;
+export const pccExitX=-.275;
+export const pccExitSpacing=(pccFrontDoorX-pccExitX)*pccLengthScale/.06;
 export const pccCabDoorZ=(1.801-pccFrontDoorX)*pccLengthScale/.06-1.04;
 export const pccTruckHalfSpacing=.875,pccAxleHalfSpacing=.242;

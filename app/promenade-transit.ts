@@ -1,5 +1,6 @@
 import {streetcarPose} from './streets.ts';
 import {createWashingtonPlatforms,type WashingtonTramPose} from './washington-platform.ts';
+import {createFerryPassenger} from './ferry-stop-passenger.ts';
 import {ambientStreetcarCall} from './washington-call.ts';
 import * as THREE from 'three';
 import {museumReader} from './museum-gallery.ts';
@@ -239,11 +240,12 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const poses=new THREE.Group();
   const california=createCaliforniaCar();poses.add(california.car);
   const washington=createWashingtonPlatforms();poses.add(washington.root);
+  const ferryPassenger=createFerryPassenger();poses.add(ferryPassenger.rider);
   const photograph=plazaPhotograph();poses.add(photograph.pair);
   const museum=museumReader();poses.add(museum.frame);
   const diners=terreneDiners();poses.add(diners.root);
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
-  // Surveyed curb points. The F-line islands have a separate builder in market-street.ts.
+  // Curbside bus stops at the Steuart terminal. The F platforms occupy the waterfront median.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
   const market=stop('Steuart and Market sheltered terminal',-3.0284,-8.8519,Math.PI+steuartYaw,true,false);
   market.children[1].position.set(.98,0,-1.30);
@@ -280,7 +282,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const paint=material??model.body.material.clone();
   const {batch,sync}=batchTraffic(poses,paint,'Batched Muni vehicles, passengers and street furniture');
   // Geometry ranges follow the rigid-parts traversal. A single tag byte covers
-  // the cable car lamps and this one rider receiving local illumination.
+  // the cable car lamps and the two riders receiving local illumination.
   const geometries=new Set<THREE.BufferGeometry>();
   poses.traverse(part=>{if(part instanceof THREE.Mesh)geometries.add(part.geometry);});
   const packed=[...geometries];
@@ -289,28 +291,29 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   for(const {start,count,kind} of california.body.lightRanges){
     mask.fill(kind,range.vertexStart+start,range.vertexStart+start+count);
   }
-  washington.rider.traverse(part=>{
+  for(const [rider,tag] of [[washington.rider,4],[ferryPassenger.rider,5]] as const)rider.traverse(part=>{
     if(!(part instanceof THREE.Mesh))return;
     const region=batch.getGeometryRangeAt(packed.indexOf(part.geometry))!;
-    mask.fill(4,region.vertexStart,region.vertexStart+region.vertexCount);
+    mask.fill(tag,region.vertexStart,region.vertexStart+region.vertexCount);
   });
   batch.geometry.setAttribute('cableLight',new THREE.BufferAttribute(mask,1));
-  const dusk={value:0},headlamp={value:california.headlamp},riderLamp={value:washington.light};
+  const dusk={value:0},headlamp={value:california.headlamp},riderLamp={value:washington.light},exitLamp={value:ferryPassenger.light};
   const previous=paint.onBeforeCompile,program=paint.customProgramCacheKey();
   paint.onBeforeCompile=function(shader,renderer){
     previous.call(this,shader,renderer);
-    shader.uniforms.cableDusk=dusk;shader.uniforms.cableHeadlamp=headlamp;shader.uniforms.washingtonLamp=riderLamp;
+    shader.uniforms.cableDusk=dusk;shader.uniforms.cableHeadlamp=headlamp;shader.uniforms.washingtonLamp=riderLamp;shader.uniforms.exitLamp=exitLamp;
     // A plaza vignette can inherit the source shader hook, but owns its clock.
     if(shader.vertexShader.includes('attribute float cableLight;'))return;
     shader.vertexShader='attribute float cableLight; varying float vCableLight;\n'+shader.vertexShader.replace(
       '#include <begin_vertex>','#include <begin_vertex>\nvCableLight=cableLight;');
-    shader.fragmentShader='uniform vec4 washingtonLamp; uniform float cableDusk,cableHeadlamp; varying float vCableLight;\n'+shader.fragmentShader.replace(
+    shader.fragmentShader='uniform vec4 washingtonLamp,exitLamp; uniform float cableDusk,cableHeadlamp; varying float vCableLight;\n'+shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',`#include <emissivemap_fragment>
       if(vCableLight>3.5){
-        vec3 delta=((viewMatrix*vec4(washingtonLamp.xyz,1.)).xyz+vViewPosition)/.06;
+        vec4 source=vCableLight>4.5?exitLamp:washingtonLamp;
+        vec3 delta=((viewMatrix*vec4(source.xyz,1.)).xyz+vViewPosition)/.06;
         float d2=max(dot(delta,delta),.0001);
         float incidence=max(dot(normal,delta*inversesqrt(d2)),0.);
-        float received=(.40+(1.60*incidence+.24)/(.90+d2))*washingtonLamp.w*cableDusk;
+        float received=(.40+(1.60*incidence+.24)/(.90+d2))*source.w*cableDusk;
         totalEmissiveRadiance+=diffuseColor.rgb*vec3(1.,.88,.73)*received;
       }else if(vCableLight>0.5){
         vec3 lamp=vCableLight<1.5?vec3(.36,.22,.11):
@@ -321,9 +324,11 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   paint.customProgramCacheKey=()=>program.endsWith('|cal49')?program:program+'|cal49';
   function setNight(amount:number){dusk.value=THREE.MathUtils.clamp(amount,0,1);}
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
-  function update(elapsed:number,localMinutes=720,sheltered=false,date?:string,washingtonSeconds?:number,tram?:WashingtonTramPose){
+  function update(elapsed:number,localMinutes=720,sheltered=false,date?:string,washingtonSeconds?:number,tram?:WashingtonTramPose,ferrySeconds?:number){
     const fallback=tram&&washingtonSeconds!==undefined?undefined:ambientStreetcarCall(elapsed);
-    washington.update(washingtonSeconds??fallback!.t,tram??streetcarPose(fallback!.station));
+    const car=tram??streetcarPose(fallback!.station);
+    washington.update(washingtonSeconds??fallback!.t,car);
+    ferryPassenger.update(ferrySeconds??fallback?.passengerTime??-Infinity,elapsed,car);
     museum.update(elapsed,localMinutes,date);
     diners.update(elapsed,localMinutes,sheltered);
     california.update(elapsed,localMinutes);headlamp.value=california.headlamp;

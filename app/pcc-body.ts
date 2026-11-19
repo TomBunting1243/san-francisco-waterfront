@@ -1,4 +1,4 @@
-import {pccFrontDoorX,pccFrontLeafWidth,pccTruckHalfSpacing} from './pcc-layout.ts';
+import {pccFrontDoorX,pccFrontLeafWidth,pccTruckHalfSpacing,pccExitX} from './pcc-layout.ts';
 import * as THREE from 'three';
 import {StreetAssembly,createStreetPaint} from './street-amenities.ts';
 import {mountExteriorEntrance,pccTreads} from './pcc-entrance.ts';
@@ -44,7 +44,7 @@ export function addPccBody(group:THREE.Group,glazing:THREE.MeshStandardMaterial,
     material.customProgramCacheKey=()=> 'pcc-local-lens-pigment-v1';
   }
   const frontHalf=2*pccFrontLeafWidth*.06/group.scale.x,doorL=pccFrontDoorX-frontHalf,doorR=pccFrontDoorX+frontHalf;
-  const rearL=-.477,rearR=-.073;
+  const rearL=pccExitX-frontHalf,rearR=pccExitX+frontHalf;
   const layouts=(side:number)=>side===1?[[x0+.018,rearL-.008,5],[rearR+.008,doorL-.007,7]]:[[x0+.018,1.205,13],[1.222,x1+.012,1]];
   const through:Array<{side:number;a:number;b:number;x:number}>=[];
   for(const side of [-1,1])for(const [a,b,count] of layouts(side)){
@@ -239,30 +239,29 @@ export function addPccBody(group:THREE.Group,glazing:THREE.MeshStandardMaterial,
   fittings.box(-.38,1.041,0,.94,.053,.278,green);
   for(let i=0;i<10;i++)for(const side of [-1,1])fittings.box(-.81+i*.094,1.041,side*.140,.056,.023,.007,'#394d3e');
   for(const side of [-1,1])fittings.box(0,.917,side*.400,2.97,.010,.008,'#476b50');
-  fittings.box(-.01,.18,0,2.73,.16,.49,'#3c433e');
-  // Folding rear exit shown closed. The entrance ahead has a real stairwell
-  // behind the moving leaves, visible from the curb and from the driver's seat.
-  for(let i=0;i<4;i++){
-    const x=rearL+(i+.5)*(rearR-rearL)/4;
-    fittings.box(x,.47,.413,.102,.66,.016,cream);
-    fittings.box(x,.661,.424,.065,.247,.007,'#456059');
-    fittings.box(x,.352,.424,.062,.117,.007,'#627467');
+  for(const [a,b] of [[-1.375,rearL],[rearR,1.30]])fittings.box((a+b)/2,.18,0,b-a,.16,.49,'#3c433e');
+  // Each folding doorway opens above a recessed well and a floor continuous
+  // across the car. The thin skirt and rub rails end at the actual jambs.
+  const sy=.06/group.scale.y,sz=.06/group.scale.z,z=.42,far=-.371;
+  for(const [left,right] of [[doorL,doorR],[rearL,rearR]]){
+    for(const [i,tread] of pccTreads.entries()){
+      const outer=z-i*.21*sz,inner=outer-.21*sz,h=tread*sy;
+      skin.face([left,h,outer],[right,h,outer],[right,h,inner],[left,h,inner],'#837f68');
+      const lower=(i?pccTreads[i-1]:.30)*sy;
+      skin.face([left,lower,outer],[right,lower,outer],[right,h,outer],[left,h,outer],i?'#606650':steel);
+    }
+    for(const x of [left,right])skin.face([x,.38*sy,z],[x,.96*sy,z-.85*sz],[x,.82,z-.85*sz],[x,.82,z],cream);
+    skin.face([left,.96*sy,z-.84*sz],[right,.96*sy,z-.84*sz],[right,.96*sy,far],[left,.96*sy,far],'#596152');
+    // The header is low only at the outside jamb. Follow the pressed roof
+    // over the stairwell so it opens into the full-height saloon aisle.
+    const ceiling=[...bands.slice(6).map(([h,w])=>[w-.003,h-.009]),
+      ...bands.slice(7,-1).reverse().map(([h,w])=>[-w+.003,h-.009])];
+    for(let i=1;i<ceiling.length;i++){
+      const [a,h]=ceiling[i-1],[b,k]=ceiling[i];
+      skin.face([left,h,a],[right,h,a],[right,k,b],[left,k,b],'#cbbf9c');
+    }
+    fittings.box((left+right)/2,.398,far+.002,right-left,.14,.028,'#7c907a');
   }
-  const r=pccTreads,sy=.06/group.scale.y,sz=.06/group.scale.z;
-  const z=.42;
-  for(let i=0;i<4;i++){
-    const outer=z-i*.21*sz,inner=outer-.21*sz,h=r[i]*sy;
-    skin.face([doorL,h,outer],[doorR,h,outer],[doorR,h,inner],[doorL,h,inner],'#837f68');
-    const lower=(i?r[i-1]:.30)*sy;
-    skin.face([doorL,lower,outer],[doorR,lower,outer],[doorR,h,outer],[doorL,h,outer],i?'#606650':steel);
-  }
-  for(const x of [doorL,doorR])skin.face([x,.38*sy,z],[x,.96*sy,z-.85*sz],[x,.82,z-.85*sz],[x,.82,z],cream);
-  // Across an open entrance the aisle runs on into the car. Continue its floor
-  // to the far wall, with a cream ceiling, jamb and pair of seats in the bay.
-  const far=-.371;
-  skin.face([doorL,.96*sy,z-.84*sz],[doorR,.96*sy,z-.84*sz],[doorR,.96*sy,far],[doorL,.96*sy,far],'#596152');
-  skin.face([doorL,.816,far],[doorR,.816,far],[doorR,.816,z],[doorL,.816,z],'#cbbf9c');
-  fittings.box(pccFrontDoorX,.398,far+.002,.455,.14,.028,'#7c907a');
   skin.face([.55,.96*sy,.38],[doorL,.96*sy,.38],[doorL,.96*sy,far],[.55,.96*sy,far],'#596152');
   fittings.box(.866,.581,.129,.007,.365,.009,steel);
   fittings.box(1.24,.489,-.199,.16,.055,.17,'#647b69');

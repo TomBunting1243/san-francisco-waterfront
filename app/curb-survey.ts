@@ -18,6 +18,19 @@ type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number
 type Run=[number,number,number[][]];
 export const curbRuns=frostCurbRuns(data.lines as Run[]);
 export const medianPaving=data.medianPaving;
+export const ferryRefugePaving=data.ferryRefugePaving;
+// Sample the very same inclined stone facets that reach the renderer. This
+// keeps feet on the two curb cuts when the surveyed paving is regenerated.
+export function ferryRefugeGround(x:number,z:number){
+  for(const [a,b,c] of ferryRefugePaving){
+    const bx=b[0]-a[0],bz=b[2]-a[2],cx=c[0]-a[0],cz=c[2]-a[2];
+    const dx=x-a[0],dz=z-a[2],area=bx*cz-bz*cx;
+    if(Math.abs(area)<1e-10)continue;
+    const u=(dx*cz-dz*cx)/area,v=(bx*dz-bz*dx)/area;
+    if(u>=-1e-7&&v>=-1e-7&&u+v<=1.0000001)return a[1]+u*(b[1]-a[1])+v*(c[1]-a[1]);
+  }
+  return gutterTop;
+}
 export const bealeSidewalk=data.bealeWalk;
 export const bealeBeds=data.bealeBeds;
 export const westGradeCut=data.westCut, westParkPlans=data.westPark;
@@ -87,6 +100,10 @@ export function addSurveyCurbs(mesh:MeshFactory){
       }
       const a=profile(start),b=profile(end);
       for(let j=0;j<4;j++){
+        if(source===3833285&&j===3){
+          const outside=(data.ferryRefugeAprons as Record<string,number[][][]>)[i-1];
+          if(outside){for(const [p,q,r] of outside)triangle(p,q,r,'#c4b8a3');continue;}
+        }
         const cut=source===-202401&&j===3?apronCuts[i-1]:undefined;
         if(cut){
           for(const {warning,points:[p,q,r]} of cut)triangle(p,q,r,warning?'#bd9c55':'#c9c5b3');

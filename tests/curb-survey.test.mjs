@@ -80,3 +80,41 @@ test('Howard and Beale meets the actual painted landing, then widens past six pl
   assert.ok(Math.abs(at(690,419)[0].point.y-.045)<.0001,'no old curb running through the widened footway');
   assert.ok(Math.abs(at(990,400)[0].point.y-.061)<.0001,'low planting occupies the widening');
 });
+
+test('Harry Bridges northbound refuge has one finished surface through both sloped approaches and the waiting area',()=>{
+  const world=createLandscape();world.root.updateMatrixWorld(true);
+  const paving=world.root.getObjectByName('Market granite and herringbone promenade');
+  const limits=new THREE.Box3(new THREE.Vector3(-.361,.028,-3.46),new THREE.Vector3(-.062,.046,-3.025));
+  const floor=new THREE.Group(),box=new THREE.Box3();
+  for(const mesh of [...world.architectureChunks,paving]){
+    if(!box.setFromObject(mesh).intersectsBox(limits))continue;
+    const geo=mesh.geometry,pos=geo.attributes.position,tri=[new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()],points=[];
+    for(let i=0;i<geo.index.count;i+=3){
+      for(let n=0;n<3;n++)tri[n].fromBufferAttribute(pos,geo.index.getX(i+n)).applyMatrix4(mesh.matrixWorld);
+      if(!box.setFromPoints(tri).intersectsBox(limits))continue;
+      for(const p of tri)points.push(p.x,p.y,p.z);
+    }
+    if(points.length){
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
+      const part=new THREE.Mesh(g,material);part.name=mesh.name;floor.add(part);
+    }
+  }
+  floor.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.019);
+  for(const x of [-.3505,-.3107,-.2653,-.2013,-.1357,-.0973,-.0691]){
+    for(let i=0;i<155;i++){
+      const z=-3.4193+i*.00230;ray.ray.origin.set(x,.047,z);
+      const hits=ray.intersectObjects(floor.children).filter(h=>h.face.normal.y>.8);
+      assert.ok(hits.length,'no hole at '+[x,z]);
+      assert.ok(hits.length===1||hits[0].distance+.003<hits[1].distance,'competing surface at '+[x,z]);
+      if(z> -3.260&&z< -3.226){
+        assert.equal(hits[0].object.name,paving.name);
+        assert.ok(Math.abs(hits[0].point.y-medianTop)<.00001,'level central landing');
+      }
+    }
+  }
+  for(const [z,y] of [[-3.412,.03150],[-3.339,.03607],[-3.266,.040644],[-3.245,.040644],[-3.215,.040644],[-3.142,.03607],[-3.069,.03150]]){
+    assert.ok(Math.abs(down(floor.children,-.2001,z,.047)-y)<.00011,'physical curb profile at '+z);
+  }
+  for(const part of floor.children)part.geometry.dispose();
+});

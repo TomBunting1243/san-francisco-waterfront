@@ -56,7 +56,7 @@ test('each wiper turns on a sill-mounted spindle, freezes on pause and finishes 
     const hidden=root.children.find(m=>!m.visible)?.getObjectByName('Windshield wiper');
     const meshes=[];root.traverseVisible(o=>{if(o.isMesh)meshes.push(o)});
     assert.equal(meshes.length,mode==='tram'?3:2);
-    if(mode==='tram')assert.ok(meshes.some(m=>m.isInstancedMesh&&m.count===4),'one draw for all four folding leaves');
+    if(mode==='tram')assert.ok(meshes.some(m=>m.isInstancedMesh&&m.count===8),'one draw for both sets of four folding leaves');
     const pivot=wiper.getWorldPosition(new T.Vector3());
     const axis=new T.Vector3(0,0,1).transformDirection(wiper.parent.matrixWorld);
     const ray=new T.Raycaster(pivot.clone().addScaledVector(axis,.004),axis.clone().negate(),0,.009);

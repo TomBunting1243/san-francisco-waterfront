@@ -1,4 +1,4 @@
-export {setPccFrontDoor} from './streetcar.ts';
+export {setPccFrontDoor,setPccExitDoor} from './streetcar.ts';
 import {rinconGardenBorder} from './rincon-curb-edge.ts';
 import {createPromenadeTransit} from './promenade-transit.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
@@ -28,6 +28,7 @@ import {addSurveyBlocks,addSurveyFront,outsideSurveyRoads,surveyedHeight} from '
 import {hasShorelineFacade,shorelineFacade} from './shoreline-facades.ts';
 import * as THREE from 'three';
 import {buildStreetcarTrack} from './streets.ts';
+import {addFerryMarketPlatforms} from './ferry-market-platform.ts';
 import {bakePccBody,createStreetcar} from './streetcar.ts';
 import {createWaterfrontTraffic} from './waterfront-traffic.ts';
 import {createPlazaSkaters} from './plaza-skaters.ts';
@@ -544,6 +545,7 @@ export function createLandscape() {
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
   buildStreetcarTrack(box,pole);
+  addFerryMarketPlatforms(root);
   const ferryClock=ferryClockAt(new Date());
   const ferries=vessels.map((_,i)=>createServiceFerry(mesh,i));
   root.add(...ferries);

@@ -1,5 +1,5 @@
 import type {CabGeometry,CabPoint} from './ride-interior.ts';
-import {pccCabDoorZ,pccFrontLeafWidth} from './pcc-layout.ts';
+import {pccCabDoorZ,pccFrontLeafWidth,pccExitSpacing} from './pcc-layout.ts';
 import {pccTreads} from './pcc-entrance.ts';
 
 // Car 1051's interior photographed by Elizabeth K. Joseph, September 2011:
@@ -60,25 +60,29 @@ export function addPccSaloon(g:CabGeometry){
     rail([x+r-.035,-.165,z+.09],[x+r,-.28,z+.084],.013);
     g.cross(z-.18,x-.047,x+.047,floor,-.78,'#43524b',.66);
   }
-  // Split the saloon floor at the front entrance. The lowest tread is 38 cm
-  // above the rail and all three risers face the boarding island.
-  const start=pccCabDoorZ-2*pccFrontLeafWidth,end=pccCabDoorZ+2*pccFrontLeafWidth,lip=1.506,inside=lip-.84;
-  if(start>front)g.level(floor,left,right,front,start,'#53564a',.44);
-  g.level(floor,left,inside,start,end,'#53564a',.44);
-  g.level(floor,left,right,end,back,'#53564a',.44);
-  for(const z of [start,end]){
-    g.cross(z,inside,lip,.38-2.15,floor,'#72816b',.58);
-  }
-  for(let k=0;k<pccTreads.length;k++){
-    const edge=lip-.21*k,h=pccTreads[k]-2.15;
-    g.level(h,edge-.21,edge,start,end,'#767a67',.70);
-    g.level(h+.002,edge-.029,edge,start,end,'#beb496',.82);
-    g.side(edge,k?pccTreads[k-1]-2.15:h-.06,h,start,end,'#515d50',.52);
+  // The cab and both exits share the model's side elevation. Each tread
+  // replaces the cabin floor across its own well.
+  const wellCenters=[pccCabDoorZ,pccCabDoorZ+pccExitSpacing];
+  const half=2*pccFrontLeafWidth,lip=1.506,inside=lip-.84;
+  const sideSpans=[[front,wellCenters[0]-half],[wellCenters[0]+half,wellCenters[1]-half],[wellCenters[1]+half,back]];
+  for(const [a,b] of sideSpans)if(b>a)g.level(floor,left,right,a,b,'#53564a',.44);
+  for(const z of wellCenters){
+    const start=z-half,end=z+half;
+    g.level(floor,left,inside,start,end,'#53564a',.44);
+    for(const side of [start,end])g.cross(side,inside,lip,.38-2.15,floor,'#72816b',.58);
+    for(const [k,h] of pccTreads.entries()){
+      const edge=lip-.21*k,y=h-2.15;
+      g.level(y,edge-.21,edge,start,end,'#767a67',.70);
+      g.level(y+.002,edge-.029,edge,start,end,'#beb496',.82);
+      g.side(edge,k?pccTreads[k-1]-2.15:y-.06,y,start,end,'#515d50',.52);
+    }
   }
   const sidePanel=(x:number,lo:number,hi:number,a:number,b:number,tint:string,light:number)=>{
-    if(x<0||lo>.32||a>=end||b<=start){g.side(x,lo,hi,a,b,tint,light);return;}
-    if(a<start)g.side(x,lo,hi,a,start,tint,light);
-    if(b>end)g.side(x,lo,hi,end,b,tint,light);
+    if(x<0||lo>.32){g.side(x,lo,hi,a,b,tint,light);return;}
+    for(const [u,v] of sideSpans){
+      const start=Math.max(a,u),end=Math.min(b,v);
+      if(end>start)g.side(x,lo,hi,start,end,tint,light);
+    }
   };
   // Transverse ribs follow the formed roof between the clerestory and center spine.
   const arch=[[-1.2,.586],[-1.15,.75],[-.95,.87],[-.55,.953],[0,.979],[.55,.953],[.95,.87],[1.15,.75],[1.2,.586]];
@@ -98,7 +102,7 @@ export function addPccSaloon(g:CabGeometry){
   for(const [x,inward] of [[left,1],[right,-1]]){
     sidePanel(x,floor,-.47,front,back,'#7b907a',.66);
     sidePanel(x+inward*.005,-.49,-.464,front,back,'#b7b29b',.66);
-    for(const [a,b] of (inward<0?[[front,start],[end,back]]:[[front,back]])){
+    for(const [a,b] of (inward<0?sideSpans:[[front,back]])){
       if(b<=a)continue;
       rail([x+inward*.03,-.195,a],[x+inward*.03,-.195,b],.014);
     }
@@ -124,13 +128,10 @@ export function addPccSaloon(g:CabGeometry){
     rail([aisle,.77,1.05],[aisle,.77,12.77],.018);
     for(let i=0;i<9;i++){
       const z=2.22+i*1.16+(inward<0&&i===0?.45:0);
-      if(inward===-1&&i===5)continue;
+      if(inward<0&&Math.abs(z-wellCenters[1])<half+.27)continue;
       seat(inward===1?-.49:1.06,z,inward===1?.73:.83);
       rail([aisle,-.171,z+.09],[aisle,.77,z+.09],.015);
     }
-  }
-  for(const z of [8.26])for(const offset of [-.58,-.20,.20,.58]){
-    sidePanel(right-.012,-.46,.36,z+offset,z+offset+.032,'#68736a',.66);
   }
   g.cross(back,left,right,floor,-.47,'#80947f',.66);
   g.cross(back,left,right,.46,.71,'#b6b39a',.66);

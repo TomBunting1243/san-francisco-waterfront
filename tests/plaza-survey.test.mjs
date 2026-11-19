@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {ferryPublicRealm} from '../app/ferry-architecture.ts';
 import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
+import {createRideInteriors} from '../app/ride-interior.ts';
 import {createLandscape} from '../app/landscape.ts';
 import {plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
 import {waterfrontGardens} from '../app/waterfront-gardens.ts';
@@ -179,16 +180,27 @@ test('the streetcar sees dry Ferry Building forecourt, stepped entry and open wa
   const candidates=[water,...world.architectureChunks],ray=new THREE.Raycaster();
   const camera=new THREE.PerspectiveCamera(52,1280/760,.013,1800);
   const p=driverPose('streetcar',museumLegDuration);camera.position.copy(p.eye);
-  camera.lookAt(p.look.x,p.look.y,p.look.z);camera.updateMatrixWorld(true);
+  camera.lookAt(p.look.x,p.look.y,p.look.z);
+  const cab=createRideInteriors();cab.show('tram');
+  cab.root.position.copy(camera.position);cab.root.quaternion.copy(camera.quaternion);cab.root.updateMatrixWorld(true);
+  const cabMeshes=[];cab.root.traverseVisible(o=>{if(o.isMesh)cabMeshes.push(o);});
+  // One ordinary drag at 1280×760, from (960,380) to (360,369), at arrival.
+  // Only the head turns. The closed doors, pillars and seats still occlude rays.
+  const radiansPerPixel=Math.PI/760;
+  camera.rotateY(-600*radiansPerPixel);camera.rotateX(-11*radiansPerPixel);camera.updateMatrixWorld(true);
   function first(){
     return ray.intersectObjects(candidates.filter(o=>!o.geometry.boundingBox||ray.ray.intersectsBox(o.geometry.boundingBox)||o===water),false)[0];
   }
-  for(const [x,y] of [[1217,424],[1150,415],[1050,408]]){
+  for(const [x,y,color,height] of [[210,404,'c9c5b3',.0372],[671,381,'ccc4b1',.0515714],[651,372,'ccc4b1',.0824286]]){
     ray.setFromCamera(new THREE.Vector2(x/640-1,1-y/380),camera);
     const h=first();assert.ok(h&&h.object!==water);
+    const cabHit=ray.intersectObjects(cabMeshes,false)[0];
+    assert.ok(!cabHit||cabHit.distance>h.distance,'forecourt sightline clears the right-hand cab window');
     const c=new THREE.Color().fromBufferAttribute(h.object.geometry.attributes.color,h.face.a);
-    assert.ok(['c9c5b3','ccc4b1'].includes(c.getHexString()));assert.ok(h.point.y>=.0309&&h.point.y<=.113);
+    assert.equal(c.getHexString(),color);
+    assert.ok(Math.abs(h.point.y-height)<.0001,'finished forecourt or tread height at '+[x,y]);
   }
+  cab.dispose();
   const down=new THREE.Vector3(0,-1,0);
   for(const [x,z,y] of [[-5.35,-1.84,.031],[2.5,-1.84,.031]]){
     ray.set(new THREE.Vector3(x,.115,z),down);assert.ok(Math.abs(first().point.y-y)<.0001);

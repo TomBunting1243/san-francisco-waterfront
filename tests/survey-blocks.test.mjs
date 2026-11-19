@@ -89,3 +89,45 @@ test('all crossing paint sits on the street or its gutter, including the bars cu
   }
   assert.ok(north&&south&&slopingGutter);
 });
+
+test('daylight rays see both continental crossings, upstream stop lines and their worn gaps beside Harry Bridges Plaza',async()=>{
+  const {createLandscape}=await import('../app/landscape.ts');
+  const scene=createLandscape();scene.root.updateMatrixWorld(true);
+  const paint=scene.root.getObjectByName('Waterfront crossings paint'),surfaces=[];
+  const box=new THREE.Box3(),target=new THREE.Box3(new THREE.Vector3(-1.6,-.08,-6.26),new THREE.Vector3(.65,.14,-2.22));
+  scene.root.traverseVisible(o=>{
+    if(!o.isMesh||o.isInstancedMesh||o.isBatchedMesh||o.material.transparent)return;
+    if(box.setFromObject(o).intersectsBox(target))surfaces.push(o);
+  });
+  assert.ok(surfaces.includes(paint));
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.14);
+  function hits(u,v){
+    ray.ray.origin.set(-3+u/132,.14,2-(420+v)/132);
+    return ray.intersectObjects(surfaces,false).filter(h=>h.face?.normal.y>.7);
+  }
+  const colors=new Set();
+  function light(u,v){
+    const h=hits(u,v),road=h.find(q=>q.object!==paint);
+    assert.equal(h[0]?.object.name,paint.name,'aerial paint '+[u,v]);
+    assert.ok(road&&Math.abs(h[0].point.y-road.point.y-.00024)<.00003);
+    const color=(hit)=>hit.object.geometry.getAttribute('color').getY(hit.face.a);
+    assert.ok(color(h[0])>1.8*color(road),'day pigment contrast '+[u,v]);
+    colors.add(color(h[0]));
+  }
+  for(const u of [271,377,453]){
+    for(const [left,right] of [[176.4,174.9],[189.4,187.9],[201.9,200.1],[214.7,212.2],[227.1,225.4],[240.2,238.3]]){
+      light(u,left+(right-left)*(u-264.2)/201.2);
+    }
+  }
+  for(const u of [223,249,305]){
+    for(const [left,right] of [[578.1,583.1],[591.7,596.5],[605.6,610.5],[619.1,624],[631,635.4],[644,648.2]]){
+      light(u,left+(right-left)*(u-217)/97.3);
+    }
+  }
+  for(const [u,v] of [[237.5,218],[238,239],[332,582],[331,637]])light(u,v);
+  assert.ok(colors.size>3,'slightly varied paint retained through city batching');
+  for(const [u,v] of [[340,226.6],[286.5,634.1],[400,220],[248,585],[358,261],[365,325]]){
+    assert.notEqual(hits(u,v)[0]?.object,paint,'worn gap, asphalt, or pedestrian paving '+[u,v]);
+  }
+  assert.equal(paint.castShadow,false);assert.ok(paint.material.polygonOffsetUnits<0);
+});

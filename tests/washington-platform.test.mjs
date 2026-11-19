@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {createWashingtonPlatforms,washingtonRiderPose} from '../app/washington-platform.ts';
-import {ambientStreetcarCall,washingtonStopX,washingtonDoorOpening,washingtonDwell} from '../app/washington-call.ts';
+import {ambientStreetcarCall,ambientStreetcarPeriod,washingtonStopX,washingtonDoorOpening,washingtonDwell} from '../app/washington-call.ts';
 import {driverPose,washingtonRideArrival} from '../app/driver-rides.ts';
 import {createStreetcar,setPccFrontDoor} from '../app/streetcar.ts';
 import {trackAt,trackCenterlines} from '../app/streets.ts';
@@ -136,7 +136,7 @@ test('ambient streetcar carries the rider behind its window and both loop resets
   const {streetcarPose}=await import('../app/streets.ts');
   const transit=createPromenadeTransit(),actor=transit.poses.getObjectByName('Washington front-door passenger'),car=createStreetcar().group;
   for(const plaza of [false,true]){
-    const arrival=-ambientStreetcarCall(0,plaza).t,period=(plaza?32:130)/.85+3.6+7;
+    const arrival=-ambientStreetcarCall(0,plaza).t,period=ambientStreetcarPeriod(plaza);
     const loop=period-(plaza?7:42)/.85;
     for(const time of [arrival+9,loop-.01,loop,loop+.10]){
       const call=ambientStreetcarCall(time,plaza),pose=streetcarPose(call.station);

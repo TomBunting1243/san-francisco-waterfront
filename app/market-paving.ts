@@ -1,5 +1,5 @@
 import {stationPavingCut} from './embarcadero-station-sites.ts';
-import {marketAxis,medianGrade,medianPaving,westMarketGround} from './curb-survey.ts';
+import {ferryRefugePaving,marketAxis,medianGrade,medianPaving,westMarketGround} from './curb-survey.ts';
 import {frostBrickTriangles,frostWalkHeight} from './california-sidewalk.ts';
 import * as THREE from 'three';
 
@@ -18,6 +18,14 @@ export function createMarketPaving(){
     for(const tri of stationPavingCut(t[0],t[1],t[2])??[t])paint(tri,frostWalkHeight,true);
   }
   for(const tri of medianPaving)paint(tri,medianGrade);
+  // The Ferry refuge uses the physical curb aprons directly. Its low lips,
+  // slopes and landing meet edge to edge without a second paving skin.
+  for(const tri of ferryRefugePaving){
+    const n=positions.length/3,[a,b,c]=tri;
+    for(const [x,y,z] of tri){positions.push(x,y,z);surface.push(x-marketAxis(z),-z);}
+    const up=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]);
+    indices.push(n,n+(up>0?1:2),n+(up>0?2:1));
+  }
   for(let i=0;i<32;i++){
     const z=-6.249-i*2.817/32,next=-6.249-(i+1)*2.817/32;
     const a=[marketAxis(z)-.92,z],b=[marketAxis(z)+.92,z],c=[marketAxis(next)-.92,next],d=[marketAxis(next)+.92,next];

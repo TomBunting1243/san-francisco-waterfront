@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {mountCabEntrance,setPccFrontDoor} from './pcc-entrance.ts';
+import {mountCabEntrance,setPccFrontDoor,setPccExitDoor} from './pcc-entrance.ts';
 import {pccCarCards} from './pcc-car-cards.ts';
 import {addPccSaloon} from './pcc-saloon.ts';
 
@@ -228,6 +228,7 @@ export function createRideInteriors(){
   }
   return {root,show,updateRain,
     setFrontDoor:(opening:number)=>{if(active?.entrance)setPccFrontDoor(active.entrance,opening);},
+    setExitDoor:(opening:number)=>{if(active?.entrance)setPccExitDoor(active.entrance,opening);},
     setNight:(night:number)=>{
       interiorNight.value=night;
       const entrance=cabs.get('tram')?.entrance;

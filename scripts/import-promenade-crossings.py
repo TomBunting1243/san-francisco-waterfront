@@ -49,6 +49,34 @@ for row,start,end,width in strips:
   # Preserve width, skew, asymmetrical approaches and missing stripe positions.
   bars.append([coord(low*.16,-width/2),coord(high*.16,-width/2),coord(high*.16,width/2),coord(low*.16,width/2)])
  if len(bars)>=2:records.append(bars)
+# The two signalized Market midblock legs are unusually wide. A single
+# median brightness profile would confuse forecourt stone courses with bars
+# and miss the interrupted markings. Trace both endpoints in the registered
+# full-resolution 2024 crop: upper-left (-3, 2-420/132), 132 px/scene unit.
+def market_point(u,v):
+ return [round(-3+u/132,6),round(2-(420+v)/132,6)]
+def market_bar(left,v0,right,v1,width,pieces=None):
+ bars=[]
+ for a,b in pieces or [(left,right)]:
+  def point(u,d):
+   return market_point(u,v0+(v1-v0)*(u-left)/(right-left)+d)
+  bars.append([point(a,-width/2),point(b,-width/2),point(b,width/2),point(a,width/2)])
+ return bars
+east=[]
+for i,(a,b) in enumerate([(176.4,174.9),(189.4,187.9),(201.9,200.1),(214.7,212.2),(227.1,225.4),(240.2,238.3),(252.8,250.9)]):
+ east+=market_bar(264.2,a,465.4,b,4.8,[(264.2,333.2),(342.1,465.4)] if i==4 else None)
+west=[]
+for i,(a,b) in enumerate([(578.1,583.1),(591.7,596.5),(605.6,610.5),(619.1,624.0),(631.0,635.4),(644.0,648.2)]):
+ west+=market_bar(217,a,314.3,b,5.0,[(217,284.8),(288.6,314.3)] if i==4 else None)
+# A separate stop stripe runs transversely upstream of each crossing.
+def stop_bar(u0,v0,u1,v1,width):
+ return [market_point(u0-width/2,v0),market_point(u0+width/2,v0),
+         market_point(u1+width/2,v1),market_point(u1-width/2,v1)]
+east.append(stop_bar(237.3,203.5,238.3,251.3,4.4))
+west.append(stop_bar(331.9,572.4,331.0,655.5,4.6))
+market_start=len(records)
+records.extend([east,west])
+
 # Register the orthophoto bars to the modeled Public Works right of way.
 # Raised islands, ramp landings and curb faces never carry a painted roadway bar.
 data=Path(__file__).resolve().parents[1]/'public/data'
@@ -136,5 +164,5 @@ for bars in records:
   if faces:leg.extend(faces)
  paint.append(leg)
 out=data/'promenade-crossings.json'
-out.write_text(json.dumps({'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','crossings':paint},separators=(',',':'))+'\n')
+out.write_text(json.dumps({'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','marketStart':market_start,'crossings':paint},separators=(',',':'))+'\n')
 print(len(records),'crossing legs;',sum(map(len,records)),'source paint bars;',sum(map(len,paint)),'road and gutter paint triangles')

@@ -78,7 +78,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
     const rideModules=enableRides?Promise.all([import('./driver-rides'),import('./ride-interior')]):null;
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances'),rideModules]).then(([THREE, { createLandscape, createStreetIllumination, setPccFrontDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule,rides]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances'),rideModules]).then(([THREE, { createLandscape, createStreetIllumination, setPccFrontDoor, setPccExitDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule,rides]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
@@ -669,12 +669,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const ambientTram=ambientStreetcarCall(elapsed,variant==='plaza');
         const platformTime=mode==='streetcar'&&rides?rideSeconds-rides[0].washingtonRideArrival:
           variant==='street'?-Infinity:ambientTram.t;
+        const ferryTime=mode==='streetcar'&&rides?rideSeconds-rides[0].museumLegDuration:
+          variant==='street'?-Infinity:ambientTram.ferryTime;
+        const passengerTime=mode==='streetcar'?ferryTime:variant==='street'?-Infinity:ambientTram.passengerTime;
         const station=variant==='street'?((elapsed*.85+7)%32)-48:ambientTram.station;
         const tramPose=driver?.body??streetcarPose(station);
         const callChanged=platformTime!==previousPlatformTime;
         const patioSheltered=snowfall||rain>.35;
         if(motionChanged||callChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
-          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose);
+          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose,passengerTime);
           lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
         }
         if(motionChanged){
@@ -714,7 +717,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);
           world.tram.rotation.y=tramPose.heading;world.tram.rotation.z=driver?.body?.pitch??0;
           rides?.[0].setStreetcarTrucks(world.tram,driver?.body);
-          const opening=washingtonDoorOpening(platformTime);
+          const exitOpening=washingtonDoorOpening(ferryTime);
+          const opening=Math.max(exitOpening,washingtonDoorOpening(platformTime));
+          setPccExitDoor(world.tram,exitOpening);interiors?.setExitDoor(exitOpening);
           setPccFrontDoor(world.tram,opening);interiors?.setFrontDoor(opening);
           previousPlatformTime=platformTime;
         }

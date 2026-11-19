@@ -60,8 +60,15 @@ test('the museum ride crosses the physical wye on eight tread contacts and clear
     ()=>new T.Mesh());
   scene.updateMatrixWorld(true);temporary.updateMatrixWorld(true);
   const patch=scene.getObjectByName('Don Chee track junction and accessible platforms');
+  const corridor=new T.Box3();
+  for(let t=0;t<=Math.ceil(museumLegDuration);t++){
+    const p=driverPose('streetcar',Math.min(t,museumLegDuration)).body;
+    corridor.expandByPoint(new T.Vector3(p.x,p.y,p.z));
+  }
+  corridor.expandByScalar(pccDimensions.length/2);
+  const segment=new T.Box3();
   const architectureChunks=[patch,...[...scene.children,...temporary.children].filter(m=>
-    ['Running rail','Market running rail'].includes(m.name)&&m.position.x>-11&&m.position.x<1&&m.position.z>-8)];
+    ['Running rail','Market running rail'].includes(m.name)&&corridor.intersectsBox(segment.setFromObject(m)))];
   assert.ok(trucks.isInstancedMesh&&trucks.count===2);
   const local=new T.Matrix4(),world=new T.Matrix4();
   const scale=pccDimensions.length/3.629,width=pccDimensions.width/.8835;
