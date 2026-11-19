@@ -33,20 +33,25 @@ function observeArrivalFog() {
   requestAnimationFrame(sample);
 }
 
-// Read the two matrices actually uploaded to the visible framebuffer. This keeps
-// the check independent of the scene implementation and excludes the shadow map.
+// Observe the perspective camera submitted to the harbor render. The print uses
+// an intermediate framebuffer. Shadow and post passes both use orthographic matrices.
 function observeCameraMatrices(){
-  const gl=WebGL2RenderingContext.prototype, names=new WeakMap();
-  const location=gl.getUniformLocation, upload=gl.uniformMatrix4fv;
+  const gl=WebGL2RenderingContext.prototype,names=new WeakMap(),state=new WeakMap();
+  const location=gl.getUniformLocation,upload=gl.uniformMatrix4fv;
   const matrices=globalThis.waterfrontMatrices={};
   gl.getUniformLocation=function(program,name){
     const value=location.call(this,program,name);
-    if(value&&(name==='viewMatrix'||name==='projectionMatrix'))names.set(value,name);
+    if(value&&(name==='viewMatrix'||name==='projectionMatrix'))names.set(value,{program,name});
     return value;
   };
   gl.uniformMatrix4fv=function(value,transpose,data,...rest){
-    const name=names.get(value);
-    if(name&&this.canvas.closest('.world > .world-scene')&&this.getParameter(this.FRAMEBUFFER_BINDING)===null)matrices[name]=Array.from(data);
+    const ref=names.get(value);
+    if(ref&&this.canvas.closest('.world > .world-scene')){
+      let frame=state.get(ref.program);
+      if(!frame){frame={};state.set(ref.program,frame);}
+      frame[ref.name]=Array.from(data);
+      if(frame.projectionMatrix?.[11]===-1&&frame.viewMatrix)Object.assign(matrices,frame);
+    }
     return upload.call(this,value,transpose,data,...rest);
   };
 }

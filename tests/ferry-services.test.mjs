@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {ferryCycle,ferryPose} from '../app/motion.ts';
 import {vessels,berthThresholds,ferryClockAt} from '../app/ferry-service.ts';
-import {createServiceFerry} from '../app/service-ferries.ts';
+import {createServiceFerry,updatePyxisBoardingDoor} from '../app/service-ferries.ts';
 import {createBoardingBrows,buildFerryTerminal} from '../app/ferry-terminal.ts';
 import {waterSurface} from '../app/water-surface.ts';
 import {sfMap} from '../app/sf-map.ts';
@@ -33,9 +33,9 @@ test('operator-specific vessel proportions, numbered berths and working gangways
   }
 });
 test('the page snapshots the Pacific service day across UTC midnight and summer time',()=>{
-  assert.deepEqual(ferryClockAt(new Date('2026-11-22T05:20:00Z')),{weekend:true,minutes:1280});
-  assert.deepEqual(ferryClockAt(new Date('2026-07-21T06:20:00Z')),{weekend:false,minutes:1400});
-  assert.deepEqual(ferryClockAt(new Date('2026-11-16T08:00:00Z')),{weekend:false,minutes:0});
+  assert.deepEqual(ferryClockAt(new Date('2026-11-22T05:20:00Z')),{date:'2026-11-21',weekend:true,minutes:1280});
+  assert.deepEqual(ferryClockAt(new Date('2026-07-21T06:20:00Z')),{date:'2026-07-20',weekend:false,minutes:1400});
+  assert.deepEqual(ferryClockAt(new Date('2026-11-16T08:00:00Z')),{date:'2026-11-16',weekend:false,minutes:0});
 });
 test('operator patterns include the 11:20 weekday Richmond exception, weekend quay and weekday-only services',()=>{
   const dock=(i,w,minutes)=>ferryPose(28-vessels[i].offset,i,{weekend:w,minutes});
@@ -110,5 +110,53 @@ test('eight vessels clear terminal structures, guide piles and one another acros
         }
       }
     }
+  }
+});
+
+test('Pyxis E1 boarding path has a working port door, solid sill and clear recessed vestibule',()=>{
+  const group=createServiceFerry(put,0),p=ferryPose(23,0,clock),floor=p.y+vessels[0].sill;
+  group.position.set(p.x,p.y,p.z);group.rotation.y=p.heading;group.updateMatrixWorld(true);
+  const body=group.children[0],positions=body.geometry.getAttribute('position');
+  assert.ok(body.userData.pyxisBoardingBody);assert.equal(group.children.length,1);
+  const cast=(x,y,z,dir)=>new THREE.Raycaster(new V(x,y,z),dir).intersectObject(body)[0]?.point;
+  const inward=(dz,h)=>cast(p.stopX,floor+h,p.stopZ+dz,new V(1,0,0));
+  const shut=inward(0,.080).x;
+  updatePyxisBoardingDoor(group,.99);assert.equal(inward(0,.080).x,shut);
+  const version=positions.version;
+  updatePyxisBoardingDoor(group,1);
+  for(const dz of [-.052,0,.052]){
+    for(const h of [.008,.068,.125]){
+      const hit=inward(dz,h);
+      assert.ok(hit.x>p.x-.3312+.145&&hit.x<p.x-.3312+.155,'body envelope fits through to the rear wall');
+    }
+    for(const depth of [-.018,.012,.060,.11]){
+      const hit=cast(p.x-.3312+depth,floor+.008,p.stopZ+dz,new V(0,-1,0));
+      assert.ok(Math.abs(hit.y-floor)<.00001);
+    }
+  }
+  for(const dz of [-.06,.06])assert.ok(inward(dz,.075).x<p.x-.3312+.001);
+  assert.ok(inward(0,.137).x<p.x-.3312+.001);
+  updatePyxisBoardingDoor(group,1);assert.equal(positions.version,version+1);
+  updatePyxisBoardingDoor(group,0);assert.equal(inward(0,.080).x,shut);
+  assert.equal(positions.version,version+2);
+});
+
+test('Pyxis has two fine stems, a raked forehouse and a single painted skin around the wraparound wheelhouse',()=>{
+  const group=createServiceFerry(put,0),body=group.children[0],g=body.geometry,v=vessels[0];
+  group.updateMatrixWorld(true);
+  assert.equal(group.children.length,1);assert.ok(g.index.count/3<1600);
+  const cast=(x,y,z,dx,dy,dz)=>new THREE.Raycaster(new V(x,y,z),new V(dx,dy,dz)).intersectObject(body);
+  const color=hit=>new THREE.Color().fromBufferAttribute(g.attributes.color,hit.face.a).getHexString();
+  const atBow=(metres,z=.012)=>cast(2,v.sill+.06*metres,z,-1,0,0)[0];
+  assert.ok(atBow(2.85).point.x-atBow(4.71).point.x>.26,'sloping upper forehouse');
+  assert.ok(atBow(6.05).point.x>atBow(5.25).point.x+.014,'forward-raked wheelhouse glass');
+  for(const z of [-.124,.012,.124])assert.equal(color(atBow(5.62,z)),'243941');
+  for(const z of [-.2268,.2268])assert.ok(cast(1.19,.42,z,0,-1,0)[0]);
+  assert.equal(cast(1.19,.42,0,0,-1,0).length,0,'open tunnel between twin stems');
+  for(const [x,h,tint] of [[-.45,1.44,'364e55'],[.37,.55,'6f9d46'],[.48,.37,'233860']]){
+    const hits=cast(x*1.23,v.sill+h*.06,-.8,0,0,1);
+    assert.equal(color(hits[0]),tint);
+    assert.equal(hits.filter(hit=>Math.abs(hit.point.z+.3312)<.003).length,1,
+      'pigment and nearest hull triangle share one geometric surface');
   }
 });

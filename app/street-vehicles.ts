@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 type Point = [x: number, y: number, z: number];
-const paint = ['#a96451', '#c3a35b', '#548086', '#777886', '#84947d', '#c0b8a4'];
+const paint = ['#b54f40','#ccab62','#507b85','#80798c','#7b9075','#c9c4b4'];
 const profiles = [
   { name:'hatchback', length:4.06, width:1.78, wheelbase:2.53, tyre:.30, waist:.89, height:1.47,
     rearBelt:-1.75, frontBelt:.94, rearRoof:-1.46, frontRoof:.37, cabinWidth:.88 },
@@ -21,10 +21,16 @@ const roadOffset = .055;
 export const streetVehicleNose=(index:number)=>(profiles[index%profiles.length].length/2+.014)*metresToModel*.25;
 
 class VehiclePaint {
+  private readonly marks:number[]=[];
+  private readonly glass:THREE.Color;
+  private readonly windshield:THREE.Color;
+  constructor(glass:THREE.Color,windshield:THREE.Color){this.glass=glass;this.windshield=windshield;}
+
   private readonly vertices: number[] = [];
   private readonly colors: number[] = [];
 
   private vertex([x,y,z]: Point, color: THREE.Color) {
+    this.marks.push(0,0,color===this.glass||color===this.windshield?1:0);
     const wash = .95 + .045*Math.sin(x*5.4+y*7.7+z*2.3);
     this.vertices.push(x,y,z);
     this.colors.push(color.r*wash,color.g*wash,color.b*wash);
@@ -49,9 +55,19 @@ class VehiclePaint {
     source.dispose();
   }
 
+  contact(length:number,width:number){
+    const corners=[[-1,-1],[-1,1],[1,1],[-1,-1],[1,1],[1,-1]];
+    for(const [x,z] of corners){
+      this.vertices.push(x*length*.47,.012,z*width*.48);
+      this.colors.push(.023,.020,.046);
+      this.marks.push(x,z,2);
+    }
+  }
+
   geometry() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(this.vertices,3));
+    geometry.setAttribute('vehiclePaint',new THREE.Int8BufferAttribute(this.marks,3));
     geometry.setAttribute('color',new THREE.Float32BufferAttribute(this.colors,3));
     geometry.scale(metresToModel,metresToModel,metresToModel);
     geometry.translate(0,roadOffset,0);
@@ -60,8 +76,73 @@ class VehiclePaint {
   }
 }
 
+type PaintLight={glass:{value:THREE.Color};cast:{value:THREE.Vector3}};
+const lights=new WeakMap<THREE.Material,PaintLight>();
+function vehicleLight(){return {glass:{value:new THREE.Color('#8faabc')},cast:{value:new THREE.Vector3()}};}
+
+export function setVehiclePaintLight(material:THREE.Material,sky:THREE.Color,sun:readonly number[],direct:number){
+  let light=lights.get(material);
+  if(!light){
+    // Regional materials clone the full scene's complete shading chain. Rebind
+    // the two uniforms to that copy, even if another scene is already drawing.
+    light=vehicleLight();lights.set(material,light);
+    const compile=material.onBeforeCompile,local=light;
+    material.onBeforeCompile=function(shader,renderer){
+      compile.call(this,shader,renderer);
+      shader.uniforms.vehicleSky=local.glass;shader.uniforms.vehicleCast=local.cast;
+    };
+    material.needsUpdate=true;
+  }
+  light.glass.value.copy(sky);
+  const horizontal=Math.hypot(sun[0],sun[2]);
+  light.cast.value.set(-sun[0],-sun[2],sun[1]>0&&horizontal>.0001?direct*horizontal/Math.max(.015,sun[1]):0);
+}
+
 export function streetVehicleMaterial() {
-  return new THREE.MeshStandardMaterial({roughness:.86,vertexColors:true});
+  const material=new THREE.MeshStandardMaterial({roughness:1,vertexColors:true}),light=vehicleLight();
+  lights.set(material,light);
+  material.onBeforeCompile=shader=>{
+    shader.uniforms.vehicleSky=light.glass;shader.uniforms.vehicleCast=light.cast;
+    shader.vertexShader='attribute vec3 vehiclePaint; varying vec3 vehicleMark; uniform vec3 vehicleCast;\n'+
+      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvehicleMark=vehiclePaint;')
+      .replace('#include <project_vertex>',`#include <project_vertex>
+        if(vehiclePaint.z>1.5 && vehicleCast.z>.001){
+          mat4 carFrame=modelMatrix;
+          #ifdef USE_INSTANCING
+            carFrame=carFrame*instanceMatrix;
+          #endif
+          #ifdef USE_BATCHING
+            carFrame=carFrame*batchingMatrix;
+          #endif
+          vec2 away=normalize(vehicleCast.xy);
+          vec2 carX=normalize(carFrame[0].xz),carZ=normalize(carFrame[2].xz);
+          vec2 drift=vec2(dot(away,carX),dot(away,carZ))*min(.45,.085*vehicleCast.z);
+          #ifdef USE_BATCHING
+            // Keep bridge marks on the roadway at the outside rail.
+            drift.y=clamp(drift.y,-.018,.018);
+          #endif
+          vec2 reach=max(sign(drift)*vehiclePaint.xy,0.)*drift;
+          vec2 push=carX*reach.x+carZ*reach.y;
+          mvPosition+=viewMatrix*vec4(push.x,0.,push.y,0.);
+          gl_Position=projectionMatrix*mvPosition;
+        }`);
+    shader.fragmentShader='uniform vec3 vehicleSky; varying vec3 vehicleMark;\n'+
+      shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+        if(vehicleMark.z>.5 && vehicleMark.z<1.5)diffuseColor.rgb=mix(diffuseColor.rgb,vehicleSky,.74);`)
+      .replace('#include <opaque_fragment>',`
+        if(vehicleMark.z>1.5){
+          // Ordered coverage lets the real painted road show through in the
+          // same opaque vehicle batch, including its markings and lamp pools.
+          const float stipple[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+          ivec2 texel=ivec2(gl_FragCoord.xy)%4;
+          float cover=.34*(1.-smoothstep(.53,1.,length(vehicleMark.xy)));
+          if(cover<(stipple[texel.x+texel.y*4]+.5)/16.)discard;
+          outgoingLight=vec3(.023,.020,.046);
+        }
+        #include <opaque_fragment>`);
+  };
+  material.customProgramCacheKey=()=> 'painted-road-traffic-v1';
+  return material;
 }
 
 export function createStreetVehicle(index: number, material: THREE.MeshStandardMaterial, distant = false) {
@@ -71,7 +152,7 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
   const glass = new THREE.Color('#536e75'), windshield = new THREE.Color('#69828a');
   const rubber = new THREE.Color('#3f4847'), rim = new THREE.Color('#a6a79a'), lamp = new THREE.Color('#ecdfae');
   const tail = new THREE.Color('#9c5044'), plate = new THREE.Color('#d1c4aa');
-  const form = new VehiclePaint(), half = p.length/2, wide = p.width/2;
+  const form = new VehiclePaint(glass,windshield), half = p.length/2, wide = p.width/2;
   const axles = [-p.wheelbase/2,p.wheelbase/2];
   const axleCover = p.tyre+.065;
   const bonnet = p.waist - (index%4===3 ? .04 : .12);
@@ -176,6 +257,7 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
     form.panel([lip,.461,-wide*.78],[lip,.461,wide*.78],[-half,.461,wide*.78],[-half,.461,-wide*.78],edge);
   }else if(!distant)box(.05,.071,.23,plate,-half+.014,.48,0);
 
+  form.contact(p.length,p.width);
   const vehicle = new THREE.Group();
   vehicle.name = p.name;
   const mesh = new THREE.Mesh(form.geometry(),material);

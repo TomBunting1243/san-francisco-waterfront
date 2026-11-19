@@ -139,3 +139,48 @@ test('mean harbor level, floating decks and fixed-pier soffits use the surveyed 
     assert.ok((gate.landY-gate.deckY)/distance<1/12);
   }
 });
+
+test('both passenger lanes have continuous foot support and body clearance from E gangway through the Pyxis doorway',async()=>{
+  const {ferryPassengerPose}=await import('../app/ferry-passengers.ts');
+  const {ferryPose}=await import('../app/motion.ts');
+  const {createServiceFerry,updatePyxisBoardingDoor}=await import('../app/service-ferries.ts');
+  const {createBoardingBrows}=await import('../app/ferry-terminal.ts');
+  const root=new THREE.Group(),terminal=buildFerryTerminal(addMesh,root),ship=createServiceFerry(addMesh,0);
+  const brows=createBoardingBrows(1),moored=ferryPose(23,0);
+  ship.rotation.y=moored.heading;ship.position.set(moored.x,moored.y,moored.z);
+  updatePyxisBoardingDoor(ship,1);brows.update(0,moored);root.add(ship,brows.mesh);root.updateMatrixWorld(true);
+  const objects=[];
+  for(const part of [terminal.getObjectByName('Surveyed fixed ferry apron'),terminal.getObjectByName('Gate E articulated gangway'),
+    terminal.getObjectByName('Gate E floating pontoon'),ship,brows.mesh]){
+    part.traverse(child=>{if(child.isMesh)objects.push({child,bounds:new THREE.Box3().setFromObject(child,true)});});
+  }
+  const down=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  const up=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,1,0),0,.114);
+  const across=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(1,0,0),0,.034);
+  for(let i=0;i<4;i++){
+    let count=0;
+    for(let time=-100;time<108;time+=.12){
+      const p=ferryPassengerPose(time,i,moored);
+      if(p.z<2.97||p.z>7.125)continue;
+      count++;
+      const near=objects.filter(({bounds:b})=>p.x>=b.min.x-.024&&p.x<=b.max.x+.024&&p.z>=b.min.z-.024&&p.z<=b.max.z+.024).map(o=>o.child);
+      for(const h of [.031,.066,.104]){
+        across.ray.origin.set(p.x-.017,p.y+h,p.z);across.ray.direction.set(1,0,0);
+        assert.equal(across.intersectObjects(near,false).length,0,'side clearance at '+[p.x,p.z]);
+        across.ray.origin.set(p.x,p.y+h,p.z-.017);across.ray.direction.set(0,0,1);
+        const obstacle=across.intersectObjects(near,false)[0];
+        assert.ok(!obstacle,'fore/aft clearance at '+[p.x,p.z]+' near '+obstacle?.object.position.toArray());
+      }
+      for(const [dx,dz] of [[0,0],[-.017,0],[.017,0],[0,-.017],[0,.017]]){
+        up.ray.origin.set(p.x+dx,p.y+.010,p.z+dz);
+        assert.equal(up.intersectObjects(near,false).length,0,'headroom at '+[p.x,p.z]);
+        down.ray.origin.set(p.x+dx,p.y+.124,p.z+dz);
+        const hit=down.intersectObjects(near,false)[0];
+        const difference=(hit?.point.y??-Infinity)-p.y;
+        assert.ok(difference<.010&&difference>-.011,
+          'person '+i+' t='+time.toFixed(2)+' xz='+[p.x,p.z].map(q=>q.toFixed(4))+' height difference='+difference+' object='+hit?.object.name+' at '+hit?.object.position.toArray());
+      }
+    }
+    assert.ok(count>400);
+  }
+});

@@ -18,7 +18,7 @@ type Profile=[number,number][];
 // above the respective curb or deck. Collar, bracket and globe profiles are
 // estimated from the photographs. All returned halos use actual lens centers.
 export function buildPromenadeLighting(root:THREE.Group):number[]{
-  const positions:number[]=[],colors:number[]=[],indices:number[]=[],halos:number[]=[];
+  const positions:number[]=[],colors:number[]=[],indices:number[]=[],halos:number[]=[],glassLight:number[]=[];
   const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.76});
   const palette=new Map<string,THREE.Color>();
   let ox=0,oz=0,ground=0,cos=1,sin=0;
@@ -32,6 +32,7 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
     let color=palette.get(tone);
     if(!color){color=new THREE.Color(tone);palette.set(tone,color);}
     positions.push(...position(u,h,v));colors.push(color.r,color.g,color.b);
+    glassLight.push(...(tone===lens?[230,153,75]:[0,0,0]));
   }
   // Hollow rotational profiles share each ring of indexed vertices. Radius and
   // height are in metres; a horizontal offset at each ring shapes curved arms.
@@ -86,13 +87,20 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
     const geometry=new THREE.BufferGeometry();
     geometry.setIndex(indices);geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
     geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    geometry.setAttribute('signLight',new THREE.Uint8BufferAttribute(glassLight,3,true));
     geometry.computeVertexNormals();geometry.userData.paintVertices=true;
     const mesh=new THREE.Mesh(geometry,material);mesh.name=name;mesh.castShadow=mesh.receiveShadow=true;
-    root.add(mesh);positions.length=colors.length=indices.length=0;
+    root.add(mesh);positions.length=colors.length=indices.length=glassLight.length=0;
   }
-  for(const [,x,z,yaw,heads] of fixtures.curb){
+  // Three inventory pins fall in small gaps in the city's sidewalk mesh.
+  // Ground their bases on the underlying registered land at those sites.
+  const landOnly=new Set([284943,281687,282992]);
+  for(const row of [fixtures.curb,fixtures.inland])for(const [id,x,z,yaw,heads] of row){
     const rincon=shore.rincon.some(([outside,...holes])=>insideBuilding(x,z,outside)&&!holes.some(h=>insideBuilding(x,z,h)));
-    setOrigin(x,z,rincon?.11:Math.max(.04,bayReliefGround(x,z)),yaw);
+    // The Ferry forecourt approaches have a lower paving datum than the
+    // standard inland sidewalk. The shore-side Rincon lawn is raised.
+    const inlandGround=landOnly.has(id)?bayReliefGround(x,z):x>=-7.28&&x<=-1.56?.031:.045;
+    setOrigin(x,z,row===fixtures.inland?inlandGround:rincon?.11:Math.max(.04,bayReliefGround(x,z)),yaw);
     if(heads===1){pedestal(false,5.55-.83);lantern(0,5.55,false);finish('Single fluted promenade light');continue;}
     pedestal(false,6.36);
     rings([[6.36,.080],[6.42,.09],[6.50,.042],[6.62,0]],iron,8);

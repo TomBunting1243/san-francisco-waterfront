@@ -26,7 +26,7 @@ pierX = (min(p[0] for p in pier)+max(p[0] for p in pier))/2
 # and Pier 1. The inventory has pole type and location but no luminaire counts.
 doubleStart = min(p[0] for p in next(b['p'] for b in sf['buildings'] if b['name']=='Ferry Station Post Office Building'))
 doubleEnd = min(p[0] for p in next(b['p'] for b in sf['buildings'] if b['name']=='Pier 1'))
-curb = []
+curb, inland = [], []
 for feature in inventory['features']:
     props=feature['properties']
     if props['street_name'] not in ('EMBARCADERO_NORTH','EMBARCADERO_SOUTH') or props['pole_type']!='SL-FluteSteel' or props['status']!='ACTIVE':
@@ -39,11 +39,16 @@ for feature in inventory['features']:
     surfaces=[(a[1]+(x-a[0])*(b[1]-a[1])/(b[0]-a[0]),(b[1]-a[1])/(b[0]-a[0])) for a,b in segments if min(a[0],b[0])<=x<=max(a[0],b[0])]
     if not surfaces:
         continue
-    roadZ,slope=max(surfaces)
-    if not .1<z-roadZ<1.0:
+    outer,inner=max(surfaces),min(surfaces)
+    if .1 < z-outer[0] < 1.0:
+        group,slope=curb,outer[1]
+    elif .1 < inner[0]-z < 1.0:
+        group,slope=inland,inner[1]
+    else:
         continue
-    curb.append([props['objectid'],round(x,4),round(z,4),round(math.atan2(-1,-slope),4),2 if doubleStart<=x<=doubleEnd else 1])
+    group.append([props['objectid'],round(x,4),round(z,4),round(math.atan2(-1,-slope),4),2 if doubleStart<=x<=doubleEnd else 1])
 curb.sort(key=lambda p:p[1])
+inland.sort(key=lambda p:p[1])
 # Centers picked on the 2024 8-cm SF orthophoto. Reprojection:
 # x = 28.52 - pixelY/145 ; z = -1 + pixelX/145. Right is offshore.
 # Each pair has a footing and a pole shadow on each side. The wider middle
@@ -60,5 +65,5 @@ for col in columns:
     xs=[min(crossings[-1]-.012,max(crossings[0]+.012,28.52-row/145+drift)) for row in (222,158)]
     pierRows.append([round(z,4),*(round(x,4) for x in xs)])
 result=dict(source=SERVICE,classification='SF General Plan NE Waterfront 10.15',ortho='https://tile.sf.gov/api/tiles/p2024_rgb8cm',
-            curb=curb,pier=pierRows)
+            curb=curb,inland=inland,pier=pierRows)
 (DATA/'promenade-lights.json').write_text(json.dumps(result,separators=(',',':'))+'\n')

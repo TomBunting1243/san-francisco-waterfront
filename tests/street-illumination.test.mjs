@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as T from 'three';
 import {createLandscape,createCityVignette} from '../app/landscape.ts';
 import {createStreetField,createStreetIllumination,waterfrontSignals,signalAspects} from '../app/street-illumination.ts';
+import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
 import {addSurveyBlocks} from '../app/survey-blocks.ts';
 
 const channelAt=(field,x,z,c=0)=>{
@@ -23,7 +24,18 @@ test('representative SFMTA heads stand on the surveyed curb; main and cross traf
 });
 test('field derives from the scene globes, is local, and reaches the same shader on buildings, people and buses',()=>{
   const scene=createLandscape(),globes=scene.streetGlobes,field=createStreetField(globes);
-  assert.ok(globes.length/3>140);
+  const visible=scene.root.getObjectByName('Waterfront streetlamp halos').geometry.getAttribute('position');
+  assert.deepEqual(visible.array,Float32Array.from(globes));
+  for(const row of [fixtures.curb,fixtures.inland])for(const [,x,z] of row){
+    assert.ok(channelAt(field,x,z)>220,'surface beneath mapped light at '+[x,z]);
+  }
+  // The static bake removes the source lenses. Check the four authored
+  // globe positions independently of both the source array and the halo batch.
+  for(const z of [-2.05,-7.45])for(const sign of [-1,1]){
+    const x=-.13+z*.133+sign*.83;
+    assert.ok(globes.some((v,i)=>i%3===0&&Math.abs(v-x)<.001&&Math.abs(globes[i+2]-z)<.001));
+    assert.ok(channelAt(field,x,z)>220);
+  }
   const market=[];
   for(let i=0;i<globes.length;i+=3)if(globes[i+2]<-10)market.push(globes.slice(i,i+3));
   assert.ok(market.length>=60);
@@ -47,6 +59,8 @@ test('field derives from the scene globes, is local, and reaches the same shader
   light.update(39,1,false);assert.equal(u.waterfrontStreetNight.value,0);assert.ok(a.getX(0)<.13);
   assert.ok(!compile(scene.waterMaterial).fragmentShader.includes('waterfrontStreetField'));
   const vignette=createCityVignette('plaza'),copy=createStreetIllumination(vignette.root,vignette.streetGlobes,vignette.waterMaterial);
+  assert.deepEqual(vignette.root.getObjectByName('Waterfront streetlamp halos').geometry.attributes.position.array,Float32Array.from(vignette.streetGlobes));
+  assert.notEqual(scene.lampGlow,vignette.lampGlow);
   const v=compile(vignette.walkers.material);copy.update(39,.85);
   assert.ok(v.uniforms.waterfrontStreetNight.value>.9&&u.waterfrontStreetNight.value===0);
   assert.equal(compile(vignette.architectureChunks[0].material).fragmentShader.match(/texture2D\(waterfrontStreetField/g).length,1);

@@ -172,3 +172,34 @@ test('the two Bay Bridge anchorages and Pier W1 have separate masses without obs
   }
   assert.equal(bridge.getObjectsByProperty('name','Continuous land cable tail').length,2);
 });
+
+test('vehicle glazing tracks the local sky and a two-triangle contact stays between the tire walls',async()=>{
+  const {setVehiclePaintLight}=await import('../app/street-vehicles.ts');
+  const paint=streetVehicleMaterial(),glass=new THREE.Color('#94b1c5');
+  setVehiclePaintLight(paint,glass,[.6,.2,-.8],1);
+  function compile(mat){
+    const shader={vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader,uniforms:{}};
+    mat.onBeforeCompile(shader,{});return shader;
+  }
+  const shader=compile(paint);
+  assert.equal(shader.uniforms.vehicleSky.value.getHex(),glass.getHex());
+  assert.deepEqual(shader.uniforms.vehicleCast.value.toArray(),[-.6,.8,5]);
+  const copy=paint.clone();copy.onBeforeCompile=paint.onBeforeCompile;
+  setVehiclePaintLight(copy,new THREE.Color('#27344c'),[.4,-.3,-.7],0);
+  assert.equal(compile(copy).uniforms.vehicleCast.value.z,0);
+  assert.equal(shader.uniforms.vehicleCast.value.z,5);
+  for(let i=0;i<12;i++)for(const distant of [false,true]){
+    const car=createStreetVehicle(i,paint,distant);
+    assert.equal(car.children.length,1);
+    const g=car.children[0].geometry,tag=g.attributes.vehiclePaint,p=g.attributes.position;
+    const marks=[],panes=[];
+    for(let j=0;j<tag.count;j++){
+      if(tag.getZ(j)===2)marks.push(j);
+      if(tag.getZ(j)===1)panes.push(j);
+    }
+    assert.equal(marks.length,6);assert.ok(panes.length>=18);
+    const minY=Math.min(...p.array.filter((_,k)=>k%3===1));
+    for(const j of marks)assert.ok(Math.abs((p.getY(j)-minY)/.24-.012)<.00001);
+    assert.ok(panes.every(j=>p.getY(j)>minY+.14));
+  }
+});

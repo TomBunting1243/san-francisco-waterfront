@@ -182,7 +182,7 @@ test('the streetcar sees dry Ferry Building forecourt, stepped entry and open wa
   for(const [x,z,y] of [[-5.35,-1.84,.031],[2.5,-1.84,.031]]){
     ray.set(new THREE.Vector3(x,.115,z),down);assert.ok(Math.abs(first().point.y-y)<.0001);
   }
-  for(const [z,y] of [[-1.94,.0825],[-1.88,.0975],[-1.81,.1125],[-1.53,.103]]){
+  for(const [z,y] of [[-2.01,.031],[-1.968,.0412857],[-1.94,.0515714],[-1.909,.0618571],[-1.875,.0721429],[-1.845,.0824286],[-1.813,.0927143],[-1.78,.103],[-1.53,.103]]){
     ray.set(new THREE.Vector3(-.12,.115,z),down);assert.ok(Math.abs(first().point.y-y)<.00005);
   }
   ray.set(new THREE.Vector3(3.6,.15,5),down);assert.equal(first().object,water);

@@ -41,6 +41,28 @@ class Reader {
   }
 }
 
+// Survey tiles always use packed Float32 xyz and a triangle index. Compute
+// Three's area-weighted normals directly on those arrays. The city adds tens
+// of thousands of faces at boarding, all sharing this one attribute layout.
+function tileNormals(xyz:Float32Array,index:Uint16Array|Uint32Array){
+  const normals=new Float32Array(xyz.length);
+  for(let i=0;i<index.length;i+=3){
+    const a=index[i]*3,b=index[i+1]*3,c=index[i+2]*3;
+    const cx=xyz[c]-xyz[b],cy=xyz[c+1]-xyz[b+1],cz=xyz[c+2]-xyz[b+2];
+    const ax=xyz[a]-xyz[b],ay=xyz[a+1]-xyz[b+1],az=xyz[a+2]-xyz[b+2];
+    const nx=cy*az-cz*ay,ny=cz*ax-cx*az,nz=cx*ay-cy*ax;
+    normals[a]+=nx;normals[a+1]+=ny;normals[a+2]+=nz;
+    normals[b]+=nx;normals[b+1]+=ny;normals[b+2]+=nz;
+    normals[c]+=nx;normals[c+1]+=ny;normals[c+2]+=nz;
+  }
+  for(let i=0;i<normals.length;i+=3){
+    const x=normals[i],y=normals[i+1],z=normals[i+2];
+    const inv=1/(Math.sqrt(x*x+y*y+z*z)||1);
+    normals[i]=x*inv;normals[i+1]=y*inv;normals[i+2]=z*inv;
+  }
+  return normals;
+}
+
 class Surface {
   private xyz=new Float32Array(8192*3);
   private rgb=new Uint8Array(8192*3);
@@ -73,12 +95,15 @@ class Surface {
     const g=new THREE.BufferGeometry(),n=this.vertexCount;
     // Retain exactly the finished tile's data. Every tile can then reuse the same
     // staging arrays without touching geometry that's already on the screen.
-    g.setAttribute('position',new THREE.BufferAttribute(this.xyz.slice(0,n*3),3));
+    const xyz=this.xyz.slice(0,n*3);
+    g.setAttribute('position',new THREE.BufferAttribute(xyz,3));
     g.setAttribute('color',new THREE.BufferAttribute(this.rgb.slice(0,n*3),3,true));
     g.setAttribute('uv',new THREE.BufferAttribute(this.uv.slice(0,n*2),2));
     const used=this.indices.subarray(0,this.indexCount);
     const index=n>65535?new Uint32Array(used):new Uint16Array(used);
-    g.setIndex(new THREE.BufferAttribute(index,1));g.computeVertexNormals();g.computeBoundingSphere();
+    g.setIndex(new THREE.BufferAttribute(index,1));
+    g.setAttribute('normal',new THREE.BufferAttribute(tileNormals(xyz,index),3));
+    g.computeBoundingSphere();
     return g;
   }
 }

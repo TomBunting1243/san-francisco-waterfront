@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import lamps from '../public/data/promenade-lights.json' with {type:'json'};
+import {bakeRigidChunk} from '../app/city-blocks.ts';
 import {sfMap} from '../app/sf-map.ts';
 import {insideBuilding} from '../app/building-character.ts';
 import {streetPose} from '../app/streets.ts';
@@ -16,6 +17,12 @@ test('the SFPUC fluted pole row follows the waterfront curb from the bridge to P
   for(const [,x,z] of lamps.curb){
     const {z:road}=streetPose(x,1);
     assert.ok(z>road+.1&&z<road+1);
+  }
+  assert.equal(lamps.inland.length,61);
+  assert.equal(new Set([...lamps.curb,...lamps.inland].map(p=>p[0])).size,128);
+  for(const [,x,z] of lamps.inland){
+    const road=streetPose(x,-1).z;
+    assert.ok(z<road-.10&&z>road-1.0,'inland municipal pin outside southbound lanes');
   }
   const gaps=lamps.curb.slice(1).map((r,i)=>r[1]-lamps.curb[i][1]);
   assert.ok(Math.max(...gaps)>8,'round trolley supports must not become fluted street lights');
@@ -57,7 +64,25 @@ test('aerial Pier 7 pairs stand on the timber deck and the night glows sit insid
     }
   }
   assert.equal(k,halos.length);
-  assert.equal(halos.length/3,136);
+  assert.equal(halos.length/3,207);
   const triangles=root.children.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0);
-  assert.ok(triangles<40000);
+  const original=root.children.filter((_,i)=>i<lamps.curb.length||i>=lamps.curb.length+lamps.inland.length);
+  assert.ok(original.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0)<40000);
+  assert.ok(triangles<59000);
+});
+
+test('baked lantern glass emits on its actual faces while iron stays dark',()=>{
+  for(const name of ['Single fluted promenade light','Twin Ferry promenade light','Pier 7 iron lantern']){
+    const pole=root.children.find(o=>o.name===name);
+    assert.ok(pole,name);
+    const baked=bakeRigidChunk(name,[pole],pole.material);
+    const emission=baked.geometry.getAttribute('signLight');
+    let glass=0,iron=0;
+    for(let i=0;i<emission.count;i++){
+      if(emission.getX(i)>.8){glass++;assert.ok(emission.getY(i)>emission.getZ(i));}
+      else if(emission.getX(i)===0)iron++;
+    }
+    assert.ok(glass>=18&&iron>glass,name);
+    baked.geometry.dispose();
+  }
 });

@@ -110,3 +110,16 @@ test('switching or cancelling a partial boarding bake drops stale work and resto
   view(-119,-62);assert.equal(ride.prepareRideView(camera,0),false);ride.endRideView();
   ride.update(camera);waterfront.update(camera);assert.deepEqual(bounds(ride),bounds(waterfront));
 });
+
+test('boarding batches preserve Three’s full-precision indexed facade, roof and road shading',()=>{
+  const group=createUrbanContext(),camera=new THREE.PerspectiveCamera(35,1,.1,52);
+  camera.position.set(-119,24,-62);camera.up.set(0,0,-1);camera.lookAt(-119,0,-62);camera.updateMatrixWorld();
+  assert.ok(group.prepareRideView(camera,Infinity));
+  assert.ok(group.children.length>=2);
+  for(const mesh of group.children){
+    const geometry=mesh.geometry,normal=geometry.getAttribute('normal');
+    geometry.deleteAttribute('normal');
+    geometry.computeVertexNormals();
+    assert.deepEqual(normal.array,geometry.getAttribute('normal').array);
+  }
+});

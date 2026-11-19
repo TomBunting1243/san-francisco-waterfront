@@ -3,43 +3,42 @@ import { getPosition } from 'suncalc';
 const pacificClock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 type Wash = {
   altitude:number; sky:number; horizon:number; water:number; sun:number;
-  fill:number; bounce:number; ambient:number; sunIntensity:number;
+  fill:number; bounce:number; ambient:number; sunIntensity:number; litShare:number;
 };
 function wash(altitude:number,sky:number,horizon:number,water:number,sun:number,
-  fill:number,bounce:number,ambient:number,sunIntensity:number):Wash{
-  return {altitude,sky,horizon,water,sun,fill,bounce,ambient,sunIntensity};
+  fill:number,bounce:number,ambient:number,sunIntensity:number,litShare:number):Wash{
+  return {altitude,sky,horizon,water,sun,fill,bounce,ambient,sunIntensity,litShare};
 }
 // Ink in the upper sky, light on the horizon, then the water and the three light sources.
 // The shared high-sun row lies below San Francisco’s winter solar noon. The two
 // daily arcs therefore meet smoothly even on the shortest day of the year.
-const night=wash(-15,0x152139,0x27364a,0x263f50,0xa9bedc,0xa9b8d1,0x737886,.83,.16);
-const highSun=wash(26,0x92b8d4,0xdde8e4,0x458c98,0xffedd4,0xd4e1e7,0xb2a699,1.82,3.28);
-const morning=[
-  night,
-  wash(-6,0x45567c,0xb8a5ae,0x4b6179,0xffc89b,0xb7beda,0x918c9b,1.08,.22),
-  wash(0,0x8da9c6,0xf3cfac,0x628191,0xffb779,0xc1cee3,0xb79f97,1.25,1.30),
-  wash(6,0x9ab8cf,0xf5dec0,0x6797a0,0xffc187,0xc4d3e9,0xbfa89b,1.27,3.96),
-  wash(14,0x9ac0d7,0xe6eadd,0x4a929b,0xffdeb4,0xcbd9e7,0xbbae9f,1.54,3.61),
-  highSun,
-];
-const evening=[
-  night,
-  wash(-6,0x42476b,0x947f9f,0x434f68,0xffaa82,0xb0abd0,0x9d8597,1.06,.20),
-  wash(0,0x8393b7,0xedb4a4,0x67788b,0xffad75,0xbdb9da,0xbfa398,1.20,1.25),
-  wash(6,0xa3b1ca,0xf5d0a7,0x738e9c,0xffb56e,0xc9c8df,0xc6aa9c,1.31,3.67),
-  wash(14,0xa1b9d1,0xf3dfca,0x58909a,0xffd6a6,0xd1d5e2,0xbfae9e,1.54,3.57),
-  highSun,
-];
+const night=wash(-15,0x0d1626,0x1c2a40,0x0b1422,0x9fb4d6,0x23324d,0x0f1a2b,.75,.12,.30);
+const blue=wash(-6,0x23346a,0x6f6aa6,0x17264a,0xff8f66,0x46558f,0x1f2a52,.95,0,.40);
+const highSun=wash(26,0x8fbfe0,0xdbe9ea,0x4a7d86,0xfff1d6,0xbcd3e8,0x7b8db3,1.10,2.20,0);
+const morning=[night,blue,
+  wash(6,0x8fa9cf,0xf6c9a8,0x4f6f8a,0xffc08f,0x8f9ce0,0x6a6fa3,.78,2.30,.03),highSun];
+const evening=[night,blue,
+  wash(6,0xa9b7dc,0xffc48e,0x47627f,0xff9d4d,0xd9a98c,0x5f5a96,.62,2.50,.05),highSun];
 const clamp = (v:number) => Math.max(0,Math.min(1,v));
 const toLinear=(c:number)=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4;
 const toSrgb=(c:number)=>c<=.0031308?c*12.92:1.055*c**(1/2.4)-.055;
+// OKLab's first step is a cube-root LMS transform; the remaining transform
+// into L,a,b is linear and commutes with interpolation in Cartesian OKLab.
+function pigmentSpace(hex:number){
+  const r=toLinear((hex>>16)/255),g=toLinear(((hex>>8)&255)/255),b=toLinear((hex&255)/255);
+  return [Math.cbrt(.4122214708*r+.5363325363*g+.0514459929*b),
+    Math.cbrt(.2119034982*r+.6806995451*g+.1073969566*b),
+    Math.cbrt(.0883024619*r+.2817188376*g+.6299787005*b)];
+}
 function mixColor(a:number,b:number,t:number){
   if(t===0||a===b)return a;
   if(t===1)return b;
-  return [16,8,0].reduce((result,shift)=>{
-    const start=toLinear(((a>>shift)&255)/255),end=toLinear(((b>>shift)&255)/255);
-    return result|(Math.round(toSrgb(start+(end-start)*t)*255)<<shift);
-  },0);
+  const start=pigmentSpace(a),end=pigmentSpace(b);
+  const [l,m,s]=start.map((v,i)=>(v+(end[i]-v)*t)**3);
+  const channel=(v:number)=>Math.round(255*toSrgb(clamp(v)));
+  return channel(4.0767416621*l-3.3077115913*m+.2309699292*s)<<16|
+    channel(-1.2684380046*l+2.6097574011*m-.3413193965*s)<<8|
+    channel(-.0041960863*l-.7034186147*m+1.7076147010*s);
 }
 export function harborWash(altitude:number,azimuth:number){
   const stops=azimuth<180?morning:evening;
@@ -50,6 +49,7 @@ export function harborWash(altitude:number,azimuth:number){
   return {
     sky:mixColor(a.sky,b.sky,t),horizon:mixColor(a.horizon,b.horizon,t),water:mixColor(a.water,b.water,t),
     sun:mixColor(a.sun,b.sun,t),fill:mixColor(a.fill,b.fill,t),bounce:mixColor(a.bounce,b.bounce,t),
+    litShare:a.litShare+(b.litShare-a.litShare)*t,
     ambient:a.ambient+(b.ambient-a.ambient)*t,sunIntensity:a.sunIntensity+(b.sunIntensity-a.sunIntensity)*t,
   };
 }

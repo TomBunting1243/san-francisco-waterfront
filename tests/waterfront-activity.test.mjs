@@ -131,3 +131,91 @@ test('two shared walkers turn inside Pier 1½, pause, then return on supported c
   }
   assert.ok(minSpace>.055,'opposing pedestrians have separate passing lanes');
 });
+
+test('four ferry travelers cross the hall and bayside promenade on supported, clear routes to the E gangway',async()=>{
+  const {ferryPassengerPose}=await import('../app/ferry-passengers.ts');
+  const {ferryPose}=await import('../app/motion.ts');
+  const {ferryCycle}=await import('../app/ferry-service.ts');
+  const world=createLandscape(),cell=.42,tiles=new Map(),probe=new THREE.Raycaster();
+  const extent=new THREE.Box3(new THREE.Vector3(-8.4,.014,-2.23),new THREE.Vector3(1.20,.26,3.10));
+  const tri=new THREE.Triangle(),box=new THREE.Box3();
+  // Index only the actual production faces along the west entry and east apron.
+  for(const chunk of world.architectureChunks){
+    const g=chunk.geometry;
+    if(!extent.intersectsBox(g.boundingBox))continue;
+    for(let i=0;i<g.index.count;i+=3){
+      const verts=[tri.a,tri.b,tri.c];
+      verts.forEach((v,k)=>v.fromBufferAttribute(g.attributes.position,g.index.getX(i+k)));
+      box.setFromPoints(verts).intersect(extent);
+      if(box.isEmpty())continue;
+      for(let x=Math.floor(box.min.x/cell);x<=Math.floor(box.max.x/cell);x++)
+        for(let z=Math.floor(box.min.z/cell);z<=Math.floor(box.max.z/cell);z++){
+          if(x*cell<-.84&&z*cell<1.25)continue;
+          const key=x+','+z,positions=tiles.get(key)??[];
+          if(!tiles.has(key))tiles.set(key,positions);
+          for(const v of verts)positions.push(v.x,v.y,v.z);
+        }
+    }
+  }
+  const material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
+  for(const [key,positions] of tiles){
+    const g=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    tiles.set(key,new THREE.Mesh(g,material));
+  }
+  const down=new THREE.Vector3(0,-1,0),point=new THREE.Vector3(),all=[];
+  for(let person=0;person<4;person++){
+    const visits=new Set();
+    for(let t=0;t<2*ferryCycle;t+=.32){
+      const p=ferryPassengerPose(t,person,ferryPose(t,0));
+      if(!extent.containsPoint(point.set(p.x,p.y,p.z))||p.standing)continue;
+      visits.add(p.z< -1.75?'steps':p.z<1.67?'hall':p.z<2.97?'promenade':'gangway joint');
+      for(const shift of [-.016,0,.016]){
+        const x=p.x+Math.sin(p.heading)*shift,z=p.z-Math.cos(p.heading)*shift;
+        const tile=tiles.get(Math.floor(x/cell)+','+Math.floor(z/cell));
+        probe.set(point.set(x,p.y+.117,z),down);probe.far=.145;
+        const ground=tile&&probe.intersectObject(tile,false)[0]?.point.y;
+        const tolerance=z>3.0?.012:shift?.011:.0035;
+        assert.ok(Number.isFinite(ground)&&Math.abs(ground-p.y)<tolerance,
+          'ground or body clearance at '+[person,t,x,p.y,z,ground].join(','));
+      }
+    }
+    all.push(visits);
+  }
+  for(const visits of all)assert.deepEqual([...visits].sort(),['gangway joint','hall','promenade','steps']);
+});
+
+test('travelers clear the gangway before retraction and ride on the moving Pyxis deck across repeated calls',async()=>{
+  const {ferryPassengerPose}=await import('../app/ferry-passengers.ts');
+  const {ferryPose}=await import('../app/motion.ts');
+  const {ferryCycle,vessels}=await import('../app/ferry-service.ts');
+  const ship=vessels[0],frame=new THREE.Object3D(),sole=new THREE.Vector3();
+  const boarded=[0,0,0,0],alighted=[0,0,0,0],wasRiding=[];
+  let separation=Infinity,crossings=0;
+  for(let time=0;time<=4*ferryCycle;time+=.25){
+    const boat=ferryPose(time,0);
+    frame.position.set(boat.x,boat.y,boat.z);
+    frame.rotation.set(0,boat.heading,Math.sin(time*1.2)*.007*(1-boat.brow));
+    frame.updateMatrixWorld();
+    const poses=Array.from({length:4},(_,i)=>ferryPassengerPose(time,i,boat));
+    for(const [i,p] of poses.entries()){
+      for(let j=0;j<i;j++)separation=Math.min(separation,Math.hypot(p.x-poses[j].x,p.z-poses[j].z));
+      const local=frame.worldToLocal(sole.set(p.x,p.y,p.z));
+      const riding=p.standing&&Math.abs(local.z+.222)<.001;
+      if(riding){
+        assert.ok(Math.abs(local.y-ship.sill)<.00001&&Math.abs(local.x-ship.door)<.034,'soles on the rigid vestibule floor');
+        if(boat.brow===0)assert.ok(Math.cos(p.heading+boat.heading)>.99999,'passengers face the bow as the hull turns');
+      }
+      if(time&&riding!==wasRiding[i]){
+        assert.equal(boat.brow,1);assert.equal(boat.phase,'alongside');
+        if(riding)boarded[i]++;else alighted[i]++;
+      }
+      if(p.x>boat.stopX+.027&&p.x<boat.stopX+.149&&Math.abs(p.z-boat.stopZ)<.04&&!p.standing){
+        assert.equal(boat.brow,1,'brow spans the water before passengers cross');crossings++;
+      }
+      wasRiding[i]=riding;
+    }
+  }
+  assert.ok(separation>.044,'travelers maintain individual body clearance across phases');
+  assert.ok(crossings>70);
+  assert.deepEqual(boarded,[2,2,2,2]);assert.deepEqual(alighted,[2,2,2,2]);
+});

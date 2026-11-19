@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {footprintGeometry,sfMap} from './sf-map.ts';
+import {markTidalPart} from './tidal-berths.ts';
 import {harborDatum,waterSurface} from './water-surface.ts';
 
 type Building={id:number;p:number[][];h:number;parent?:number};
 type Point=[number,number];
-type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
+type Pane={x:number;y:number;z:number;ry:number;w:number;h:number;tide?:boolean};
 export const mooredVesselIds=new Set([281243360,281243626]);
 export const pierThreeFloat=sfMap.piers.find(p=>p.p[0][0]===20.232&&p.p[0][1]===10.731)!;
 export const isMooredVessel=(b:Building)=>mooredVesselIds.has(b.parent||b.id);
@@ -49,6 +50,7 @@ export function mooredVessel(b:Building,font:Font){
   const root=new THREE.Group(),windows:Pane[]=[],frame=berth(b.p),belle=b.id===281243626;
   const white='#e4e1d1',shadow='#344b50',rail='#cdd3c6',blue='#485d71',maroon='#a55443';
   const paint=new Map<string,THREE.MeshStandardMaterial>();
+  markTidalPart(root,'Pier 3');
   root.name=belle?'San Francisco Belle, Pier 3':'Santa Rosa, Pier 3';
   root.position.set(frame.x,waterSurface.level,frame.z);root.rotation.y=frame.angle;root.updateMatrixWorld();
   function mesh(geo:THREE.BufferGeometry,color:string,x=0,y=0,z=0,name=''){
@@ -114,7 +116,7 @@ export function mooredVessel(b:Building,font:Font){
       for(let j=0;j<n;j++){
         const f=(j+.5)/n,xx=x+dx*f+nx*.003,zz=z+dz*f+nz*.003;
         const point=root.localToWorld(v(xx,y,zz));
-        windows.push({x:point.x,y:point.y,z:point.z,ry:frame.angle+heading,w,h});
+        windows.push({x:point.x,y:point.y,z:point.z,ry:frame.angle+heading,w,h,tide:true});
         if(style==='sash'){
           const mullion=box(.004,h,.004,xx+nx*.001,y,zz+nz*.001,white);mullion.rotation.y=heading;
           const sash=box(w,.006,.004,xx+nx*.002,y+h*.09,zz+nz*.002,white);sash.rotation.y=heading;
@@ -230,6 +232,7 @@ export function mooredVessel(b:Building,font:Font){
   // Rosa boards at her outboard end. Belle boards via a separate float.
   const worldPoint=(x:number,y:number,z:number)=>root.worldToLocal(v(x,y,z));
   function gangway(ship:THREE.Vector3,landing:THREE.Vector3,width:number,name:string){
+    const first=root.children.length;
     const delta=landing.clone().sub(ship),mid=ship.clone().lerp(landing,.5);
     const ramp=box(width,.014,delta.length(),mid.x,mid.y,mid.z,'#aaa99c',name);
     ramp.rotation.order='YXZ';ramp.rotation.y=Math.atan2(delta.x,delta.z);ramp.rotation.x=-Math.atan2(delta.y,Math.hypot(delta.x,delta.z));
@@ -239,6 +242,10 @@ export function mooredVessel(b:Building,font:Font){
       const spacing=Math.max(1,Math.ceil(delta.length()/.19));
       for(let i=0;i<=spacing;i++){const p=s.clone().lerp(e,i/spacing);rod(p,p.clone().add(v(0,.068,0)),.003,rail);}
       rod(s.clone().add(v(0,.068,0)),e.clone().add(v(0,.068,0)),.0034,rail);
+    }
+    if(name==='Pier 3 boarding gangway'){
+      const a=root.localToWorld(landing.clone()),b=root.localToWorld(ship.clone());
+      for(const part of root.children.slice(first))markTidalPart(part,'Pier 3',[a.x,a.z],[b.x,b.z]);
     }
   }
   if(belle){
@@ -257,7 +264,9 @@ export function mooredVessel(b:Building,font:Font){
     const s=v(-mainWidth*.425,freeboard+.07,sign*(belle?1.74:1.62));
     const e=worldPoint(19.54,harborDatum.pierDeck+.015,frame.z+sign*(belle?2.10:2.02));
     const mid=s.clone().lerp(e,.5);mid.y-=.055;
-    rod(s,mid,.0045,'#8f846b');rod(mid,e,.0045,'#8f846b');
+    const a=root.localToWorld(e.clone()),b=root.localToWorld(s.clone());
+    for(const line of [rod(s,mid,.0045,'#8f846b'),rod(mid,e,.0045,'#8f846b')])
+      markTidalPart(line,'Pier 3',[a.x,a.z],[b.x,b.z]);
     mesh(new THREE.CylinderGeometry(.037,.035,.12,8),'#565c56',-mainWidth*.49,freeboard-.009,sign*.92,'Fender');
   }
   return {root,windows};

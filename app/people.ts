@@ -7,6 +7,7 @@ const contactSurfaceOffset=.0009;
 const swingFraction=.44;
 const pedSpeed=(direction:number)=>direction>0?pedestrianPace:pedestrianPace*.87;
 
+const accents=['#c0362c','#e8a13a','#e9d24a','#ecebe4'];
 const cast=[
   {coat:'#a9604c',hem:'#915343',trousers:'#4b565a',ink:'#503f3a',light:'#caae83',accent:'#d0aa6c',bag:'#9a7950',cut:'trench'},
   {coat:'#a78746',hem:'#8d7441',trousers:'#5e6153',ink:'#534c3f',light:'#b58769',accent:'#6f8176',bag:'#9e8170',cut:'skirt'},
@@ -17,7 +18,7 @@ const cast=[
 ];
 
 type Point=[number,number];
-type RouteSample=(timeOffset:number)=>{x:number;z:number;heading:number};
+type RouteSample=(timeOffset:number)=>{x:number;z:number;y?:number;heading:number};
 
 /** A tinted, slightly irregular piece of paper. The geometry has no cylindrical cross-section. */
 function cutout(points:Point[],seed:number){
@@ -34,7 +35,7 @@ function cutout(points:Point[],seed:number){
   return geometry;
 }
 
-function contactMaterial(){
+function contactMaterial(cast:{value:THREE.Vector3}){
   const size=24, pixels=new Uint8Array(size*size*4);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const distance=Math.hypot((x+.5)*2/size-1,(y+.5)*2/size-1);
@@ -44,13 +45,44 @@ function contactMaterial(){
   const alphaMap=new THREE.DataTexture(pixels,size,size);
   alphaMap.minFilter=alphaMap.magFilter=THREE.LinearFilter;
   alphaMap.needsUpdate=true;
-  return new THREE.MeshBasicMaterial({color:'#3d4539',alphaMap,transparent:true,opacity:.29,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
+  const material=new THREE.MeshBasicMaterial({color:'#2a2740',alphaMap,transparent:true,opacity:.34,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
+  material.onBeforeCompile=shader=>{
+    shader.uniforms.paperCast=cast;
+    shader.vertexShader='uniform vec3 paperCast;\n'+shader.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
+      // One stamp stays beneath the shoe. Its partner starts at the other sole
+      // and stretches away from the sun. Both remain anchored as the camera turns.
+      if(paperCast.z>.0001 && gl_InstanceID%2==0){
+        vec3 anchor=(modelMatrix*instanceMatrix[3]).xyz;
+        float width=length(instanceMatrix[0].xyz);
+        vec2 along=normalize(paperCast.xy);
+        vec2 shadow=anchor.xz+along*((uv.y-.09)*min(1.5,width*4.18*paperCast.z))+
+          vec2(-along.y,along.x)*(uv.x-.5)*width*1.35;
+        vec4 projected=viewMatrix*vec4(shadow.x,anchor.y,shadow.y,1.);
+        mvPosition=mix(mvPosition,projected,smoothstep(0.,.3,paperCast.z));
+        gl_Position=projectionMatrix*mvPosition;
+      }`);
+  };
+  return material;
 }
 
 /** Painted miniature pedestrians with view-facing contours and world-space foot contact. */
 export function createPeople(count=22,seatedCount=0){
   const group=new THREE.Group();
   const paper=new THREE.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:1,side:THREE.DoubleSide});
+  // The figure's painted face follows the viewer. Its pigment must not turn
+  // brighter or darker with that artificial rotation. Local lamp spill is
+  // added later by the same street-light shader as the rest of the scene.
+  paper.onBeforeCompile=shader=>{
+    shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',
+      'outgoingLight=diffuseColor.rgb;\n#include <opaque_fragment>');
+  };
+  const castOffset={value:new THREE.Vector3()},white=new THREE.Color(0xffffff);
+  function setPaintLight(fill:THREE.Color,sun:readonly number[],direct:number,night:number){
+    paper.color.copy(fill).lerp(white,.82-.57*night);
+    const horizontal=Math.hypot(sun[0],sun[2]);
+    const reach=horizontal>.0001&&sun[1]>0?direct*horizontal/Math.max(.015,sun[1]):0;
+    castOffset.value.set(-sun[0],-sun[2],reach);
+  }
   function batch(name:string,geometry:THREE.BufferGeometry,n=count,material:THREE.Material=paper){
     const mesh=new THREE.InstancedMesh(geometry,material,n);
     mesh.name=name;mesh.frustumCulled=false;group.add(mesh);return mesh;
@@ -102,13 +134,15 @@ export function createPeople(count=22,seatedCount=0){
   const straps=batch('Bag straps',cutout([
     [-.0036,-.51],[.0043,-.51],[.0035,.50],[-.0031,.50],
   ],5));
-  const contacts=batch('Foot contact shadows',new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),count*2,contactMaterial());
+  const contacts=batch('Foot contact shadows',new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),count*2,contactMaterial(castOffset));
   contacts.renderOrder=2;
 
   for(let i=0;i<count;i++){
     const person=cast[i%cast.length];
+    const coat=i%6===0?accents[Math.floor(i/6)%accents.length]:person.coat;
+    const hem=i%6===0?new THREE.Color(coat).multiplyScalar(.76):person.hem;
     for(const [mesh,color] of [
-      [bodies,person.coat],[hems,person.hem],[hands,person.light],[lapels,person.accent],
+      [bodies,coat],[hems,hem],[hands,person.light],[lapels,person.accent],
       [heads,person.ink],[cheeks,person.light],[hats,i%3===0?person.hem:person.ink],
       [bags,person.bag],[straps,person.bag],
     ] as const)mesh.setColorAt(i,new THREE.Color(color));
@@ -117,7 +151,7 @@ export function createPeople(count=22,seatedCount=0){
       const trouserInk=new THREE.Color(person.trousers).multiplyScalar(side?1:.82);
       legs.setColorAt(index,trouserInk);
       if(i>=count-seatedCount)legs.setColorAt((i+seatedCount)*2+side,trouserInk);
-      sleeves.setColorAt(index,new THREE.Color(person.coat).multiplyScalar(side?1:.84));
+      sleeves.setColorAt(index,new THREE.Color(coat).multiplyScalar(side?1:.84));
       shoes.setColorAt(index,new THREE.Color(person.ink).multiplyScalar(side?.94:.79));
     }
   }
@@ -194,9 +228,10 @@ export function createPeople(count=22,seatedCount=0){
       const ankleY=.020+lift;
       const advance=(footZ+.012)*size+(seat?.footReach??0), spread=sign*.045*size;
       const anchor=routeSample?.(advance/pedSpeed(direction));
+      const sole=anchor?.y??base;
       if(anchor){
         // The ground anchor stays fixed during stance, including when the body rounds a bend.
-        foot.set(anchor.x+Math.sin(anchor.heading)*spread,base+size*ankleY,anchor.z-Math.cos(anchor.heading)*spread);
+        foot.set(anchor.x+Math.sin(anchor.heading)*spread,sole+size*ankleY,anchor.z-Math.cos(anchor.heading)*spread);
       }else foot.set(x+pathX*advance+pathZ*spread,base+size*ankleY,z+pathZ*advance-pathX*spread);
       hip.set(x+size*(pathX*.003+pathZ*sign*.022),base+size*(.228+bob),z+size*(pathZ*.003-pathX*sign*.022));
       if(seat){
@@ -209,7 +244,7 @@ export function createPeople(count=22,seatedCount=0){
       }else legSegment(index,hip,foot,side);
       place(shoes,index,foot.x,foot.y,foot.z,paperWidth,1,swing&&!standing?-Math.sin(2*Math.PI*u)*.105:0);
       const shadowScale=1-lift*8;
-      transform.position.set(foot.x,base+contactSurfaceOffset,foot.z);
+      transform.position.set(foot.x,sole+contactSurfaceOffset,foot.z);
       transform.quaternion.setFromAxisAngle(up,Math.PI/2-bearing);
       transform.scale.set(.131*shadowScale*size,1,(.17+.008*sway)*shadowScale*size);
       transform.updateMatrix();contacts.setMatrixAt(index,transform.matrix);
@@ -224,5 +259,5 @@ export function createPeople(count=22,seatedCount=0){
   function flush(){
     for(const mesh of [legs,shoes,bodies,hems,sleeves,hands,lapels,heads,cheeks,hats,bags,straps,contacts])mesh.instanceMatrix.needsUpdate=true;
   }
-  return {group,bodies,heads,setViewer,update,flush};
+  return {group,bodies,heads,setPaintLight,setViewer,update,flush};
 }

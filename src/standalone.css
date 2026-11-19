@@ -89,3 +89,7 @@ main[data-harbor-light=dark] .standalone-custom-reset:disabled{color:#afbab8}
 }
 .ride-boarding[data-ready=true] span::after{animation:none}
 @keyframes boarding-breathe{from{opacity:.36;transform:scaleX(.55)}to{opacity:1;transform:scaleX(1)}}
+
+.standalone-custom-panel .standalone-harbor-data {display:grid;gap:.45rem;margin:.25rem 0;font-size:.76rem;line-height:1.35;}
+.standalone-harbor-data dt {font-weight:600;}
+.standalone-harbor-data dd {margin:0;}

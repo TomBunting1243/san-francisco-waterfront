@@ -6,7 +6,7 @@ export const fireboatCycle=120;
 const smooth=(x:number)=>{const t=Math.max(0,Math.min(1,x));return t*t*(3-2*t);};
 const dock={x:-42.9,z:5.3},display={x:-32,z:17},heading=-Math.atan2(display.z-dock.z,display.x-dock.x);
 /** Repeating harbor salute: depart, rotate with monitors running, then return to berth. */
-export function fireboatPose(elapsed:number){
+export function fireboatPose(elapsed:number,tideOffset=0){
   const t=((elapsed%fireboatCycle)+fireboatCycle)%fireboatCycle;
   let travel=0,angle=heading,spray=0,phase='berthed';
   if(t>=8&&t<30){travel=smooth((t-8)/22);phase='departing';}
@@ -15,7 +15,7 @@ export function fireboatPose(elapsed:number){
   else if(t>=100){angle=heading+Math.PI*3+Math.PI*smooth((t-100)/8);}
   const speed=t>=8&&t<30?6*((t-8)/22)*(1-(t-8)/22)/22:t>=74&&t<100?6*((t-74)/26)*(1-(t-74)/26)/26:0;
   const x=dock.x+(display.x-dock.x)*travel,z=dock.z+(display.z-dock.z)*travel;
-  return {x,z,y:waterHeight(x,z,elapsed)-.01+Math.sin(elapsed*1.7)*.008,heading:angle,spray,speed:speed*Math.hypot(display.x-dock.x,display.z-dock.z),phase};
+  return {x,z,y:waterHeight(x,z,elapsed,tideOffset)-.01+Math.sin(elapsed*1.7)*.008,heading:angle,spray,speed:speed*Math.hypot(display.x-dock.x,display.z-dock.z),phase};
 }
 
 export function createFireboat(){
@@ -58,16 +58,16 @@ export function createFireboat(){
   const dummy=new THREE.Object3D(),a=new THREE.Vector3(),b=new THREE.Vector3(),delta=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
   const landingHeights=new Float32Array(monitors.length);
   function jetPoint(index:number,t:number,strength:number,time:number,out:THREE.Vector3){const m=monitors[index],angle=m.angle+Math.sin(time*.28+index)*.055;return out.set(m.x+Math.cos(angle)*m.reach*t*strength,m.y*(1-t)+landingHeights[index]*t+4*m.peak*strength*t*(1-t),m.z+Math.sin(angle)*m.reach*t*strength);}
-  function update(time:number){
-    const pose=fireboatPose(time);root.position.set(pose.x,pose.y,pose.z);root.rotation.y=pose.heading;vessel.rotation.z=Math.sin(time*1.1)*.012;
+  function update(time:number,tideOffset=0){
+    const pose=fireboatPose(time,tideOffset);root.position.set(pose.x,pose.y,pose.z);root.rotation.y=pose.heading;vessel.rotation.z=Math.sin(time*1.1)*.012;
     spray.visible=pose.spray>.001;wake.visible=pose.speed>.025;
-    wake.position.set(-1.25,waterHeight(pose.x-1.25*Math.cos(pose.heading),pose.z+1.25*Math.sin(pose.heading),time)-pose.y+.025,0);wake.scale.set(1+pose.speed*.6,.72,1);wake.rotation.z=Math.sin(time*.8)*.08;
+    wake.position.set(-1.25,waterHeight(pose.x-1.25*Math.cos(pose.heading),pose.z+1.25*Math.sin(pose.heading),time,tideOffset)-pose.y+.025,0);wake.scale.set(1+pose.speed*.6,.72,1);wake.rotation.z=Math.sin(time*.8)*.08;
     if(!spray.visible)return pose;
     for(let j=0;j<monitors.length;j++){
-      jetPoint(j,1,pose.spray,time,a);const wx=pose.x+a.x*Math.cos(pose.heading)+a.z*Math.sin(pose.heading),wz=pose.z-a.x*Math.sin(pose.heading)+a.z*Math.cos(pose.heading);landingHeights[j]=waterHeight(wx,wz,time)-pose.y+.025;
+      jetPoint(j,1,pose.spray,time,a);const wx=pose.x+a.x*Math.cos(pose.heading)+a.z*Math.sin(pose.heading),wz=pose.z-a.x*Math.sin(pose.heading)+a.z*Math.cos(pose.heading);landingHeights[j]=waterHeight(wx,wz,time,tideOffset)-pose.y+.025;
       for(let i=0;i<segments;i++){jetPoint(j,i/segments,pose.spray,time,a);jetPoint(j,(i+1)/segments,pose.spray,time,b);delta.subVectors(b,a);const length=delta.length();dummy.position.copy(a).add(b).multiplyScalar(.5);dummy.quaternion.setFromUnitVectors(up,delta.normalize());const radius=(.026+.022*i/segments)*pose.spray;dummy.scale.set(radius,length*1.025,radius);dummy.updateMatrix();jets.setMatrixAt(j*segments+i,dummy.matrix);}
       for(let i=0;i<dropsPerJet;i++){const t=((time*.48+i/dropsPerJet+j*.17)%1);jetPoint(j,t,pose.spray,time,a);const scatter=t*t*.17*pose.spray;dummy.position.set(a.x+Math.sin(i*5+j)*scatter,a.y+Math.sin(i*13+j)*scatter,a.z+Math.cos(i*8+j)*scatter);dummy.quaternion.identity();const r=(.011+t*.026)*pose.spray;dummy.scale.set(r,r*1.6,r);dummy.updateMatrix();droplets.setMatrixAt(j*dropsPerJet+i,dummy.matrix);}
-      jetPoint(j,1,pose.spray,time,a);for(let k=0;k<3;k++){const p=(time*.7+k/3)%1;const wx=pose.x+a.x*Math.cos(pose.heading)+a.z*Math.sin(pose.heading),wz=pose.z-a.x*Math.sin(pose.heading)+a.z*Math.cos(pose.heading);dummy.position.set(a.x,waterHeight(wx,wz,time)-pose.y+.03,a.z);dummy.rotation.set(-Math.PI/2,0,0);const r=(.09+p*.36)*pose.spray;dummy.scale.set(r,r,1-p*.8);dummy.updateMatrix();splashes.setMatrixAt(j*3+k,dummy.matrix);}
+      jetPoint(j,1,pose.spray,time,a);for(let k=0;k<3;k++){const p=(time*.7+k/3)%1;const wx=pose.x+a.x*Math.cos(pose.heading)+a.z*Math.sin(pose.heading),wz=pose.z-a.x*Math.sin(pose.heading)+a.z*Math.cos(pose.heading);dummy.position.set(a.x,waterHeight(wx,wz,time,tideOffset)-pose.y+.03,a.z);dummy.rotation.set(-Math.PI/2,0,0);const r=(.09+p*.36)*pose.spray;dummy.scale.set(r,r,1-p*.8);dummy.updateMatrix();splashes.setMatrixAt(j*3+k,dummy.matrix);}
     }
     jets.instanceMatrix.needsUpdate=true;droplets.instanceMatrix.needsUpdate=true;splashes.instanceMatrix.needsUpdate=true;
     return pose;

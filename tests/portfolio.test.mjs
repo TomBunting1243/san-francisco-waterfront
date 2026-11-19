@@ -198,7 +198,12 @@ test('ferry hulls and wakes share the waterfront mist bank and one weather-drive
     assert.match(shader.fragmentShader,/mix\(gl_FragColor.rgb,bayHorizon,distanceMist\)/);
     assert.doesNotMatch(shader.fragmentShader,/#include <fog_fragment>|float edgeHaze/);
   }
-  assert.equal(world.walkerHeads.count,world.walkerCount+world.residentPositions.length+world.pier14Visitors.length);
+  assert.equal(world.seatStart,world.walkerCount+world.residentPositions.length+4);
+  assert.equal(world.walkerHeads.count,world.seatStart+world.pier14Visitors.length);
+  const pyxis=world.ferries[0],positions=pyxis.children[0].geometry.getAttribute('position');
+  const version=positions.version;
+  world.updatePyxisBoardingDoor(pyxis,1);
+  assert.equal(positions.version,version+1,'Opening the ship moves the door in the final single-draw hull');
   const matrix=new THREE.Matrix4(),position=new THREE.Vector3();
   world.residentPositions.forEach((anchor,i)=>{
     world.walkerHeads.getMatrixAt(i+world.walkerCount,matrix);position.setFromMatrixPosition(matrix);
@@ -218,7 +223,26 @@ test('regional city views reuse geometry and exclude most of the full city',asyn
   for(const variant of ['street','plaza']){
     const view=createCityVignette(variant);
     assert.ok(view.architectureChunks.length<full.architectureChunks.length/3);
-    for(const chunk of view.architectureChunks){assert.ok(full.architectureChunks.some(source=>source.geometry===chunk.geometry));assert.equal(chunk.userData.sharedGeometry,true);assert.notEqual(chunk.material,full.architectureChunks[0].material);}
+    let tidalCopies=0;
+    for(const chunk of view.architectureChunks){
+      const source=full.architectureChunks.find(s=>s.geometry===chunk.geometry)??full.architectureChunks.find(s=>s.geometry.userData.tideBoundsMargin&&s.name===chunk.name&&s.geometry.attributes.position.count===chunk.geometry.attributes.position.count);
+      assert.ok(source,chunk.name);assert.notEqual(chunk.material,source.material);
+      if(source.geometry.userData.tideBoundsMargin){
+        tidalCopies++;
+        assert.ok(chunk.geometry!==source.geometry,'independent tidal geometry');
+        assert.ok(chunk.geometry.attributes.position.array!==source.geometry.attributes.position.array,'independent tidal vertices');
+        const original=source.geometry.attributes.position.array.slice();
+        view.updateTide(.087);
+        assert.ok(original.every((v,i)=>v===source.geometry.attributes.position.array[i]),'a regional tide cannot move the main harbor');
+        assert.ok(original.some((v,i)=>v!==chunk.geometry.attributes.position.array[i]),'floating berth must rise within '+chunk.name);
+        view.updateTide(0);
+        assert.ok(original.every((v,i)=>v===chunk.geometry.attributes.position.array[i]),'berth returns to datum in '+chunk.name);
+      }else{
+        assert.ok(chunk.geometry===source.geometry,'fixed geometry must be shared');
+        assert.equal(chunk.userData.sharedGeometry,true);
+      }
+    }
+    assert.ok(tidalCopies<view.architectureChunks.length/3,'only floating infrastructure needs independent vertices');
     assert.ok(view.walkers.count<full.walkers.count);assert.equal(view.ferries.length,0);assert.ok(view.traffic.length>0);
     const windows=view.root.children.find(o=>o instanceof THREE.InstancedMesh&&o.material===view.windowMaterial);
     const glow=windows.geometry.getAttribute('windowGlow'),matrix=new THREE.Matrix4();
@@ -506,6 +530,41 @@ test('Ferry Building retains the five-bay portico, 23 east arches and open centr
   assert.ok(towerZ<-1);
 });
 
+test('west portico visitors pass under patterned fanlights, alongside the recessed market doors and the main stair',async()=>{
+  const {FontLoader}=await import('three/addons/loaders/FontLoader.js');
+  const {default:fontData}=await import('../app/harbor-font.json',{with:{type:'json'}});
+  const {ferryHall}=await import('../app/ferry-architecture.ts');
+  const {ferryEntryX,ferryPorticoGround,ferryTreads}=await import('../app/ferry-portico-access.ts');
+  const {root}=ferryHall(new FontLoader().parse(fontData));
+  root.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(),east=new THREE.Vector3(0,0,1),down=new THREE.Vector3(0,-1,0);
+  function first(offset,y){
+    ray.set(new THREE.Vector3(ferryEntryX+offset,y,-3),east);
+    return ray.intersectObject(root,true)[0];
+  }
+  for(const eye of [.175,.210,.260])for(const offset of [-.075,0,.075]){
+    assert.equal(first(offset,eye),undefined,'paired doors leave the public passage open');
+  }
+  assert.ok(first(.155,.190).point.z>-1.24&&first(.155,.190).point.z<-1.19,'glazed sidelight at column line A');
+  assert.ok(first(1.06,.19).point.z>-.76&&first(1.06,.19).point.z<-.49,'outer market door at column line B');
+  assert.equal(first(-.57,.19).object.material.color.getHexString(),'a79d87','historic stair beyond right-hand arch');
+  assert.ok(first(2.03,.19).point.z>-.83,'north arcade opens toward its recessed merchant window');
+  const fan=new Set();
+  for(let offset=-.15;offset<=.15;offset+=.005){
+    const h=first(offset,.59);
+    if(h?.object.name==='Recessed west glazing and shop interiors'){
+      fan.add(new THREE.Color().fromBufferAttribute(h.object.geometry.attributes.color,h.face.a).getHexString());
+    }
+  }
+  assert.ok(fan.size>=4,'clear distinction between glazing and the metal lattice in the half-round fanlight');
+  for(const offset of [-.05,0,.05])for(const z of [...ferryTreads.map(p=>p.z),-1.745,-1.60,-1.225,-.90,.05,1.41]){
+    ray.set(new THREE.Vector3(ferryEntryX+offset,.17,z),down);
+    const h=ray.intersectObject(root,true)[0];
+    assert.ok(h&&Math.abs(h.point.y-ferryPorticoGround(z))<.00005,'foot height follows finished entrance floor');
+  }
+  assert.ok(ferryTreads.every((t,i)=>i===0||Math.abs(ferryTreads[i-1].top-t.top)/.06<.18));
+});
+
 test('pedestrians stay in architectural scale, plant their feet and keep shadows on the plaza',async()=>{
   const {createPeople}=await import('../app/people.ts');
   const {pedestrianPace}=await import('../app/waterfront-routes.ts');
@@ -693,4 +752,73 @@ test('stance anchors stay in place through a turn on the actual Rincon route',as
     }
   }
   assert.ok(compared>300);
+});
+
+test('cut-paper coats retain their pigment as the viewer turns, with local fill and directional sole marks',async()=>{
+  const {createPeople}=await import('../app/people.ts');
+  const people=createPeople(24),shade=people.group.getObjectByName('Foot contact shadows').material;
+  const shader={vertexShader:THREE.ShaderLib.basic.vertexShader,fragmentShader:THREE.ShaderLib.basic.fragmentShader,uniforms:{}};
+  shade.onBeforeCompile(shader,{});
+  const sky=new THREE.Color('#42517e'),white=new THREE.Color(0xffffff),pigment=new THREE.Color();
+  people.setPaintLight(sky,[.6,.2,-.8],1,0);
+  assert.equal(people.bodies.material.color.getHex(),sky.clone().lerp(white,.82).getHex());
+  assert.deepEqual(shader.uniforms.paperCast.value.toArray(),[-.6,.8,5]);
+  for(let i=0;i<24;i+=6){
+    people.bodies.getColorAt(i,pigment);
+    assert.equal(pigment.getHex(),[0xc0362c,0xe8a13a,0xe9d24a,0xecebe4][i/6]);
+  }
+  people.setViewer(20,8);people.update(0,1,2,30,1,.045);
+  people.setPaintLight(sky,[.6,-.2,-.8],0,1);
+  assert.equal(shader.uniforms.paperCast.value.z,0);
+  assert.equal(people.bodies.material.color.getHex(),sky.clone().lerp(white,.25).getHex());
+  assert.equal(shade.color.getHex(),0x2a2740);
+});
+
+test('harbor pane draw IDs follow each clipped quad, preserving room data, tides and the vignette source',async()=>{
+  const {cullHarborInstances}=await import('../app/harbor-instances.ts');
+  let uploads=0;
+  const gl={createBuffer(){return{};},bindBuffer(){},bufferData(){},bufferSubData(){uploads++;}};
+  const root=new THREE.Group(),parent=new THREE.Group();root.add(parent);
+  parent.position.set(2,.2,-.7);parent.rotation.y=.32;
+  const n=1400,mat=new THREE.MeshStandardMaterial(),geo=new THREE.PlaneGeometry();
+  const source=new THREE.InstancedMesh(geo,mat,n),o=new THREE.Object3D(),color=new THREE.Color();
+  const glow=Float32Array.from({length:n},(_,i)=>(i%17)/17);
+  geo.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(glow,1));
+  parent.add(source);source.position.x=.17;
+  for(let i=0;i<n;i++){
+    o.position.set((i%41)-20,(i%11)*.71,Math.floor(i/41)-17);
+    o.rotation.set(i%13*.03,i*.07,0);o.scale.set(.1+i%3*.16,.2+i%4*.23,1.3);o.updateMatrix();
+    source.setMatrixAt(i,o.matrix);source.setColorAt(i,color.setRGB((i%5)/5,(i%11)/11,(i%7)/7));
+  }
+  const original=source.instanceMatrix.array.slice(),hook=cullHarborInstances({getContext:()=>gl},root,source);
+  const draw=root.getObjectByName('Visible waterfront windows');
+  root.updateMatrixWorld(true);
+  assert.equal(draw.parent,parent);assert.equal(source.visible,false);
+  assert.deepEqual(draw.matricesTexture.image.data.slice(0,n*16),original);
+  assert.deepEqual(draw.uniformsTexture.image.data.slice(0,n),glow);
+  for(let i=0;i<n;i++)for(let c=0;c<3;c++)assert.equal(draw.colorsTexture.image.data[i*4+c],source.instanceColor.array[i*3+c]);
+  const camera=new THREE.PerspectiveCamera(42,1.5,.2,32),frustum=new THREE.Frustum(),matrix=new THREE.Matrix4();
+  const corners=[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]].map(([x,y])=>new THREE.Vector3(x,y,0));
+  const worldCorners=corners.map(c=>c.clone());
+  function verify(){
+    camera.updateMatrixWorld();
+    frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    const expected=[];
+    for(let i=0;i<n;i++){
+      source.getMatrixAt(i,matrix);matrix.premultiply(source.matrixWorld);
+      corners.forEach((c,j)=>worldCorners[j].copy(c).applyMatrix4(matrix));
+      if(frustum.planes.every(p=>worldCorners.some(c=>p.distanceToPoint(c)>=0)))expected.push(i);
+    }
+    draw.performFrustumCulling(camera);
+    assert.deepEqual([...draw.instanceIndex.array.slice(0,draw.count)].sort((a,b)=>a-b),expected);
+    const before=uploads;draw.performFrustumCulling(camera);assert.equal(uploads,before);
+    return expected;
+  }
+  for(let i=0;i<10;i++){camera.position.set(Math.cos(i)*12,2+i*.35,Math.sin(i)*13);camera.lookAt(1,1,0);verify();}
+  const moving=verify()[0];source.getMatrixAt(moving,matrix);matrix.elements[13]+=14;source.setMatrixAt(moving,matrix);
+  hook.updateTidalPane(moving);
+  assert.ok(!verify().includes(moving));
+  assert.equal(draw.matricesTexture.image.data[moving*16+13],source.instanceMatrix.array[moving*16+13]);
+  hook.dispose();assert.equal(source.visible,true);assert.equal(source.parent,parent);assert.equal(draw.parent,null);
+  assert.equal(source.geometry.getAttribute('windowGlow').array,glow);
 });

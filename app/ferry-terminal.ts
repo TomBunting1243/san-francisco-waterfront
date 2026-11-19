@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {doradoBoardingFreeboard} from './dorado-ferry.ts';
+import {collectTidalParts,markTidalPart} from './tidal-berths.ts';
 import {berthThresholds} from './ferry-service.ts';
 import {center,footprintGeometry,sfMap} from './sf-map.ts';
 import {harborDatum,waterSurface} from './water-surface.ts';
@@ -39,14 +40,14 @@ export function createBoardingBrows(count:number){
   mesh.name='Telescoping ferry boarding brows';mesh.frustumCulled=false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const part=new THREE.Object3D();
-  function update(i:number,pose:{gate:Gate;x:number;y:number;brow:number;stopX?:number;stopZ?:number;hullHalfBeam?:number;boardingFreeboard?:number}){
+  function update(i:number,pose:{gate:Gate;x:number;y:number;brow:number;stopX?:number;stopZ?:number;hullHalfBeam?:number;boardingFreeboard?:number;tideOffset?:number}){
     const [fallbackX,fallbackZ]=boardingStops[pose.gate];
     const x=pose.stopX??fallbackX,z=pose.stopZ??fallbackZ,side=Math.sign(pose.x-x);
     const sill=pose.boardingFreeboard??doradoBoardingFreeboard;
     if(pose.brow<=0){
       part.position.set(x,waterSurface.level,z);part.scale.set(0,0,0);
     }else{
-      const shore=pose.gate==='C'?.084+.0495:waterSurface.level+sill;
+      const shore=pose.gate==='C'?.084+.0495:waterSurface.level+sill+(pose.tideOffset??0);
       const start=x+side*(pose.gate==='C'?.026:.020),end=pose.x-side*((pose.hullHalfBeam??.315)-.007);
       const rise=(pose.y+sill-shore)*pose.brow,run=(end-start)*pose.brow;
       part.position.set(start+run/2,shore-.004+rise/2,z);
@@ -145,16 +146,21 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     if(covered){
       roof(0,width*1.07,.023,length-.024,.226,.036,gangway);
       const shoreZ=Math.min(...plate.p.map(p=>p[1])),tip=Math.max(...plate.p.map(p=>p[1]));
-      roof(cx,.51,shoreZ+.083,tip-.17,deckY+.234,.073,landing);
+      // E's canopy eave also covers the inclined passenger path at the high sill.
+      const canopyHeight=gate==='E'?.292:.234;
+      roof(cx,.51,shoreZ+.083,tip-.17,deckY+canopyHeight,.073,landing);
       for(const side of [-1,1]){
-        for(let z=shoreZ+.14;z<tip-.15;z+=.34){
-          cylinder(.015,.236,cx+side*.235,deckY+.118,z,cream,landing);
+        // Leave the turn from the E gangway to its east-side ramp unobstructed.
+        const firstPost=shoreZ+(gate==='E'&&side>0?.22:.14);
+        for(let z=firstPost;z<tip-.15;z+=.34){
+          cylinder(.015,canopyHeight+.002,cx+side*.235,deckY+(canopyHeight+.002)/2,z,cream,landing);
         }
         // Steel bearing guides are separate from the float and dark rubber fenders
         // lie below the edge, clear of the deck and passenger path.
         for(const z of [shoreZ+.08,tip-.067]){
-          cylinder(.053,1.07,cx+side*.454,deckY-.405,z,fender,landing).name='Independent guide pile';
-          cylinder(.055,.019,cx+side*.454,deckY+.133,z,gray,landing);
+          const pile=cylinder(.053,1.07,cx+side*.454,deckY-.405,z,fender,landing);
+          pile.name='Independent guide pile';pile.userData.fixedGuide=true;
+          cylinder(.055,.019,cx+side*.454,deckY+.133,z,gray,landing).userData.fixedGuide=true;
         }
         for(let z=shoreZ+.15;z<tip-.075;z+=.22){
           box(.048,.169,.102,cx+side*.409,deckY-.134,z,fender,landing);
@@ -177,9 +183,12 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
         link(rampStart,rampEnd,.012,'#aab4ad',landing,.123).name='Adjustable vessel boarding ramp';
         for(const offset of [-.057,.057]){
           const rail=new THREE.Vector3(offset,.065,0);
-          link(rampStart.clone().add(rail),rampEnd.clone().add(rail),.007,steel,landing);
+          // The outer E1 rail ends before the transverse turn onto the brow.
+          const exitRail=gate==='E'&&stopX===berthThresholds.E1[0]&&offset*side>0;
+          const railEnd=exitRail?rampEnd.clone().lerp(rampStart,.126/1.79):rampEnd;
+          link(rampStart.clone().add(rail),railEnd.clone().add(rail),.007,steel,landing);
           for(let i=0;i<=5;i++){
-            const at=rampStart.clone().lerp(rampEnd,i/5);
+            const at=rampStart.clone().lerp(railEnd,i/5);
             box(.008,.065,.008,at.x+offset,at.y+.0325,at.z,steel,landing);
           }
         }
@@ -252,7 +261,9 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     if(length<.035||Math.max(a[1],b[1])<1.57)continue;
     const nx=-orient*dz/length,nz=orient*dx/length;
     const at=(t:number,y:number,offset=0)=>new THREE.Vector3(a[0]+dx*t+nx*offset,y,a[1]+dz*t+nz*offset);
-    link(at(0,underside+.031,.011),at(1,underside+.031,.011),.056,'#a1aa9e',support,.057).name='Fixed apron recessed edge beam';
+    // The perimeter beam bears against the underside of the slab, including
+    // beneath each gangway threshold. Its top must clear the walking surface.
+    link(at(0,underside-.028,.011),at(1,underside-.028,.011),.056,'#a1aa9e',support,.057).name='Fixed apron recessed edge beam';
     link(at(0,apronY-.009),at(1,apronY-.009),.019,'#c9c2ad',support,.027);
     const intervals=Math.max(1,Math.ceil(length/.47));
     for(let span=0;span<intervals;span++){
@@ -367,4 +378,18 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     }
   }
   return terminal;
+}
+
+// Stamp the articulation onto the ordinary geographic batches. No extra draw
+// or second copy of the pontoon surface is needed for tides or raycasts.
+export function prepareFerryTerminalTide(terminal:THREE.Group){
+  for(const c of ferryConnections.filter(c=>c.covered)){
+    const pontoon=terminal.getObjectByName('Gate '+c.gate+' floating pontoon')!;
+    for(const part of pontoon.children){
+      if(part instanceof THREE.Mesh&&!part.userData.fixedGuide)markTidalPart(part,'Ferry Building');
+    }
+    const gangway=terminal.getObjectByName('Gate '+c.gate+' articulated gangway')!;
+    markTidalPart(gangway,'Ferry Building',c.from,c.to);
+  }
+  collectTidalParts(terminal.parent??terminal);
 }

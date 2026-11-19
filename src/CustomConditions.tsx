@@ -13,6 +13,30 @@ export default function CustomConditions({value,change,ride,startRide,toggleRide
   const [open,setOpen]=useState(false),[liveTime,setLiveTime]=useState(sanFranciscoTime);
   const anchor=useRef<HTMLDivElement>(null),pause=useRef<HTMLButtonElement>(null),liveSwitch=useRef<HTMLInputElement>(null),panel=useId();
   const mode=ride?.mode;
+  const [harbor,setHarbor]=useState<{tide:string;sailing:string}>();
+  useEffect(()=>{
+    if(!open)return;
+    let active=true;
+    const refresh=async()=>{
+      const {harborConditionsAt,refreshHarborTide}=await import('../app/harbor-conditions.ts');
+      const show=()=>{
+        if(!active)return;
+        const {tide,next}=harborConditionsAt(new Date(),value.minutes);
+        const height=(tide.meters*3.28084).toFixed(1);
+        const sailing=next.status==='scheduled'?
+          (next.daysAhead===1?'Tomorrow ':next.daysAhead?'In '+next.daysAhead+' days ':'')+
+          timeText(next.minutes)+' · '+next.destination+' · Gate '+next.gate:
+          next.status==='outside feed'?'Outside published timetable':'No further published sailing';
+        setHarbor({tide:tide.source==='mean level'?'Mean sea level · observation unavailable':
+          height+' ft MLLW · '+(tide.source==='observed'?'NOAA observation':'NOAA prediction'),sailing});
+      };
+      show();
+      if(value.minutes===undefined){await refreshHarborTide(new Date());show();}
+    };
+    void refresh();
+    const timer=setInterval(()=>void refresh(),60000);
+    return()=>{active=false;clearInterval(timer);};
+  },[open,value.minutes]);
   useEffect(()=>{
     if(mode)pause.current?.focus({preventScroll:true});
   },[mode]);
@@ -88,6 +112,10 @@ export default function CustomConditions({value,change,ride,startRide,toggleRide
         <option value="">Live San Francisco</option>
         {Object.entries(weatherLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}
       </select>
+      {harbor&&<dl className="standalone-harbor-data">
+        <div><dt>Tide</dt><dd>{harbor.tide}</dd></div>
+        <div><dt>Next SF Bay Ferry sailing</dt><dd>{harbor.sailing}</dd></div>
+      </dl>}
       <button className="standalone-custom-reset" type="button" disabled={!custom}
         onClick={()=>{setLiveTime(sanFranciscoTime());change({});liveSwitch.current?.focus();}}>Reset to live</button>
     </div>

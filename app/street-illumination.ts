@@ -46,7 +46,7 @@ export function createSignalHousings(){
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
   const all=promenade.slice(),position=new THREE.Vector3();
   root.traverse(node=>{
-    if(node.name==='Path of Gold globe'){node.getWorldPosition(position);all.push(position.x,position.y,position.z);}
+    if(node.name==='Path of Gold globe'||node.name==='Ferry forecourt globe'){node.getWorldPosition(position);all.push(position.x,position.y,position.z);}
   });
   return all;
 }
@@ -60,7 +60,9 @@ export function createStreetField(globes:number[]){
         const dx=(i-col)*pitch,dz=(j-row)*pitch,d=Math.hypot(dx,dz)/r;
         if(d>=1)continue;
         const aim=heading===undefined?1:.45+.55*THREE.MathUtils.clamp(.5+(dx*Math.sin(heading)+dz*Math.cos(heading))/r,0,1);
-        const weight=Math.round(255*(1-d*d)**3*aim),idx=(j*width+i)*4;
+        // Give the subpixel lens center one hot texel before the amber penumbra.
+        const pool=Math.min(1,(1-d)/(1-.085/r));
+        const weight=Math.round(255*(channel===0?pool**2.2:(1-d*d)**3)*aim),idx=(j*width+i)*4;
         if(pixels[idx+channel]>=weight)continue;
         pixels[idx+channel]=weight;
         if(channel===0)pixels[idx+3]=Math.round(255*THREE.MathUtils.clamp(y,0,1));
@@ -69,7 +71,7 @@ export function createStreetField(globes:number[]){
   };
   for(let i=0;i<globes.length;i+=3){
     const [x,y,z]=[globes[i],globes[i+1],globes[i+2]];
-    stamp(x,y,z,Math.max(.38,Math.min(.88,y*1.62)),0);
+    stamp(x,y,z,Math.min(1.2,y*3.25),0);
   }
   for(const h of waterfrontSignals){
     const p=location(h,.46,4.19,.2);stamp(p.x,p.y,p.z,.42,1+h.axis,h.heading);
@@ -127,7 +129,7 @@ const illumination=`
       float signalZ=1.-smoothstep(.24,.45,waterfrontLightPosition.y);
       float normalY=inverseTransformDirection(normal,viewMatrix).y;
       float facing=smoothstep(-.72,-.05,normalY)*(.47+.53*max(normalY,0.));
-      vec3 spill=vec3(.97,.65,.30)*field.r*lampZ*.82+
+      vec3 spill=vec3(1.,.4564,.1119)*field.r*lampZ*.82+
         (waterfrontMainSignal*field.g+waterfrontCrossSignal*field.b)*signalZ*.34;
       outgoingLight+=waterfrontStreetNight*facing*(.015+.85*diffuseColor.rgb)*spill;
       if(waterfrontStreetWet>.01 && normalY>.75){

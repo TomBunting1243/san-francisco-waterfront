@@ -40,7 +40,10 @@ function decodeGrid(grid: Grid) {
   const bytes = atob(grid.heights);
   const meters = new Int16Array(grid.cols * grid.rows);
   for (let i = 0; i < meters.length; i++) meters[i] = bytes.charCodeAt(i * 2) | (bytes.charCodeAt(i * 2 + 1) << 8);
-  return { ...grid, meters, east: grid.west + grid.step * (grid.cols - 1), north: grid.south + grid.step * (grid.rows - 1) };
+  // A relief vertex is immutable, including the tidal and downtown adjustments.
+  // Keep the exact double used by the renderer. All three grids total 856 KiB.
+  const groundY=new Float64Array(meters.length).fill(NaN);
+  return { ...grid, meters, groundY, east: grid.west + grid.step * (grid.cols - 1), north: grid.south + grid.step * (grid.rows - 1) };
 }
 
 type HeightGrid = ReturnType<typeof decodeGrid>;
@@ -132,7 +135,12 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
 }
 
 function reliefHeight(grid:HeightGrid,lng:number,lat:number){
-  return sample(grid, lng, lat, (col, row) => surfaceVertex(grid, col, row).y);
+  return sample(grid, lng, lat, (col, row) => {
+    const i=row*grid.cols+col;
+    const cached=grid.groundY[i];
+    if(!Number.isNaN(cached))return cached;
+    return grid.groundY[i]=surfaceVertex(grid,col,row).y;
+  });
 }
 
 /** Height of the clipped relief along the surveyed bank, including its boundary. */

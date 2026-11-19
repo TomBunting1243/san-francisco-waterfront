@@ -12,6 +12,7 @@ export function installOrderedArchitecture(mesh:THREE.Mesh,minimum=40000,facesPe
   for(let first=0;first<index.count;first+=3*facesPerLeaf){
     const end=Math.min(index.count,first+3*facesPerLeaf),bounds=new THREE.Box3();
     for(let j=first;j<end;j++)bounds.expandByPoint(p.fromBufferAttribute(position,index.getX(j)));
+    if(g.userData.tideBoundsMargin){bounds.min.y-=g.userData.tideBoundsMargin;bounds.max.y+=g.userData.tideBoundsMargin;}
     leaves.push({bounds,start:first,end});
   }
   function join(lo:number,hi:number):Node{

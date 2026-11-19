@@ -33,14 +33,15 @@ import {createPeople} from './people.ts';
 import {pier14Visitors,updatePier14Visitors} from './pier14-visitors.ts';
 import {bicycleScale,bicycleWheelBottom,rinconGround,rinconApproach,rinconExit,routes,routeWidth,walkSurface,waterfrontCyclist,waterfrontWalker,waterfrontWalkerCount} from './waterfront-routes.ts';
 import {harborBuilding,smallHarborBuildings,harborPublicPiers,ferryPortal} from './harbor-architecture.ts';
-import {buildFerryTerminal,createBoardingBrows,ferryConnections,fixedFerryApron} from './ferry-terminal.ts';
+import {buildFerryTerminal,prepareFerryTerminalTide,createBoardingBrows,ferryConnections,fixedFerryApron} from './ferry-terminal.ts';
 import {ferryHall,ferryPublicRealm} from './ferry-architecture.ts';
 import {embarcaderoPlaza,plazaStandingHeight} from './embarcadero-plaza.ts';
 import {addRinconRestaurant} from './rincon-restaurants.ts';
 import {createRememberedWaterfront} from './remembered-waterfront.ts';
 import {bindFountainWaterClock,fountainWaterName} from './fountain-flow.ts';
 import {createFireboat} from './fireboat.ts';
-import {createServiceFerry,serviceFerryPaint} from './service-ferries.ts';
+import {ferryPassengerCount,updateFerryPassengers} from './ferry-passengers.ts';
+import {createServiceFerry,serviceFerryPaint,updatePyxisBoardingDoor} from './service-ferries.ts';
 import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
@@ -56,6 +57,7 @@ import {createBridgeTraffic} from './traffic-batches.ts';
 import {streetVehicleMaterial} from './street-vehicles.ts';
 import {architectureProfile,referenceColor,refineReferenceMassing,referenceArchitecture} from './reference-architecture.ts';
 import {isMooredVessel,mooredVessel,pierThreeFloat} from './moored-vessels.ts';
+import {paintedLight} from './gouache-light.ts';
 import {windowGlow,applyWindowLighting} from './window-lighting.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
@@ -65,6 +67,7 @@ import {buildApproachBlocks} from './approach-blocks.ts';
 import {hillsCoffeeTubes} from './coffee-neon.ts';
 import {buildApproachBillboards} from './approach-billboards.ts';
 import {addOneMarketTower} from './one-market-towers.ts';
+import {cloneTidalGeometry,createTideUpdater} from './tidal-berths.ts';
 import {installOrderedArchitecture} from './ordered-architecture.ts';
 import {addFiftyFremont} from './fifty-fremont.ts';
 import {addProvidianBuilding} from './providian-building.ts';
@@ -92,6 +95,7 @@ import {addMarketCenter} from './market-center.ts';
 import {addEmbarcaderoCenterWest} from './embarcadero-center-west.ts';
 import {add500Folsom} from './500-folsom.ts';
 import {addMetropolitanTowers,addBayCrestWings} from './rincon-residential.ts';
+import {add199Fremont} from './199-fremont.ts';
 import {add425Market} from './425-market.ts';
 import {add455Market} from './455-market.ts';
 import {add333Market} from './333-market.ts';
@@ -117,7 +121,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 export function createLandscape() {
   const root = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
-  const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number }[] = [];
+  const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number; tide?:boolean }[] = [];
   const residentPositions:{x:number;z:number;y:number}[]=[];
   const cream = '#ede4d3', dark = '#345564';
   function material(color: string) {
@@ -237,7 +241,7 @@ export function createLandscape() {
     if(addEmbarcaderoCenterWest(b,root,windowPositions))return;
     if(add500Folsom(b,root,windowPositions))return;
     if(addMetropolitanTowers(b,root,windowPositions)||addBayCrestWings(b,root,windowPositions))return;
-    if(add425Market(b,root,windowPositions))return;
+    if(add425Market(b,root,windowPositions)||add199Fremont(b,root,windowPositions))return;
     if(add455Market(b,root,windowPositions))return;
     if(add333Market(b,root,windowPositions)||addCaliforniaCenter(b,root,windowPositions))return;
     if(addMarketCenter(b,root,windowPositions)||addMarketFlatiron(b,root,windowPositions))return;
@@ -527,7 +531,7 @@ export function createLandscape() {
   residentPositions.push({x:-9.83,z:1.51,y:southPlazaTop+.009});
   for(const [x,z] of [[-9.67,1.48],[-9.18,.61],[-8.21,.23],[-7.57,1.25]])residentPositions.push({x,z,y:southPlazaTop});
 
-  buildFerryTerminal(mesh,root);
+  const terminal=buildFerryTerminal(mesh,root);
   for(const entry of ferryConnections)root.add(ferryPortal(entry,font));
   mesh(walkSurface(routes.ferry,routeWidth.ferry,.016),'#bdb8a6',0,0,0).name='Ferry landing promenade';
   for(const [x,z] of [[-4.63,2.98],[-4.24,3.10],[-3.40,4.73],[-4.30,4.95],[-3.70,5.30],[-3.49,5.66]])residentPositions.push({x,z,y:.096});
@@ -575,7 +579,7 @@ export function createLandscape() {
   for(const side of [-1,1]){const flipper=mesh(new THREE.SphereGeometry(.2,7,5),'#786148',-.15,-.02,side*.4,seaLion);flipper.scale.set(1.5,.18,.55);flipper.rotation.y=side*.4;sealFlippers.push(flipper);}
   const walkerCount=waterfrontWalkerCount();
   const skaters=createPlazaSkaters();root.add(skaters.root);
-  const seatStart=walkerCount+residentPositions.length;
+  const passengerStart=walkerCount+residentPositions.length,seatStart=passengerStart+ferryPassengerCount;
   const people=createPeople(seatStart+pier14Visitors.length,pier14Visitors.length);
   for(let i=0;i<walkerCount;i++){
     const poseAt=(offset:number)=>waterfrontWalker(offset,i);
@@ -583,6 +587,7 @@ export function createLandscape() {
     people.update(i,p.x,p.z,0,1,p.y,0,p.standing,p.heading,poseAt);
   }
   residentPositions.forEach((p,i)=>people.update(walkerCount+i,p.x,p.z,0,i%2?1:-1,p.y,0,true));
+  updateFerryPassengers(people,passengerStart,0,ferryPose(0,0,ferryClock),-1);
   updatePier14Visitors(people,seatStart,pier14Visitors,0);
   people.flush();const pedestrians=people.group;root.add(pedestrians);
   const walkers=people.bodies,walkerHeads=people.heads;
@@ -616,8 +621,9 @@ export function createLandscape() {
     return {group:bird,wings};
   });
   // Instanced windows keep the detailed city inexpensive to draw.
-  const windowMaterial=new THREE.MeshStandardMaterial({color:'#597b85',roughness:.8,emissive:'#e4c89a',emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
-  applyWindowLighting(windowMaterial,bayLights.clock);
+  const windowMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,emissive:0xffffff,emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
+  const facadeClock=createFacadeClock();
+  applyWindowLighting(windowMaterial,bayLights.clock,facadeClock.litShare);
   const windowGeometry=new THREE.PlaneGeometry(1,1);
   windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(windowPositions.map(windowGlow)),1));
   const windowMesh=new THREE.InstancedMesh(windowGeometry,windowMaterial,windowPositions.length);
@@ -627,6 +633,14 @@ export function createLandscape() {
   const fireboat=createFireboat();root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
+  const architectureMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02,side:THREE.FrontSide});
+  prepareFerryTerminalTide(terminal);
+  const tidalPanes=windowPositions.flatMap((p,i)=>p.tide?[{i,y:p.y}]:[]);
+  function updateTide(offset:number,updatePane?:(i:number)=>void){
+    water.position.y=waterSurface.level+offset;updateTidalChunks(offset);
+    for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
+    if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
+  }
   const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
@@ -634,7 +648,6 @@ export function createLandscape() {
     for(let parent:THREE.Object3D|null=o;parent;parent=parent.parent)if(moving.has(parent))return;
     staticMeshes.push(o);
   });
-  const architectureMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02,side:THREE.FrontSide});
   // A few depth units separate thin paint from pavement even at grazing angles.
   const roadPaintMaterial=architectureMaterial.clone();
   roadPaintMaterial.polygonOffset=true;roadPaintMaterial.polygonOffsetUnits=-3;
@@ -653,7 +666,7 @@ export function createLandscape() {
   });
   const walkMaterial=architectureMaterial.clone();applyWalkPanelJoints(walkMaterial);
   const facadeMaterial=architectureMaterial.clone();
-  const facadeClock=createFacadeClock();
+
   applyDowntownGlazing(facadeMaterial,facadeClock);
   const leafSun={value:new THREE.Vector3()};
   const canopyMaterial=createCanopyMaterial(architectureMaterial,leafSun);
@@ -665,6 +678,7 @@ export function createLandscape() {
     bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('walkPanel')),walkMaterial),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
+  const updateTidalChunks=createTideUpdater(architectureChunks);
   for(const chunk of architectureChunks)installOrderedArchitecture(chunk);
   const illuminatedArchitecture=architectureMaterial.clone();
   for(const chunk of architectureChunks)if(chunk.geometry.hasAttribute('signLight'))chunk.material=illuminatedArchitecture;
@@ -674,11 +688,12 @@ export function createLandscape() {
   const ferryPaint=serviceFerryPaint;
   for(const group of [tram,...ferries,...cyclists]) {
     const isFerry=ferries.includes(group);
+    const boardingBody=group.children.find(o=>o.userData.pyxisBoardingBody) as THREE.Mesh|undefined;
     group.updateMatrixWorld(true);
     const inverse=new THREE.Matrix4().copy(group.matrixWorld).invert();
     const batches=new Map<THREE.Material,{geometries:THREE.BufferGeometry[];objects:THREE.Mesh[]}>();
     group.traverse(o=>{
-      if(!(o instanceof THREE.Mesh))return;
+      if(!(o instanceof THREE.Mesh)||o===boardingBody)return;
       const source=o.material as THREE.MeshStandardMaterial;
       const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();
       g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse,o.matrixWorld));
@@ -698,6 +713,18 @@ export function createLandscape() {
       batch.geometries.push(g);batch.objects.push(o);batches.set(mat,batch);
     });
     batches.forEach((batch,mat)=>{
+      if(boardingBody&&mat===ferryPaint){
+        // Keep the hull's original vertex indices so the sliding door and
+        // the rigid hull lettering can share the same draw and position buffer.
+        for(const part of batch.geometries)part.setIndex(Array.from({length:part.getAttribute('position').count},(_,i)=>i));
+        const hull=boardingBody.geometry;
+        const painted=mergeGeometries([hull,...batch.geometries]);
+        if(!painted)throw new Error('Boarding ferry lettering merge failed');
+        boardingBody.geometry=painted;hull.dispose();
+        batch.objects.forEach(o=>{o.removeFromParent();o.geometry.dispose();});
+        batch.geometries.forEach(g=>g.dispose());
+        return;
+      }
       const g=mergeGeometries(batch.geometries);if(!g)throw new Error('Moving object merge failed');
       batch.objects.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});batch.geometries.forEach(g=>g.dispose());
       const m=new THREE.Mesh(g,mat);m.castShadow=true;m.receiveShadow=true;group.add(m);
@@ -747,6 +774,16 @@ export function createLandscape() {
     const previousCacheKey=mat.customProgramCacheKey();
     mat.onBeforeCompile=(shader,renderer)=>{
       previousCompile.call(mat,shader,renderer);
+      if(washSurface||mat===windowMaterial)shader.fragmentShader=paintedLight(shader.fragmentShader);
+      if(mat===windowMaterial){
+        shader.uniforms.glassSky=facadeClock.glassSky;
+        shader.fragmentShader='uniform vec3 glassSky;\n'+shader.fragmentShader.replace('#include <color_fragment>',
+          '#include <color_fragment>\ndiffuseColor.rgb*=glassSky;');
+      }
+      if(mat===architectureMaterial||mat===facadeMaterial||mat===illuminatedArchitecture){
+        shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',
+          '#include <color_fragment>\ndiffuseColor.rgb*=mix(.90,1.10,clamp(harborPosition.y/13.,0.,1.));');
+      }
       if(marine){shader.uniforms.bayHorizon=bayWeather.bayHorizon;shader.fragmentShader='uniform vec3 bayHorizon;\n'+shader.fragmentShader;}
       shader.uniforms.edgeFogColor=edgeFogColor;shader.uniforms.seaMistBank=seaMist;shader.uniforms.rainOnStone=rainOnStone;
       shader.uniforms.pigmentSheet={value:pigment};shader.uniforms.nightInk=nightInk;
@@ -807,15 +844,22 @@ export function createLandscape() {
         ${marine?marineDistanceFog:'#include <fog_fragment>'}`);
       if(mat===illuminatedArchitecture)shader.fragmentShader='varying vec3 nightSignLight;\n'+shader.fragmentShader;
     };
-    mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-wash-v4|${marine}|${washSurface}|${mat===waterMaterial||mat.transparent}|${mat===illuminatedArchitecture?'|sign-lights':''}`;
+    mat.customProgramCacheKey=()=> `${previousCacheKey}|waterfront-wash-v5|${marine}|${washSurface}|${mat===architectureMaterial}|${mat===waterMaterial||mat.transparent}|${mat===illuminatedArchitecture?'|sign-lights':''}`;
   }
   // Haloes share one transparent batch and sit at the coordinates of the promenade lamps.
-  const lampGlow=new THREE.PointsMaterial({color:'#ffd799',size:.105,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,opacity:0});
-  lampGlow.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+  const lampGlow=new THREE.PointsMaterial({color:'#ffb45e',size:.105,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,opacity:0});
+  lampGlow.onBeforeCompile=shader=>{
+    // The inventory locates the bulb center, behind its opaque glass model.
+    // Draw its glow on the near glass face, retaining depth occlusion by the city.
+    shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
+      mvPosition.xyz-=normalize(mvPosition.xyz)*.024;
+      gl_Position=projectionMatrix*mvPosition;`);
+    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
     float lens=length(gl_PointCoord-vec2(.5))*2.;
+    diffuseColor.rgb=mix(diffuseColor.rgb,vec3(1.,.82,.49),1.-smoothstep(.09,.31,lens));
     diffuseColor.a*=exp(-5.*lens*lens)*(1.-smoothstep(.6,1.,lens));`);};
-  const glowGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(lanterns,3));
-  const pierLamps=new THREE.Points(glowGeometry,lampGlow);root.add(pierLamps);
+  const glowGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(streetGlobes,3));
+  const pierLamps=new THREE.Points(glowGeometry,lampGlow);pierLamps.name='Waterfront streetlamp halos';root.add(pierLamps);
   const hitTargets:THREE.Mesh[]=[];
   const hitMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
   for(const [name,x,y,z,w,h,d] of [['waterfront',0,2.2,0,16,4.7,3],['bridge',bridgePoint(0,36.85).x,4.8,bridgePoint(0,36.85).z,2.8,10,2.8],['pyramid',26.75,7.8,-40.4,3,16,3]] as const){
@@ -830,7 +874,7 @@ export function createLandscape() {
     boardingBrows.update(i,pose);
   });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, urbanContext, setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), urbanContext, seatStart, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   cityTemplate=result;
   return result;
 }
@@ -842,18 +886,33 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   const source=cityTemplate||createLandscape(),root=new THREE.Group(),waterTime={value:0};
   const bounds=variant==='street'?new THREE.Box3(new THREE.Vector3(-62,-5,-28),new THREE.Vector3(-15,40,14)):new THREE.Box3(new THREE.Vector3(-22,-5,-32),new THREE.Vector3(32,40,22));
   const facadeClock=createFacadeClock();
+  const streetGlobes:number[]=[];
+  const globePoint=new THREE.Vector3();
+  for(let i=0;i<source.streetGlobes.length;i+=3){
+    globePoint.fromArray(source.streetGlobes,i);
+    if(bounds.containsPoint(globePoint))streetGlobes.push(globePoint.x,globePoint.y,globePoint.z);
+  }
+  const lampGlow=source.lampGlow.clone();
+  lampGlow.onBeforeCompile=source.lampGlow.onBeforeCompile;
+  const haloGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(streetGlobes,3));
+  const halos=new THREE.Points(haloGeometry,lampGlow);halos.name='Waterfront streetlamp halos';root.add(halos);
   const materialCopies=new Map<THREE.Material,THREE.Material>();
   function copiedMaterial(mat:THREE.Material){
     let copy=materialCopies.get(mat);if(!copy){copy=mat.clone();copy.onBeforeCompile=mat.onBeforeCompile;copy.customProgramCacheKey=mat.customProgramCacheKey;
-      if(mat.userData.surveyedDowntownGlazing)bindFacadeClock(copy,facadeClock);
+      if(mat.userData.surveyedDowntownGlazing||mat===source.windowMaterial)bindFacadeClock(copy,facadeClock);
       materialCopies.set(mat,copy);}return copy;
   }
   function copyMesh(mesh:THREE.Mesh){const m=mesh.clone();m.geometry=mesh.geometry;m.userData.sharedGeometry=true;m.material=Array.isArray(mesh.material)?mesh.material.map(copiedMaterial):copiedMaterial(mesh.material);return m;}
   const treeBatches=source.treeBatches.filter(t=>t.high.boundingBox!.intersectsBox(bounds)).map(t=>{const mesh=copyMesh(t.mesh);return {...t,mesh};});
   const treeDraw=source.treeDraw&&createTreeDraw(treeBatches,copiedMaterial(source.treeDraw.material));if(treeDraw)root.add(treeDraw);
-  const architectureChunks=source.architectureChunks.filter(m=>m.geometry.boundingBox!.intersectsBox(bounds)).map(m=>{const copy=copyMesh(m);root.add(copy);return copy;});
+  const architectureChunks=source.architectureChunks.filter(m=>m.geometry.boundingBox!.intersectsBox(bounds)).map(m=>{
+    const copy=copyMesh(m),geometry=cloneTidalGeometry(m.geometry);
+    if(geometry){copy.geometry=geometry;delete copy.userData.sharedGeometry;}
+    root.add(copy);return copy;
+  });
+  const updateVignetteTide=createTideUpdater(architectureChunks);
   // Only window instances inside the vignette are copied to its renderer.
-  const original=source.root.children.find(o=>o instanceof THREE.InstancedMesh&&o.material===source.windowMaterial) as THREE.InstancedMesh;
+  const original=source.windowMesh;
   const matrix=new THREE.Matrix4(),point=new THREE.Vector3(),indices:number[]=[];
   for(let i=0;i<original.count;i++){original.getMatrixAt(i,matrix);point.setFromMatrixPosition(matrix);if(bounds.containsPoint(point))indices.push(i);}
   const windowMaterial=copiedMaterial(source.windowMaterial) as THREE.MeshStandardMaterial;
@@ -862,6 +921,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(indices.map(i=>glow.getX(i))),1));
   const windows=new THREE.InstancedMesh(windowGeometry,windowMaterial,indices.length);
   indices.forEach((index,i)=>{original.getMatrixAt(index,matrix);windows.setMatrixAt(i,matrix);const color=new THREE.Color();original.getColorAt(index,color);windows.setColorAt(i,color);});root.add(windows);
+  const tidalPanes=source.tidalPanes.map(({i,y})=>({i:indices.indexOf(i),y})).filter(p=>p.i>=0);
   const water=new THREE.Mesh(new THREE.PlaneGeometry(240,240,1,1),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=waterSurface.level;water.receiveShadow=true;root.add(water);
   const residents=source.residentPositions.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));
   const walkerCount=waterfrontWalkerCount(variant);
@@ -915,7 +975,11 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   }
   const ferryMarket=variant==='plaza'?createFerryMarket():source.ferryMarket;if(variant==='plaza')root.add(ferryMarket.root);
   const transit=variant==='plaza'&&source.transit?createPromenadeTransit(copiedMaterial(source.transit.batch.material) as THREE.MeshStandardMaterial):undefined;if(transit)root.add(transit.root);
-  return {...source,root,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
+  return {...source,root,windowMesh:windows,tidalPanes,updateTide:(offset:number,updatePane?:(i:number)=>void)=>{
+    water.position.y=waterSurface.level+offset;updateVignetteTide(offset);
+    for(const {i,y} of tidalPanes){windows.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
+    if(tidalPanes.length)windows.instanceMatrix.needsUpdate=true;
+  },seatStart,streetGlobes,lampGlow,glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
     streetcarGlazing:copiedMaterial(source.streetcarGlazing) as THREE.MeshStandardMaterial,streetcarLamp:copiedMaterial(source.streetcarLamp) as THREE.MeshStandardMaterial,
     coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cyclists,hitTargets:[],
     seaLion:new THREE.Group(),sealFlippers:[]};

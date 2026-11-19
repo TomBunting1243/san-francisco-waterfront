@@ -3,6 +3,7 @@ import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import raw from '../public/data/south-beach.json' with {type:'json'};
 import {footprintGeometry,center} from './sf-map.ts';
+import {markTidalPart} from './tidal-berths.ts';
 import {harborDatum,waterHeight,waterSurface,waterWaveHeight} from './water-surface.ts';
 
 export const southBeach=raw;
@@ -148,7 +149,7 @@ function berthSpan(a:Point,b:Point){
 
 function addMarinaFleet(harbor:THREE.Group,moorings:Mooring[][],waterTime:{value:number}){
   const material=new THREE.MeshStandardMaterial({roughness:.86,vertexColors:true});
-  const update:(()=>void)[]=[];
+  const update:((offset:number)=>void)[]=[];
   for(const [type,anchors] of moorings.entries()){
     if(!anchors.length)continue;
     const fleet=new THREE.InstancedMesh(yachtGeometry(yachtTypes[type]),material,anchors.length);
@@ -156,13 +157,14 @@ function addMarinaFleet(harbor:THREE.Group,moorings:Mooring[][],waterTime:{value
     fleet.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     fleet.receiveShadow=true;
     const holder=new THREE.Object3D();
-    let lastTime=NaN;
-    function matchWaterline(){
+    let lastTime=NaN,lastTide=NaN;
+    function matchWaterline(tideOffset=0){
       const time=waterTime.value;
-      if(time===lastTime)return;
+      if(time===lastTime&&tideOffset===lastTide)return;
+      lastTide=tideOffset;
       lastTime=time;
       for(const [i,{x,z,heading,length}] of anchors.entries()){
-        holder.position.set(x,waterHeight(x,z,time),z);
+        holder.position.set(x,waterHeight(x,z,time,tideOffset),z);
         holder.rotation.y=heading;
         holder.scale.setScalar(length);
         holder.updateMatrix();fleet.setMatrixAt(i,holder.matrix);
@@ -174,7 +176,7 @@ function addMarinaFleet(harbor:THREE.Group,moorings:Mooring[][],waterTime:{value
     update.push(matchWaterline);
     harbor.add(fleet);
   }
-  return ()=>{for(const updateBatch of update)updateBatch();};
+  return (offset=0)=>{for(const updateBatch of update)updateBatch(offset);};
 }
 
 export function createSouthBeach(font:Font,waterTime={value:0}){
@@ -323,7 +325,9 @@ export function createSouthBeach(font:Font,waterTime={value:0}){
   guardRail(southBeach.features.breakwater,fixedDeck+.069,harbor,-.13);
   boardwalk(southBeach.features.fishingPier,.22,fixedDeck-.027,'#a7ad9e',harbor);
   guardRail(southBeach.features.fishingPier,fixedDeck+.069,harbor,.083);
-  slab(southBeach.features.oracleFloat,floatDeck-.13,.13,'#9ea99e',harbor).name='Oracle Park Ferry Terminal';
+  const floatingDocks=group('South Beach floating berths',0,0,0,harbor);
+  markTidalPart(floatingDocks,'South Beach Marina');
+  slab(southBeach.features.oracleFloat,floatDeck-.13,.13,'#9ea99e',floatingDocks).name='Oracle Park Ferry Terminal';
   slab(southBeach.features.oracleBridge,fixedDeck-harborDatum.pierSlabThickness,harborDatum.pierSlabThickness,'#b2b9a9',harbor);
   // The mapped shore and intermediate platforms lead to the separate
   // China Basin float. Both spans land just inside their adjoining decks.
@@ -332,6 +336,7 @@ export function createSouthBeach(font:Font,waterTime={value:0}){
     [[-111.77,fixedDeck,-43.30],[-112.75,floatDeck,-41.87]],
   ] as [XYZ,XYZ][];
   for(const [a,b] of spans){
+    const first=harbor.children.length;
     line([a[0],a[1]-.01,a[2]],[b[0],b[1]-.01,b[2]],.15,.02,'#a3aaa2',harbor).name='China Basin access span';
     const dx=b[0]-a[0],dz=b[2]-a[2],d=Math.hypot(dx,dz);
     for(const side of [-1,1]){
@@ -339,16 +344,17 @@ export function createSouthBeach(font:Font,waterTime={value:0}){
       line([a[0]+nx,a[1]+.064,a[2]+nz],[b[0]+nx,b[1]+.064,b[2]+nz],.008,.008,steel,harbor);
       for(let i=0;i<=5;i++)box(.008,.064,.008,THREE.MathUtils.lerp(a[0],b[0],i/5)+nx,THREE.MathUtils.lerp(a[1],b[1],i/5)+.032,THREE.MathUtils.lerp(a[2],b[2],i/5)+nz,steel,harbor);
     }
+    if(b[1]===floatDeck)for(const p of harbor.children.slice(first))markTidalPart(p,'South Beach Marina',[a[0],a[2]],[b[0],b[2]]);
   }
   // Gap in the landside rail for the gangway.
   const float=southBeach.features.oracleFloat;
-  guardRail([...float.slice(0,6),[-112.64,-41.86]],floatDeck+.069,harbor);
-  guardRail([[-112.82,-41.97],float[0]],floatDeck+.069,harbor);
+  guardRail([...float.slice(0,6),[-112.64,-41.86]],floatDeck+.069,floatingDocks);
+  guardRail([[-112.82,-41.97],float[0]],floatDeck+.069,floatingDocks);
   for(const [i,dock] of southBeach.docks.entries()){
     const wide=!!dock.name||dock.p.length>3;
     const fixed=dock.id===780006769;
     if(fixed)slab(dock.p,fixedDeck-harborDatum.pierSlabThickness,harborDatum.pierSlabThickness,'#a3a590',harbor);
-    else boardwalk(dock.p,wide?.19:.061,walkHeight-.027,wide?'#a49a7e':'#9b967e',harbor);
+    else boardwalk(dock.p,wide?.19:.061,walkHeight-.027,wide?'#a49a7e':'#9b967e',floatingDocks);
     const [x,z]=dock.p.at(-1)!;
     box(.031,.33,.035,x,walkHeight-.085,z,'#828b7b',harbor);
     if(wide||i%3!==0)continue;

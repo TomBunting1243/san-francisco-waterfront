@@ -104,6 +104,23 @@ test('sunset light follows the western sun through twilight',async()=>{
   assert.equal(pacificLighting(new Date('2026-11-21T06:00:00Z')).sunset,0);
 });
 
+test('five solar studies preserve their shadow pigments, sun and room-light proportions',async()=>{
+  const {harborWash}=await import('../app/lighting.ts');
+  const midpoint=harborWash(0,270); // Halfway between blue hour and evening gold in Cartesian OKLab.
+  assert.deepEqual([midpoint.sky,midpoint.horizon,midpoint.fill],[0x6273a2,0xb498a0,0x8d8092]);
+  const stops=[
+    [6,95,0x8f9ce0,0x6a6fa3,2.3,.78,.03],
+    [55,180,0xbcd3e8,0x7b8db3,2.2,1.1,0],
+    [6,260,0xd9a98c,0x5f5a96,2.5,.62,.05],
+    [-6,270,0x46558f,0x1f2a52,0,.95,.40],
+    [-22,300,0x23324d,0x0f1a2b,.12,.75,.30],
+  ];
+  for(const [alt,az,fill,bounce,key,hemi,share] of stops){
+    const row=harborWash(alt,az);
+    assert.deepEqual([row.fill,row.bounce,row.sunIntensity,row.ambient,row.litShare],[fill,bounce,key,hemi,share]);
+  }
+});
+
 test('east and west low sun have distinct washes that converge at solar noon and through the night',async()=>{
   const {harborWash}=await import('../app/lighting.ts');
   const dawn=harborWash(6,105),dusk=harborWash(6,255);

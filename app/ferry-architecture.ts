@@ -1,3 +1,5 @@
+import {ferryGlazing} from './ferry-portico-glazing.ts';
+import {ferryEntryX,ferryHallFloor,ferryTreads} from './ferry-portico-access.ts';
 import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
 import {createMarketPaving} from './market-paving.ts';
 import {createFerryBikeRacks} from './ferry-bike-racks.ts';
@@ -40,7 +42,7 @@ export function ferryHall(font:Font) {
   const left=Math.min(...footprint.map(p=>p[0])),right=Math.max(...footprint.map(p=>p[0]));
   const centerX=(left+right)/2, width=right-left;
   const bayZ=Math.max(...footprint.map(p=>p[1])), streetZ=footprint[0][1];
-  const porticoZ=Math.min(...footprint.map(p=>p[1])), towerX=(1.181-1.418)/2;
+  const porticoZ=Math.min(...footprint.map(p=>p[1])), towerX=ferryEntryX;
   const depth=bayZ-streetZ,breezeWidth=.49;
   const street=new THREE.Group(),bay=new THREE.Group();
   street.name='Embarcadero arcade and portico';
@@ -100,7 +102,10 @@ export function ferryHall(font:Font) {
   // bridge the slot between the two ground-floor volumes.
   box(width-.07,.054,depth+.07,centerX,.076,(bayZ+streetZ)/2,ashlar).name='Breezeway paving';
   for(const [a,b] of [[left+.12,towerX-breezeWidth/2],[towerX+breezeWidth/2,right-.12]]){
-    box(b-a,.279,depth-.44,(a+b)/2,.240,(bayZ+streetZ)/2,'#8b9188');
+    // Set the marketplace back to column line B. The original box sat in
+    // front of the west shop windows, hiding their glazing and closed doors.
+    const westBack=streetZ+.75,eastBack=bayZ-.22;
+    box(b-a,.279,eastBack-westBack,(a+b)/2,.240,(eastBack+westBack)/2,'#8b9188');
     box(.034,.271,depth-.42,a<towerX?b:a,.240,(bayZ+streetZ)/2,'#bab7a8');
   }
   box(width-.16,.475,depth-.125,centerX,.639,(bayZ+streetZ)/2,'#aeb0a4').name='Ferry Hall upper volume and breezeway ceiling';
@@ -113,6 +118,7 @@ export function ferryHall(font:Font) {
   const porticoWidth=2.63,porticoCenter=centerX-towerX;
   const westWing=[{a:-width/2,b:porticoCenter-porticoWidth/2,openSpans:[6,16]},
     {a:porticoCenter+porticoWidth/2,b:width/2,openSpans:[10]}];
+  const shops=ferryGlazing(street);
   for(const {a,b,openSpans} of westWing){
     const pitch=(b-a)/18;
     for(let i=0;i<18;i++){
@@ -122,32 +128,57 @@ export function ferryHall(font:Font) {
       box(.011,.303,.014,x-pitch*.451,.599,.010,'#bdb8a8',street);
       if(openSpans.includes(i)){
         box(pitch*2,.052,.087,x+pitch/2,.377,-.036,ashlar,street);
+        for(let k=0;k<2;k++)shops.shop(x+k*pitch,pitch*.94,-.43,i+k);
         continue;
       }
       if(openSpans.includes(i-1))continue;
       archedOpening(street,x,pitch,.109,.400,pitch*.343,.339,'small');
-      const glass=i<6||i>11?'#637776':'#52635e';
-      storefront(street,x,pitch*.75,.111,.219,-.222,glass);
+      // The arcaded walk extends along the facade; the tenant frontage is
+      // visible beyond the arch, not installed between its granite jambs.
+      const gallery=a<0?i>=7:i<10,z=gallery?-.430:-.226;
+      shops.shop(x,pitch*.96,z,i);
+      if(gallery){
+        box(pitch,.013,.40,x,.354,-.224,'#939382',street);
+        if(i%3===1)box(.029,.009,.029,x,.337,-.196,'#dfd3af',street).userData.signLight=[.35,.24,.13];
+      }
     }
   }
+  shops.finish();
   const portico=new THREE.Group();portico.name='Central five-bay entrance';
   portico.position.set(porticoCenter,0,streetZ-porticoZ);street.add(portico);
+  const entries=ferryGlazing(portico);
   let cursor=-porticoWidth/2;
   for(const [i,span] of [.41,.60333,.60334,.60333,.41].entries()){
     const x=cursor+span/2,outer=i===0||i===4,r=outer?.117:.196;
     const top=outer?.537:.784;
     archedOpening(portico,x,span,.111,1.023,r,top,'tall');
+    const lineA=-(streetZ-porticoZ),lineB=lineA-.491;
+    const clear=2*r,entryTop=outer?.343:.397;
+    // Page & Turnbull 2024, memo fig. 2 and exhibit 46. The three large
+    // fanlights are set into the FRONT wall of the portico. The elevator
+    // and breezeway doors are on line A, the outer market doors on line B.
+    entries.fanlight(x,r*1.92,entryTop+.012,top-.010,-.070);
+    box(clear+.014,.026,.065,x,entryTop,-.035,'#b2b09b',portico);
+    if(outer)sash(portico,x,.59,span*.67,.133,.008,'small');
+    const doorZ=outer?lineB:lineA;
+    // Keep the front portion of the portico open sideways as in exhibit 46.
     if(outer){
-      sash(portico,x,.59,span*.67,.133,.008,'small');
-      storefront(portico,x,span*.77,.115,.35,-.367,'#75837a');
-    }else{
-      const arch=roundWindow(r*1.91,top-.407);
-      extrude(arch,.014,'#9d9c86',x,.405,-.112,portico);
-      for(const d of [-.61,-.31,0,.31,.61]){
-        box(.009,.206,.011,x+d*r,.513,-.094,'#c2bc9f',portico);
+      entries.returnWall(x-clear*.54,.104,.333,lineA,doorZ-.130,true);
+      entries.returnWall(x+clear*.54,.104,.333,lineA,doorZ-.130,false);
+    }
+    if(i===3){
+      for(let step=0;step<14;step++){
+        const top=.113+step*.010;
+        box(clear,.010,.028,x,top-.005,lineA-step*.024,'#a79d87',portico);
       }
-      box(r*1.91,.024,.035,x,.406,-.086,'#8e8876',portico);
-      if(i!==2)storefront(portico,x,r*1.97,.113,.45,-.610,'#687a6d');
+      entries.doors(x,clear,lineA-.280,.223,.155);
+      entries.pane(x,.311,lineA-.354,clear,.171,'#59625b');
+    }else{
+      entries.doors(x,clear,doorZ,.103,outer?.210:.242,i===2);
+      if(i!==2)entries.shop(x,clear*1.02,doorZ-.078,i+2);
+    }
+    for(const dir of [-1,1]){
+      box(.018,.245,.095,x+dir*(clear/2+.014),.226,lineA-.004,ashlar,portico);
     }
     if(i>0){
       box(.065,.832,.075,cursor,.56,.009,pale,portico);
@@ -162,17 +193,19 @@ export function ferryHall(font:Font) {
     }
     cursor+=span;
   }
+  entries.finish();
   for(const side of [-1,1])box(.082,.896,streetZ-porticoZ+.046,side*porticoWidth/2,.558,-.258,ashlar,portico);
   for(const y of [.938,.973,1.018]){
     box(porticoWidth+.07,.027,.091,0,y,.023,pale,portico);
   }
-  // The three treads rise from the curbside pavement to the existing hall floor.
-  for(let step=0;step<3;step++){
-    const top=.1125-step*.015,base=.030;
-    box(porticoWidth+.08+step*.058,top-base,.09,0,(top+base)/2,.055+step*.057,'#ccc4b1',portico);
+  for(const tread of ferryTreads){
+    box(porticoWidth+.08+tread.extraWidth,tread.top-.030,tread.depth,0,(tread.top+.030)/2,
+      porticoZ-tread.z,'#ccc4b1',portico);
   }
   const landingDepth=streetZ-porticoZ;
-  box(porticoWidth,.054,landingDepth+.015,0,.076,.014-landingDepth/2,ashlar,portico).name='Portico landing';
+  box(porticoWidth,.054,landingDepth+.025,0,ferryHallFloor-.027,.014-landingDepth/2,ashlar,portico).name='Portico landing';
+  // The recessed walk connects the open arcades to the main market entrance.
+  box(width-.06,.036,.574,0,ferryHallFloor-.018,-.260,pale,street);
 
   // Port/SFMTA right-of-way polygons 110 and 128 already pave the west
   // approach, including the curb returns and accessible ramps. Match their
@@ -236,7 +269,10 @@ export function ferryHall(font:Font) {
     const y=g===street?.94:.90;
     box(width+.12,.045,.084,0,y,.010,pale,g);
     box(width+.10,.015,.076,0,y-.028,.008,'#b1b4a8',g);
-    box(width+.08,.025,.063,0,.104,.028,'#d1c9b8',g);
+    // The water table terminates at the through door; its moulding cannot
+    // run across the central walking surface.
+    for(const [a,b] of [[-width/2-.04,-.26],[.26,width/2+.04]])
+      box(b-a,.025,.063,(a+b)/2,.104,.028,'#d1c9b8',g);
     for(let x=-width/2+.10;x<width/2;x+=g===street?.134:.174){
       box(.039,.014,.041,x,y-.048,.042,'#dad8ca',g);
     }
@@ -312,6 +348,8 @@ export function ferryHall(font:Font) {
   // and entablature. The recessed glazed openings retain their darker centers.
   // https://hlblighting.com/project/san-francisco-ferry-building/
   function hallUplight(p:THREE.Vector3,n:THREE.Vector3){
+    // HLB's light falls on the stone jambs and cornices; recesses behind
+    // the front colonnade receive less light than the outward-facing stone.
     const west=p.z<streetZ+.12;
     const side=west?-1:1;
     const column=west&&Math.abs(p.x-towerX)<porticoWidth/2&&p.z<streetZ-.09;
@@ -319,7 +357,7 @@ export function ferryHall(font:Font) {
     const incidence=.25+.66*Math.max(0,n.z*side)+.28*Math.max(0,-n.y);
     return height*incidence*(column?.96:west?.65:.40);
   }
-  for(const side of [street,bay])side.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=hallUplight;});
+  for(const side of [street,bay])side.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=o.name==='Recessed west glazing and shop interiors'?()=>.078:hallUplight;});
   return {root,towerX,towerZ:(porticoZ+streetZ)/2+.24};
 }
 
@@ -335,7 +373,8 @@ export function ferryPublicRealm() {
     const x=streetX+side*(z>-10?.83:.90), y=harryBridgesGround(x,z)??(z>-3?.031:westMarketGround(x,z));
     mesh(new THREE.CylinderGeometry(.018,.035,.64,7),metal,x,y+.32,z);
     box(.067,.082,.064,x,y+.049,z,metal);
-    box(.039,.068,.041,x,y+.64,z,'#e8d4a6');
+    const globe=box(.039,.068,.041,x,y+.64,z,'#e8d4a6');
+    globe.name='Ferry forecourt globe';globe.userData.signLight=[.90,.60,.29];
     mesh(new THREE.ConeGeometry(.039,.045,8),metal,x,y+.693,z);
   }
   // Port inventory C3 identifies the two Millennium light sculptures. The

@@ -64,11 +64,20 @@ test('the full city and both vignette shaders follow independent local clocks ac
     const shader={vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader,uniforms:{}};
     mesh.material.onBeforeCompile(shader,{});
     assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance+=roomEmission;'));
-    assert.ok(shader.fragmentShader.includes('if(roomNight>.0001)'));
+    assert.ok(shader.fragmentShader.includes('if(roomShare>.0001)'));
+    assert.ok(shader.fragmentShader.includes('RE_Direct_Gouache'));
+    assert.ok(shader.fragmentShader.includes('clamp(harborPosition.y/13.'));
+    const panes={vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader,uniforms:{}};
+    scene.windowMaterial.onBeforeCompile(panes,{});
+    assert.equal(panes.uniforms.glassSky,scene.glassSky);
+    assert.equal(shader.uniforms.glassSky,scene.glassSky);
+    assert.ok(panes.fragmentShader.includes('diffuseColor.rgb*=glassSky'));
     return shader.uniforms;
   }
   const f=uniforms(full),s=uniforms(street),p=uniforms(plaza);
-  full.setFacadeClock(20,45,.92);street.setFacadeClock(2,0,1);plaza.setFacadeClock(12,0,0);
+  assert.notEqual(f.glassSky,s.glassSky);assert.notEqual(s.glassSky,p.glassSky);
+  full.setFacadeClock(20,45,.92,.40);street.setFacadeClock(2,0,1);plaza.setFacadeClock(12,0,0);
+  assert.deepEqual([f.roomShare.value,s.roomShare.value,p.roomShare.value],[.40,.30,0]);
   assert.deepEqual([f.roomQuiet.value,s.roomQuiet.value,p.roomQuiet.value],[0,1,0]);
   assert.deepEqual([f.roomNight.value,s.roomNight.value,p.roomNight.value],[.92,1,0]);
   full.setFacadeClock(23,59,.96);const midnight=f.roomQuiet.value;
