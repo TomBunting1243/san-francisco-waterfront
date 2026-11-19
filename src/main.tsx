@@ -3,8 +3,6 @@ import CustomConditions, {type Ride} from './CustomConditions';
 import {loadConditions,saveConditions,type Conditions} from './conditions.ts';
 import {createRoot} from 'react-dom/client';
 import CityWorld from '../app/CityWorld';
-import './city.css';
-import './standalone.css';
 
 const darkMode = window.matchMedia('(prefers-color-scheme: dark)');
 function updatePalette() {

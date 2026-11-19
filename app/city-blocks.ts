@@ -33,36 +33,62 @@ function coalesceSparseTiles(tiles:Map<string,Tile>){
   return combined;
 }
 
-/** Bake rigid buildings once. Keep indexed source faces and pack only the attributes used by the city material. */
-export function bakeBlocks(meshes: PaintedMesh[], material: THREE.MeshStandardMaterial):THREE.Mesh[] {
+function groupBlockParts(meshes:PaintedMesh[]){
   const blocks = new Map<string, Tile>();
   const point = new THREE.Vector3();
   const worldBounds=new THREE.Box3();
   for (const mesh of meshes) {
     const geo = mesh.geometry;
-    if (!geo.boundingBox) geo.computeBoundingBox();
-    geo.boundingBox!.getCenter(point).applyMatrix4(mesh.matrixWorld);
+    const bounds=sourceBounds(geo);
+    bounds.getCenter(point).applyMatrix4(mesh.matrixWorld);
     const x=Math.floor(point.x/blockWidth),z=Math.floor(point.z/blockWidth),key=x+','+z;
     let tile=blocks.get(key);
     if(!tile){tile={x,z,parts:[],bounds:new THREE.Box3(),triangles:0};blocks.set(key,tile);}
     tile.parts.push(mesh);
-    tile.bounds.union(worldBounds.copy(geo.boundingBox!).applyMatrix4(mesh.matrixWorld));
+    tile.bounds.union(worldBounds.copy(bounds).applyMatrix4(mesh.matrixWorld));
     tile.triangles+=(geo.index?.count??geo.attributes.position.count)/3;
   }
-  return Array.from(coalesceSparseTiles(blocks),([key,parts])=>bakeRigidChunk('City block '+key,parts,material));
+  return coalesceSparseTiles(blocks);
 }
 
-// The output always has tightly packed world-space Float32 positions. Three's
-// generic bounds helpers otherwise read this same large buffer three times.
-function boundPackedGeometry(geometry:THREE.BufferGeometry,xyz:Float32Array){
-  const bounds=new THREE.Box3(),sphere=new THREE.Sphere();
+/** Bake rigid buildings once, preserving indexed source faces in district order. */
+export function bakeBlocks(meshes:PaintedMesh[],material:THREE.MeshStandardMaterial):THREE.Mesh[]{
+  return Array.from(groupBlockParts(meshes),([key,parts])=>bakeRigidChunk('City block '+key,parts,material));
+}
+
+/** A district is complete before pausing, so intermediate frames never see
+ * partial geometry. All chunks are returned together in the synchronous order. */
+export function* bakeBlockGroups(meshes:PaintedMesh[],material:THREE.MeshStandardMaterial,shouldYield:()=>boolean):Generator<void,THREE.Mesh[]>{
+  const chunks:THREE.Mesh[]=[];
+  for(const [key,parts] of groupBlockParts(meshes)){
+    chunks.push(bakeRigidChunk('City block '+key,parts,material));
+    if(shouldYield())yield;
+  }
+  return chunks;
+}
+
+function packedBounds(xyz:Float32Array){
   let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
   for(let i=0;i<xyz.length;i+=3){
     const x=xyz[i],y=xyz[i+1],z=xyz[i+2];
     minX=Math.min(minX,x);minY=Math.min(minY,y);minZ=Math.min(minZ,z);
     maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);maxZ=Math.max(maxZ,z);
   }
-  bounds.min.set(minX,minY,minZ);bounds.max.set(maxX,maxY,maxZ);
+  return new THREE.Box3(new THREE.Vector3(minX,minY,minZ),new THREE.Vector3(maxX,maxY,maxZ));
+}
+
+export function sourceBounds(geometry:THREE.BufferGeometry){
+  if(!geometry.boundingBox){
+    const pos=geometry.attributes.position;
+    if(pos instanceof THREE.BufferAttribute&&pos.itemSize===3&&!pos.normalized&&pos.array instanceof Float32Array&&!geometry.morphAttributes.position)
+      geometry.boundingBox=packedBounds(pos.array);
+    else geometry.computeBoundingBox();
+  }
+  return geometry.boundingBox!;
+}
+
+function boundPackedGeometry(geometry:THREE.BufferGeometry,xyz:Float32Array){
+  const bounds=packedBounds(xyz),sphere=new THREE.Sphere();
   const center=bounds.getCenter(sphere.center);let distanceSquared=0;
   for(let i=0;i<xyz.length;i+=3){
     const x=xyz[i]-center.x,y=xyz[i+1]-center.y,z=xyz[i+2]-center.z;
@@ -107,42 +133,61 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
     }
     const red = Math.round(255*r), green = Math.round(255*g), blue = Math.round(255*b);
     normalMatrix.getNormalMatrix(mesh.matrixWorld);
-    // Most sources are ordinary BufferAttributes. Keep Three's accessor
-    // semantics for interleaved, normalized and half-float source formats.
     const xyz=pos instanceof THREE.BufferAttribute&&pos.itemSize===3&&!pos.normalized&&pos.array instanceof Float32Array?pos.array:null;
     const directions=n instanceof THREE.BufferAttribute&&n.itemSize===3&&!n.normalized&&n.array instanceof Float32Array?n.array:null;
-    const packedNormals=n instanceof THREE.BufferAttribute&&n.itemSize===3&&n.normalized&&n.array instanceof Int16Array?n.array:null;
-    const channels=paint instanceof THREE.BufferAttribute&&paint.itemSize===3&&paint.normalized&&paint.array instanceof Uint8Array?paint.array:null;
-    const e=mesh.matrixWorld.elements,m=normalMatrix.elements,affine=e[3]===0&&e[7]===0&&e[11]===0&&e[15]===1;
-    for(let i=0;i<pos.count;i++){
-      const k=3*i,j=vertex*3+k;
-      if(xyz&&affine){
-        const x=xyz[k],y=xyz[k+1],z=xyz[k+2];
-        point.set(e[0]*x+e[4]*y+e[8]*z+e[12],e[1]*x+e[5]*y+e[9]*z+e[13],e[2]*x+e[6]*y+e[10]*z+e[14]);
-      }else point.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
-      positions[j]=point.x;positions[j+1]=point.y;positions[j+2]=point.z;
-      if(directions||packedNormals){
-        let x,y,z;
-        if(directions){x=directions[k];y=directions[k+1];z=directions[k+2];}
-        else {
-          x=Math.max(-1,packedNormals![k]/32767);y=Math.max(-1,packedNormals![k+1]/32767);z=Math.max(-1,packedNormals![k+2]/32767);
+    const e=mesh.matrixWorld.elements,m=normalMatrix.elements,base=vertex*3,end=(vertex+pos.count)*3;
+    // Split positions, normals and pigment into homogeneous loops. Much of
+    // downtown already uses world axes and needs just its origin added.
+    if(xyz&&e[3]===0&&e[7]===0&&e[11]===0&&e[15]===1){
+      const translated=e[0]===1&&e[1]===0&&e[2]===0&&e[4]===0&&e[5]===1&&e[6]===0&&e[8]===0&&e[9]===0&&e[10]===1;
+      if(translated){
+        for(let j=base,k=0;j<end;j+=3,k+=3){
+          positions[j]=xyz[k]+e[12];positions[j+1]=xyz[k+1]+e[13];positions[j+2]=xyz[k+2]+e[14];
         }
-        normal.set(m[0]*x+m[3]*y+m[6]*z,m[1]*x+m[4]*y+m[7]*z,m[2]*x+m[5]*y+m[8]*z).normalize();
-      }else normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
-      normals[j]=Math.round(normal.x*32767);normals[j+1]=Math.round(normal.y*32767);normals[j+2]=Math.round(normal.z*32767);
-      if(channels){
-        colors[j]=Math.round(255*r*(channels[k]/255));colors[j+1]=Math.round(255*g*(channels[k+1]/255));colors[j+2]=Math.round(255*b*(channels[k+2]/255));
-      }else if(paint){
-        colors[j]=Math.round(255*r*paint.getX(i));colors[j+1]=Math.round(255*g*paint.getY(i));colors[j+2]=Math.round(255*b*paint.getZ(i));
       }else{
-        colors[j]=red;colors[j+1]=green;colors[j+2]=blue;
+        for(let j=base,k=0;j<end;j+=3,k+=3){
+          const x=xyz[k],y=xyz[k+1],z=xyz[k+2];
+          positions[j]=e[0]*x+e[4]*y+e[8]*z+e[12];
+          positions[j+1]=e[1]*x+e[5]*y+e[9]*z+e[13];
+          positions[j+2]=e[2]*x+e[6]*y+e[10]*z+e[14];
+        }
       }
-      if(signLights&&uplight&&!light){
-        const irradiance=uplight(point,normal);
-        signLights[j]=Math.min(255,colors[j]*irradiance);
-        signLights[j+1]=Math.min(255,colors[j+1]*irradiance*.82);
-        signLights[j+2]=Math.min(255,colors[j+2]*irradiance*.59);
+    }else for(let i=0;i<pos.count;i++)point.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld).toArray(positions,base+3*i);
+
+    if(directions){
+      // Planar faces repeat their normal at each corner. Reuse its transformed
+      // and quantized components until the source direction actually changes.
+      let previousX=NaN,previousY=NaN,previousZ=NaN,nx=0,ny=0,nz=0;
+      for(let j=base,k=0;j<end;j+=3,k+=3){
+        const x=directions[k],y=directions[k+1],z=directions[k+2];
+        if(x!==previousX||y!==previousY||z!==previousZ){
+          normal.set(m[0]*x+m[3]*y+m[6]*z,m[1]*x+m[4]*y+m[7]*z,m[2]*x+m[5]*y+m[8]*z).normalize();
+          nx=Math.round(normal.x*32767);ny=Math.round(normal.y*32767);nz=Math.round(normal.z*32767);
+          previousX=x;previousY=y;previousZ=z;
+        }
+        normals[j]=nx;normals[j+1]=ny;normals[j+2]=nz;
       }
+    }else for(let i=0;i<pos.count;i++){
+      normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
+      const j=base+i*3;normals[j]=Math.round(normal.x*32767);normals[j+1]=Math.round(normal.y*32767);normals[j+2]=Math.round(normal.z*32767);
+    }
+    if(!paint){
+      for(let j=base;j<end;j+=3){colors[j]=red;colors[j+1]=green;colors[j+2]=blue;}
+    }else if(paint instanceof THREE.BufferAttribute&&paint.itemSize===3&&!paint.normalized&&paint.array instanceof Float32Array){
+      const channels=paint.array;
+      for(let j=base,k=0;j<end;j+=3,k+=3){
+        colors[j]=Math.round(255*r*channels[k]);colors[j+1]=Math.round(255*g*channels[k+1]);colors[j+2]=Math.round(255*b*channels[k+2]);
+      }
+    }else for(let i=0;i<pos.count;i++){
+      const j=base+3*i;colors[j]=Math.round(255*r*paint.getX(i));colors[j+1]=Math.round(255*g*paint.getY(i));colors[j+2]=Math.round(255*b*paint.getZ(i));
+    }
+    if(signLights&&uplight&&!light)for(let i=0;i<pos.count;i++){
+      point.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
+      normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
+      const j=base+i*3,irradiance=uplight(point,normal);
+      signLights[j]=Math.min(255,colors[j]*irradiance);
+      signLights[j+1]=Math.min(255,colors[j+1]*irradiance*.82);
+      signLights[j+2]=Math.min(255,colors[j+2]*irradiance*.59);
     }
     const sourceIndices=geometry.index?.array;
     if(sourceIndices){

@@ -47,7 +47,7 @@ import {createServiceFerry,serviceFerryPaint,updatePyxisBoardingDoor} from './se
 import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,vignetteBaySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
-import {bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from './city-blocks.ts';
+import {bakeBlockGroups,bakeRigidChunk,freezeBakedArchitecture} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
@@ -120,7 +120,7 @@ import fontData from './harbor-font.json' with { type: 'json' };
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** San Francisco waterfront footprints with selectively detailed landmark models. */
-export function* landscapeStages() {
+export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const root = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number; tide?:boolean }[] = [];
@@ -157,6 +157,7 @@ export function* landscapeStages() {
   const water = new THREE.Mesh(baySurfaceGeometry(), waterMaterial);
   water.rotation.x = -Math.PI / 2; water.position.y = waterSurface.level; water.receiveShadow = true; root.add(water);
   addSurveyShore(mesh,bayReliefBankHeight);
+  if(shouldYield())yield 1;
   function linePath(points:number[][],width:number,y:number,color:string){
     for(let i=1;i<points.length;i++){
       const [ax,az]=points[i-1],[bx,bz]=points[i],length=Math.hypot(bx-ax,bz-az);
@@ -219,12 +220,14 @@ export function* landscapeStages() {
   const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
   const detailedBuildings=refineMaritimeLandings(refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing])));
   const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
+  if(shouldYield())yield 2;
   const gardens=waterfrontGardens(detailedBuildings,font);root.add(gardens.root);
+  if(shouldYield())yield 2;
   const centerComplex=createEmbarcaderoCenter(waterfrontLandscape.areas,waterfrontLandscape.paths,detailedBuildings);
   root.add(centerComplex.root);windowPositions.push(...centerComplex.windows);
   addMarketCenterPlaza(root);
   const buildingParents=new Set(detailedBuildings.map(b=>b.parent).filter(Boolean));
-  [...detailedBuildings,...smallHarborBuildings].forEach(b=>{
+  function addBuilding(b:typeof detailedBuildings[number]){
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
@@ -331,7 +334,11 @@ export function* landscapeStages() {
         }
       }
     }
-  });
+  }
+  for(const building of [...detailedBuildings,...smallHarborBuildings]){
+    addBuilding(building);
+    if(shouldYield())yield 2;
+  }
   const salesforce=createSalesforceTower(mappedBuildings.find(b=>b.name==='Salesforce Tower')!,nightInk,artClock);
   const transamerica=createTransamericaPyramid(mappedBuildings.find(b=>b.name==='Transamerica Pyramid')!);
   root.add(salesforce,transamerica.root);windowPositions.push(...transamerica.windows);
@@ -407,6 +414,7 @@ export function* landscapeStages() {
     box(2.1,.19,.4,0,3.55,z,'#9aa9a5',bridge);
   }
   const updateApproach=buildApproachRoad(mesh,root);
+  if(shouldYield())yield 3;
   buildApproachBlocks(mesh,root);
   buildApproachBillboards(mesh,root,font);
   // Carry the viaduct from its west-span anchorage to the rising tunnel cut.
@@ -569,6 +577,7 @@ export function* landscapeStages() {
     operator.rotation.y=side<0?Math.PI:0;
   }
   const ferryMarket=createFerryMarket();root.add(ferryMarket.root);
+  if(shouldYield())yield 4;
   waterfrontBench(-26.917,.11,.125,.11);
   for(const x of [-21,31,34]){
     const edge=seawallAt(x);
@@ -679,15 +688,29 @@ export function* landscapeStages() {
   const canopyMaterial=createCanopyMaterial(architectureMaterial,leafSun);
   const treeBatches=bakeTreeBatches(staticMeshes,canopyMaterial);
   const treeDraw=createTreeDraw(treeBatches,canopyMaterial);if(treeDraw)root.add(treeDraw);
-  const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.userData.roadPaint&&!m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint')),architectureMaterial),
-    ...paintChunks,
-    // All billboard faces share one atlas; the entire set is only 26 triangles.
-    bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()),
-    ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('walkPanel')),walkMaterial),
-    ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
+  if(shouldYield())yield 5;
+  function* bakeSection(parts:typeof staticMeshes,mat:THREE.MeshStandardMaterial){
+    const blocks=bakeBlockGroups(parts,mat,shouldYield);
+    let block=blocks.next();
+    while(!block.done){yield 5;block=blocks.next();}
+    return block.value;
+  }
+  const ordinary=staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.userData.roadPaint&&
+    !m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint'));
+  const architectureChunks=yield* bakeSection(ordinary,architectureMaterial);
+  architectureChunks.push(...paintChunks);
+  // All billboard faces share one atlas; the entire set is only 26 triangles.
+  architectureChunks.push(bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()));
+  for(const [attribute,mat] of [['walkPanel',walkMaterial],['facadeGrid',facadeMaterial]] as const){
+    const chunks=yield* bakeSection(staticMeshes.filter(m=>m.geometry.hasAttribute(attribute)),mat);
+    architectureChunks.push(...chunks);
+  }
   yield 6;
   const updateTidalChunks=createTideUpdater(architectureChunks);
-  for(const chunk of architectureChunks)installOrderedArchitecture(chunk);
+  for(const chunk of architectureChunks){
+    installOrderedArchitecture(chunk);
+    if(shouldYield())yield 6;
+  }
   const illuminatedArchitecture=architectureMaterial.clone();
   for(const chunk of architectureChunks)if(chunk.geometry.hasAttribute('signLight'))chunk.material=illuminatedArchitecture;
   root.add(...architectureChunks);
@@ -741,6 +764,7 @@ export function* landscapeStages() {
   }
   for(const object of moving)object.traverse(child=>{child.castShadow=false;});
   const transit=createPromenadeTransit();root.add(transit.root);
+  if(shouldYield())yield 6;
   // One small, tileable sheet holds wash density, dried wash edges and paper tooth.
   // All three fields share mip levels, so the pigment resolves into a continuous tint at a distance.
   const tileSide=128,grainBytes=new Uint8Array(tileSide*tileSide*4);
@@ -874,6 +898,7 @@ export function* landscapeStages() {
   for(const [name,x,y,z,w,h,d] of [['waterfront',0,2.2,0,16,4.7,3],['bridge',bridgePoint(0,36.85).x,4.8,bridgePoint(0,36.85).z,2.8,10,2.8],['pyramid',26.75,7.8,-40.4,3,16,3]] as const){
     const target=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),hitMaterial);target.position.set(x,y,z);target.userData.landmark=name;root.add(target);hitTargets.push(target);
   }
+  if(shouldYield())yield 6;
   const relief=createBayRelief();root.add(relief.root);
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);

@@ -57,9 +57,9 @@ main[data-harbor-light=dark] .standalone-custom-reset:disabled{color:#afbab8}
 
 .standalone-custom{display:flex;align-items:center;gap:8px}
 .standalone-custom-view,.standalone-ride-toolbar{display:none}
-.world-scene[data-ready=true]~.standalone-custom .standalone-custom-view{display:block;margin-bottom:8px}
+.world-poster:is([data-state=ready],[data-state=loading])~.standalone-custom .standalone-custom-view{display:block;margin-bottom:8px}
 .standalone-custom-view label{display:block;margin-bottom:5px}
-.world-scene[data-ready=true]~.standalone-custom .standalone-ride-toolbar{display:flex}
+.world-poster:is([data-state=ready],[data-state=loading])~.standalone-custom .standalone-ride-toolbar{display:flex}
 .standalone-ride-toolbar{
   align-items:center;border:1px solid #f4efcc66;border-radius:5px;
   background:#183135;color:#fff9e9;box-shadow:0 1px 5px #11272c2b;

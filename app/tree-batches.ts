@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {bakeRigidChunk} from './city-blocks.ts';
+import {bakeRigidChunk,sourceBounds} from './city-blocks.ts';
 
 type PaintedMesh=THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>;
 type Plant={parts:PaintedMesh[];bounds:THREE.Box3};
@@ -11,29 +11,30 @@ const box=new THREE.Box3(),point=new THREE.Vector3();
 // in its own coordinate system so a tall, narrow crown retains its proportions.
 // Opposing windings remain distinct on palms and other two-sided leaf surfaces.
 function reducedCrown(high:THREE.BufferGeometry,part:PaintedMesh,start:number,indices:number[]){
-  const p=high.getAttribute('position'),count=part.geometry.getAttribute('position').count;
+  const xyz=high.getAttribute('position').array,count=part.geometry.getAttribute('position').count;
   box.copy(part.geometry.boundingBox!).applyMatrix4(part.matrixWorld);
   const scale=box.getSize(new THREE.Vector3());
   const divisions=part.geometry.userData.planeLeaf?4:5,last=divisions-1;
   scale.set(divisions/Math.max(.00001,scale.x),divisions/Math.max(.00001,scale.y),divisions/Math.max(.00001,scale.z));
-  const remap=new Uint32Array(count),cells=new Map<number,{index:number;distance:number}>();
-  for(let i=0;i<count;i++){
-    point.fromBufferAttribute(p,start+i).sub(box.min).multiply(scale);
-    const x=Math.min(last,Math.max(0,Math.floor(point.x))),y=Math.min(last,Math.max(0,Math.floor(point.y))),z=Math.min(last,Math.max(0,Math.floor(point.z)));
-    const key=x+5*y+25*z,old=cells.get(key);
-    // Favor the envelope in the outer cells to keep the measured silhouette.
-    const target=(k:number)=>k===0?0:k===last?divisions:k+.5;
-    const distance=(point.x-target(x))**2+(point.y-target(y))**2+(point.z-target(z))**2;
-    if(!old||distance<old.distance)cells.set(key,{index:start+i,distance});
+  // A crown has at most 125 cells. Direct lookups retain the first vertex
+  // on a tie, just like the original nearest-envelope selection.
+  const remap=new Uint8Array(count),nearest=new Float64Array(125).fill(Infinity),representative=new Uint32Array(125);
+  const target=(k:number)=>k===0?0:k===last?divisions:k+.5;
+  for(let i=0,k=start*3;i<count;i++,k+=3){
+    const px=(xyz[k]-box.min.x)*scale.x,py=(xyz[k+1]-box.min.y)*scale.y,pz=(xyz[k+2]-box.min.z)*scale.z;
+    const x=Math.min(last,Math.max(0,Math.floor(px))),y=Math.min(last,Math.max(0,Math.floor(py))),z=Math.min(last,Math.max(0,Math.floor(pz)));
+    const key=x+5*y+25*z;
+    const distance=(px-target(x))**2+(py-target(y))**2+(pz-target(z))**2;
+    if(distance<nearest[key]){nearest[key]=distance;representative[key]=start+i;}
     remap[i]=key;
   }
-  const original=part.geometry.index,n=original?.count??count,seen=new Set<number>();
+  const original=part.geometry.index?.array,n=original?.length??count,seen=new Set<number>();
   for(let i=0;i<n;i+=3){
-    const a=remap[original?original.getX(i):i],b=remap[original?original.getX(i+1):i+1],c=remap[original?original.getX(i+2):i+2];
+    const a=remap[original?original[i]:i],b=remap[original?original[i+1]:i+1],c=remap[original?original[i+2]:i+2];
     if(a===b||b===c||c===a)continue;
     const key=a<=b&&a<=c?a+125*(b+125*c):b<=c?b+125*(c+125*a):c+125*(a+125*b);
     if(seen.has(key))continue;
-    seen.add(key);indices.push(cells.get(a)!.index,cells.get(b)!.index,cells.get(c)!.index);
+    seen.add(key);indices.push(representative[a],representative[b],representative[c]);
   }
 }
 
@@ -44,8 +45,7 @@ export function bakeTreeBatches(meshes:PaintedMesh[],material:THREE.MeshStandard
     if(!anchor)continue;
     let plant=plants.get(anchor);
     if(!plant)plants.set(anchor,plant={parts:[],bounds:new THREE.Box3()});
-    if(!mesh.geometry.boundingBox)mesh.geometry.computeBoundingBox();
-    plant.bounds.union(box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));plant.parts.push(mesh);
+    plant.bounds.union(box.copy(sourceBounds(mesh.geometry)).applyMatrix4(mesh.matrixWorld));plant.parts.push(mesh);
   }
   const tiles=new Map<string,Plant[]>();
   for(const plant of plants.values()){
@@ -81,17 +81,24 @@ export function createTreeDraw(tiles:TreeBatch[],material:THREE.Material){
   if(!tiles.length)return undefined;
   const compact=tiles.map(t=>{
     if(t.low===t.high)return t.high;
-    const index=t.low.index!,used=new Map<number,number>(),indices=new Uint32Array(index.count);
-    for(let i=0;i<index.count;i++){
-      const old=index.getX(i);let fresh=used.get(old);
-      if(fresh===undefined){fresh=used.size;used.set(old,fresh);}
-      indices[i]=fresh;
+    const index=t.low.index!.array,vertices=t.high.getAttribute('position').count;
+    // The source indices already occupy a dense interval. Keep both directions
+    // of the first-use remap without building a hash table for every tile.
+    const remap=new Uint32Array(vertices),used=new Uint32Array(vertices),indices=new Uint32Array(index.length);
+    let count=0;
+    for(let i=0;i<index.length;i++){
+      const old=index[i];
+      if(!remap[old]){used[count]=old;remap[old]=++count;}
+      indices[i]=remap[old]-1;
     }
     const geometry=new THREE.BufferGeometry();
     for(const [name,source] of Object.entries(t.high.attributes)){
       const attr=source as THREE.BufferAttribute,dim=attr.itemSize;
-      const array=attr.array.slice(0,used.size*dim);
-      for(const [old,fresh] of used)for(let k=0;k<dim;k++)array[fresh*dim+k]=attr.array[old*dim+k];
+      const array=new (attr.array.constructor as THREE.TypedArrayConstructor)(count*dim);
+      for(let fresh=0;fresh<count;fresh++){
+        const old=used[fresh]*dim;
+        for(let k=0;k<dim;k++)array[fresh*dim+k]=attr.array[old+k];
+      }
       geometry.setAttribute(name,new THREE.BufferAttribute(array,dim,attr.normalized));
     }
     geometry.setIndex(new THREE.BufferAttribute(indices,1));

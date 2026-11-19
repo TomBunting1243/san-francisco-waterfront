@@ -153,3 +153,45 @@ test('London planes preserve measured extent but admit daylight between separate
   t.diagnostic((100*open/oldPixels).toFixed(1)+'% of previously filled lower canopies now admit sky with a two-pixel clearance');
   assert.ok(open/oldPixels>.13&&open/oldPixels<.66);
 });
+
+test('all measured plane crowns retain the original ordered point assignments for each bough',async()=>{
+  const {observedCanopy}=await import('../app/surveyed-canopies.ts');
+  const {observedSprays}=await import('../app/waterfront-trees.ts');
+  const {default:forms}=await import('../public/data/plaza-canopies.json',{with:{type:'json'}});
+  // Independent reference: five full nearest-center assignments with ten
+  // farthest-point seeds. Both tie order and the order within a bough affect
+  // the generated vertex, color and index buffers.
+  function reference(points){
+    const centers=[points.reduce((a,b)=>a.y>b.y?a:b).clone()];
+    while(centers.length<10){
+      let farthest=points[0],best=-1;
+      for(const p of points){
+        const distance=Math.min(...centers.map(c=>p.distanceToSquared(c)));
+        if(distance>best){best=distance;farthest=p;}
+      }
+      centers.push(farthest.clone());
+    }
+    let groups;
+    for(let pass=0;pass<5;pass++){
+      groups=centers.map(()=>[]);
+      points.forEach((p,i)=>{
+        const distances=centers.map(c=>c.distanceToSquared(p));
+        groups[distances.indexOf(Math.min(...distances))].push(i);
+      });
+      groups.forEach((indices,k)=>{
+        if(!indices.length)return;
+        const sum=new THREE.Vector3();
+        for(const i of indices)sum.add(points[i]);
+        centers[k].copy(sum).divideScalar(indices.length);
+      });
+    }
+    return groups;
+  }
+  const crowns=Object.keys(forms).map(k=>observedCanopy(Number(k),true).points);
+  crowns.push([new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3(0,1,0)]);
+  for(const points of crowns){
+    const groups=observedSprays(points);
+    assert.deepEqual(groups,reference(points));
+    assert.equal(observedSprays(points),groups);
+  }
+});

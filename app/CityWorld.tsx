@@ -45,6 +45,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
   const [loadStage,setLoadStage]=useState(0);
   const [renderedRide,setRenderedRide]=useState<RideMode|null>(null);
+  const [rideError,setRideError]=useState('');
   const seatLook=useRef({yaw:0,pitch:0});
   const settings = useRef({ paused, zoom, tilt: 0, yaw: openingCamera.yaw });
   const travelKeys=useRef(new Set<string>());
@@ -79,16 +80,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     reducedMotion.current = motionQuery.matches;
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
-    const rideModules=enableRides?Promise.all([import('./driver-rides'),import('./ride-interior')]):null;
     const paintStep=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances'),rideModules]).then(async ([THREE, { landscapeStages,rememberLandscape, createStreetIllumination, setPccFrontDoor, setPccExitDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule,rides]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances')]).then(async ([THREE, { landscapeStages,rememberLandscape, createStreetIllumination, setPccFrontDoor, setPccExitDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule]) => {
       if (disposed) return;
       setLoadStage(1);
       await paintStep();
       if(disposed)return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
-      catch { setStatus('fallback'); return; }
+      catch { if(rideRef.current)endRideRef.current?.();setStatus('fallback');return; }
       teardown=()=>{renderer.dispose();renderer.domElement.remove();};
       const navigatorHints=navigator as Navigator & {deviceMemory?:number;connection?:{saveData?:boolean}};
       const economy=window.matchMedia('(prefers-reduced-data: reduce)').matches||navigatorHints.connection?.saveData===true;
@@ -103,6 +103,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const sky=streetView?null:createHarborSky();if(sky)scene.add(sky.dome);
       const precipitation=createHarborRain();scene.add(precipitation.mesh);
       const camera = new THREE.PerspectiveCamera(20,1,.35,1800);
+      const loadRides=()=>Promise.all([import('./driver-rides'),import('./ride-interior')]);
+      let rides:Awaited<ReturnType<typeof loadRides>>|undefined,loadingRide=false;
       let interiors:ReturnType<typeof import('./ride-interior').createRideInteriors>|undefined;
       const lampPosition=new THREE.Vector3(),lampAim=new THREE.Vector3();
       let preparedRide:RideMode|null=null,presentedRide:RideMode|null=null;
@@ -125,17 +127,28 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let world:ReturnType<typeof rememberLandscape>;
       if(streetView){world=createCityVignette(variant);}
       else{
-        const stages=landscapeStages();
+        // Inside an expensive stage, release the main thread between real
+        // buildings or mesh batches so the Custom menu and ride controls can respond.
+        let deadline=performance.now()+40,shownStage=1;
+        const stages=landscapeStages(()=>performance.now()>=deadline);
         let step=stages.next();
         while(!step.done){
-          setLoadStage(step.value);
-          await paintStep();
+          if(step.value!==shownStage){
+            shownStage=step.value;setLoadStage(shownStage);await paintStep();
+          }else{
+            await new Promise<void>(resolve=>setTimeout(resolve,0));
+          }
           if(disposed)return;
+          deadline=performance.now()+40;
           step=stages.next();
         }
         world=rememberLandscape(step.value);
       }
-      setLoadStage(7);
+      if(!streetView){
+        setLoadStage(7);
+        await paintStep();
+        if(disposed)return;
+      }
       scene.add(world.root);
       // Keep the detailed waterfront and hills on the opening path. The larger
       // municipal neighborhood survey streams once the first frame is visible.
@@ -456,13 +469,32 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const offset=new THREE.Vector3();
       function animate(now:number) {
         frame=0;if(disposed||!visible||!rendering||document.hidden)return;
-        const ride=rideRef.current,mode=ride?.mode??null;
+        // Custom is available while the opening is building. Present that first
+        // waterfront frame so it can start the neighborhood survey a ride needs.
+        const ride=presented&&enableRides?rideRef.current:null,mode=ride?.mode??null;
         // Let the browser paint the route change before issuing the first cab draw.
         if(preparedRide!==mode){
           preparedRide=mode;presentedRide=null;setRenderedRide(null);rideMoving=false;
           if(rideFence){gl.deleteSync(rideFence);rideFence=null;}
           if(mode){requestFrame();return;}
           neighborhoods?.endRideView();
+        }
+        if(mode&&!rides){
+          if(!loadingRide){
+            loadingRide=true;setRideError('');
+            loadRides().then(modules=>{
+              if(disposed)return;
+              rides=modules;loadingRide=false;requestFrame();
+            }).catch(()=>{
+              if(disposed)return;
+              loadingRide=false;
+              if(rideRef.current){
+                setRideError('The ride couldn’t load. Reload to try again.');
+                endRideRef.current?.();
+              }
+            });
+          }
+          return;
         }
         if(rideFence){
           const result=gl.clientWaitSync(rideFence,0,0);
@@ -828,10 +860,10 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.root.traverse(o=>{if(o instanceof THREE.BatchedMesh){geometries.delete(o.geometry);o.dispose();}});
         if(rideFence)gl.deleteSync(rideFence);interiors?.dispose();culled?.dispose();print?.dispose();streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
       };
-    }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);setStatus('fallback');}});
+    }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);if(rideRef.current)endRideRef.current?.();setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
   },[streetView,variant,enableRides]);
-  const reset=()=>{selectedFerry.current=-1;setFerryLabel('');resetTravel.current();wake.current();settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
+  const reset=()=>{selectedFerry.current=-1;setFerryLabel('');setRideError('');resetTravel.current();wake.current();settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
@@ -863,7 +895,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     {ride&&status==='ready'&&<div className="ride-boarding" data-ready={renderedRide===ride.mode} aria-hidden={renderedRide===ride.mode} role="status">
       <div><strong>{ride.mode==='bridge'?'Bay Bridge drive':'F-line streetcar'}</strong><span>Drag to look around</span></div>
     </div>}
-    {overlay}{(ferryLabel||focus)&&<div className="world-place" role="status">{ferryLabel||(focus&&landmarks[focus].label)}</div>}
+    {overlay}{(ferryLabel||focus||rideError)&&<div className="world-place" role="status">{ferryLabel||(focus&&landmarks[focus].label)||rideError}</div>}
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}
     {status==='loading'&&<WaterfrontLoading stage={loadStage}/>}
     {status==='fallback'&&fallback}

@@ -142,35 +142,50 @@ class Paint {
   }
 }
 
-// Partition each measured surface once (also reused by trees borrowing its
-// form). Farthest-point seeds follow high returns and spreading side branches.
+// Farthest-point seeds follow high returns and spreading side branches.
+// Trees borrowing a measured form reuse the same ordered bough memberships.
 const planeClusters=new WeakMap<Point[],number[][]>();
-function observedSprays(points:Point[]){
+export function observedSprays(points:Point[]){
   const cached=planeClusters.get(points);if(cached)return cached;
-  const centers=[points.reduce((a,b)=>a.y>b.y?a:b).clone()];
-  const distances=new Float64Array(points.length).fill(Infinity);
-  while(centers.length<10){
-    let far=0;
+  const boughs=10,centers:Point[]=[];
+  const groupForPoint=new Uint8Array(points.length);
+  const nearestDistance=new Float64Array(points.length).fill(Infinity);
+  let seedPoint=points.reduce((a,b)=>a.y>b.y?a:b);
+  // Adding each seed already compares it with every point. Keep the winning
+  // group here so the first refinement starts with its assignments complete.
+  for(let k=0;k<boughs;k++){
+    centers.push(seedPoint.clone());
+    let farthest=0;
     for(let i=0;i<points.length;i++){
-      distances[i]=Math.min(distances[i],points[i].distanceToSquared(centers[centers.length-1]));
-      if(distances[i]>distances[far])far=i;
+      const distance=points[i].distanceToSquared(seedPoint);
+      if(distance<nearestDistance[i]){
+        nearestDistance[i]=distance;
+        groupForPoint[i]=k;
+      }
+      if(nearestDistance[i]>nearestDistance[farthest])farthest=i;
     }
-    centers.push(points[far].clone());
+    seedPoint=points[farthest];
   }
-  let groups:number[][]=[];
-  for(let pass=0;pass<5;pass++){
-    groups=centers.map(()=>[]);
-    for(const [i,p] of points.entries()){
-      let closest=0,d=Infinity;
-      for(const [k,c] of centers.entries()){const ds=c.distanceToSquared(p);if(ds<d){closest=k;d=ds;}}
-      groups[closest].push(i);
+  const sums=centers.map(()=>vec(0,0,0)),counts=new Uint32Array(boughs);
+  for(let pass=1;pass<5;pass++){
+    counts.fill(0);for(const sum of sums)sum.set(0,0,0);
+    for(let i=0;i<points.length;i++){
+      const k=groupForPoint[i];sums[k].add(points[i]);counts[k]++;
     }
-    groups.forEach((indices,k)=>{
-      if(indices.length)centers[k].set(0,0,0);
-      for(const i of indices)centers[k].add(points[i]);
-      if(indices.length)centers[k].divideScalar(indices.length);
-    });
+    for(let k=0;k<boughs;k++)if(counts[k])centers[k].copy(sums[k]).divideScalar(counts[k]);
+    let changed=false;
+    for(let i=0;i<points.length;i++){
+      let nearest=0,min=Infinity;
+      for(let k=0;k<boughs;k++){
+        const distance=points[i].distanceToSquared(centers[k]);
+        if(distance<min){min=distance;nearest=k;}
+      }
+      if(nearest!==groupForPoint[i]){groupForPoint[i]=nearest;changed=true;}
+    }
+    if(!changed)break;
   }
+  const groups:number[][]=Array.from({length:boughs},()=>[]);
+  for(let i=0;i<points.length;i++)groups[groupForPoint[i]].push(i);
   planeClusters.set(points,groups);return groups;
 }
 

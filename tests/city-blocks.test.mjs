@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
-import {bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from '../app/city-blocks.ts';
+import {bakeBlockGroups,bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from '../app/city-blocks.ts';
 
 test('baking preserves native material vertex paint while unpainted materials keep their own tint',()=>{
   const panel=new THREE.PlaneGeometry(1,1);
@@ -141,4 +141,58 @@ test('packed rigid batches preserve Three transforms, pigment and precise bounds
   const box=batch.boundingBox.clone(),sphere=batch.boundingSphere.clone();
   batch.computeBoundingBox();batch.computeBoundingSphere();
   assert.ok(batch.boundingBox.equals(box));assert.ok(batch.boundingSphere.equals(sphere));
+});
+
+test('tile assignment includes displaced morph bounds and lighting samples retain full precision before packing',()=>{
+  const geometry=new THREE.BoxGeometry(.73,.31,.56);
+  const displaced=geometry.attributes.position.clone();
+  for(let i=0;i<displaced.count;i++)displaced.setY(i,displaced.getY(i)+2);
+  geometry.morphAttributes.position=[displaced];
+  const expected=geometry.clone();expected.computeBoundingBox();
+  const material=new THREE.MeshStandardMaterial({color:'#99b7c1'});
+  const part=new THREE.Mesh(geometry,material);
+  part.position.set(3.141592653589793,.538729876543,-2.718281828459045);
+  part.rotation.y=.789159;part.updateMatrixWorld();
+  const samples=[];
+  part.userData.uplight=(p,n)=>{samples.push([p.toArray(),n.toArray()]);return .5;};
+  const [block]=bakeBlocks([part],material);
+  assert.ok(geometry.boundingBox.equals(expected.boundingBox));
+  const direction=new THREE.Matrix3().getNormalMatrix(part.matrixWorld);
+  for(let i=0;i<geometry.attributes.position.count;i++){
+    const p=new THREE.Vector3().fromBufferAttribute(geometry.attributes.position,i).applyMatrix4(part.matrixWorld);
+    const n=new THREE.Vector3().fromBufferAttribute(geometry.attributes.normal,i).applyNormalMatrix(direction);
+    assert.deepEqual(samples[i],[p.toArray(),n.toArray()]);
+  }
+  assert.ok(block.geometry.getAttribute('signLight').array.some(value=>value>0));
+});
+
+
+test('deadline pauses keep synchronous district order, material, buffers and bounds',()=>{
+  const material=new THREE.MeshStandardMaterial({color:'#b7906f'}),geometry=new THREE.BoxGeometry();
+  const parts=[1,25,-5,100,172].map(x=>{
+    const mesh=new THREE.Mesh(geometry,material);
+    mesh.position.x=x;mesh.updateMatrixWorld();return mesh;
+  });
+  const expected=bakeBlocks(parts,material);
+  assert.ok(expected.length>=3&&expected.some(m=>m.name.includes('district')));
+  for(const interval of [1,2,Infinity]){
+    let calls=0,pauses=0;
+    const steps=bakeBlockGroups(parts,material,()=>++calls%interval===0);
+    assert.equal(calls,0);
+    let next=steps.next();
+    while(!next.done){
+      assert.equal(next.value,undefined);assert.equal(calls,++pauses*interval);next=steps.next();
+    }
+    assert.equal(calls,expected.length);assert.equal(pauses,Math.floor(calls/interval));
+    const actual=next.value;
+    assert.deepEqual(actual.map(m=>m.name),expected.map(m=>m.name));
+    for(let i=0;i<actual.length;i++){
+      const a=actual[i].geometry,e=expected[i].geometry;
+      assert.equal(actual[i].material,material);
+      assert.deepEqual(a.index.array,e.index.array);
+      for(const key of Object.keys(e.attributes))assert.deepEqual(a.attributes[key].array,e.attributes[key].array);
+      assert.ok(a.boundingBox.equals(e.boundingBox)&&a.boundingSphere.equals(e.boundingSphere));
+    }
+  }
+  assert.deepEqual(bakeBlockGroups([],material,()=>assert.fail('empty bake checked deadline')).next(),{value:[],done:true});
 });
