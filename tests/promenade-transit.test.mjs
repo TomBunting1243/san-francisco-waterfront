@@ -80,3 +80,38 @@ test('Market terminal rider reads the timetable, returns to the bench and sits w
   const fixed=at(33).toArray();assert.deepEqual(at(95).toArray(),fixed);
   assert.ok(at(61.999).distanceTo(at(.001))<.0001);
 });
+
+test('front boarding follows supported paving, passes the exiting rider and reaches the stowed ramp',async()=>{
+  const {addSurveyBlocks}=await import('../app/survey-blocks.ts');
+  const ground=[],mat=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
+  addSurveyBlocks(g=>{const m=new THREE.Mesh(g,mat);ground.push(m);return m;});
+  const scene=createPromenadeTransit(),coach=scene.poses.getObjectByName('2 Sutter coach 1');
+  const board=scene.poses.getObjectByName('Boarding passenger'),exit=scene.poses.getObjectByName('Alighting passenger');
+  const pole=scene.poses.getObjectByName('2 Sutter terminal at Steuart and Don Chee');
+  const down=new THREE.Vector3(0,-1,0);
+  const surface=(point,meshes)=>new THREE.Raycaster(new THREE.Vector3(point.x,.12,point.z),down,0,.13).intersectObjects(meshes,false)[0]?.point.y;
+  for(let phase=2.5;phase<22;phase+=.125){
+    scene.update(phase-7);
+    const local=coach.worldToLocal(board.position.clone());
+    if(local.z>1.51){
+      // Contact over a 16 cm shoe footprint also covers the narrow survey
+      // tessellation seam where the curb return meets the sidewalk mesh.
+      const paving=[-.08,0,.08].map(d=>surface(coach.localToWorld(local.clone().setZ(local.z+d)),ground));
+      assert.ok(paving.some(y=>y>.0405&&Math.abs(board.position.y-y)<.0009),'feet supported by curb or sidewalk at '+phase);
+    }
+    if(exit.visible)assert.ok(board.position.distanceTo(exit.position)>.048,'passing clearance at '+phase);
+    assert.ok(Math.hypot(board.position.x-pole.position.x,board.position.z-pole.position.z)>.020);
+  }
+  scene.update(14.98);
+  const floor=surface(board.position,[coach.children[0]]);
+  // Cast below the roof and window belt, directly onto the ramp.
+  assert.ok(floor&&Math.abs(floor-board.position.y)<.0003);
+  // Front and rear door edges stop within a single ordinary step of curb top.
+  for(const along of [4.59,-1.93]){
+    const at=z=>coach.localToWorld(new THREE.Vector3(along,0,z));
+    assert.ok(surface(at(1.27),ground)<.033);
+    assert.ok(surface(at(1.53),ground)>.0405);
+  }
+  assert.equal(scene.batch.instanceCount,69);
+  assert.ok(scene.batch.geometry.index.count/3<6200);
+});

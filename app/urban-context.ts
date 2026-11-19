@@ -20,32 +20,65 @@ class Reader {
   view: DataView;
   offset=0;
   constructor(encoded:string){
-    this.view=new DataView(Uint8Array.from(atob(encoded),s=>s.charCodeAt(0)).buffer);
+    // Decode in native code where available. The fallback also avoids the
+    // iterator and per-byte callbacks on older Safari versions.
+    const type=Uint8Array as typeof Uint8Array & {fromBase64?:(text:string)=>Uint8Array};
+    let bytes:Uint8Array;
+    if(type.fromBase64)bytes=type.fromBase64(encoded);
+    else{
+      const raw=atob(encoded);bytes=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    }
+    this.view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   }
   u8(){return this.view.getUint8(this.offset++);}
   u16(){const n=this.view.getUint16(this.offset,true);this.offset+=2;return n;}
   i16(){const n=this.view.getInt16(this.offset,true);this.offset+=2;return n;}
   path(x:number,z:number):XZ[]{
-    return Array.from({length:this.u16()},()=>[x+this.i16()/100,z+this.i16()/100]);
+    const points:XZ[]=new Array(this.u16());
+    for(let i=0;i<points.length;i++)points[i]=[x+this.i16()/100,z+this.i16()/100];
+    return points;
   }
 }
 
 class Surface {
-  positions:number[]=[];colors:number[]=[];indices:number[]=[];uv:number[]=[];
+  private xyz=new Float32Array(8192*3);
+  private rgb=new Uint8Array(8192*3);
+  private uv=new Float32Array(8192*2);
+  private indices=new Uint32Array(16384);
+  vertexCount=0;
+  private indexCount=0;
+  reset(){this.vertexCount=0;this.indexCount=0;}
   vertex(x:number,y:number,z:number,color:THREE.Color,u=-1,v=-1){
-    const n=this.positions.length/3;
-    this.positions.push(x,y,z);
-    this.colors.push(Math.round(color.r*255),Math.round(color.g*255),Math.round(color.b*255));
-    this.uv.push(u,v);
+    const n=this.vertexCount++,p=n*3;
+    if(p===this.xyz.length){
+      const xyz=new Float32Array(p*2),rgb=new Uint8Array(p*2),uv=new Float32Array(n*4);
+      xyz.set(this.xyz);rgb.set(this.rgb);uv.set(this.uv);
+      this.xyz=xyz;this.rgb=rgb;this.uv=uv;
+    }
+    this.xyz[p]=x;this.xyz[p+1]=y;this.xyz[p+2]=z;
+    this.rgb[p]=Math.round(color.r*255);this.rgb[p+1]=Math.round(color.g*255);this.rgb[p+2]=Math.round(color.b*255);
+    this.uv[n*2]=u;this.uv[n*2+1]=v;
     return n;
   }
-  quad(a:number,b:number,c:number,d:number){this.indices.push(a,b,c,a,c,d);}
+  triangle(a:number,b:number,c:number){
+    const i=this.indexCount;
+    if(i+3>this.indices.length){
+      const indices=new Uint32Array(this.indices.length*2);indices.set(this.indices);this.indices=indices;
+    }
+    this.indices[i]=a;this.indices[i+1]=b;this.indices[i+2]=c;this.indexCount+=3;
+  }
+  quad(a:number,b:number,c:number,d:number){this.triangle(a,b,c);this.triangle(a,c,d);}
   geometry(){
-    const g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.Float32BufferAttribute(this.positions,3));
-    g.setAttribute('color',new THREE.Uint8BufferAttribute(this.colors,3,true));
-    g.setAttribute('uv',new THREE.Float32BufferAttribute(this.uv,2));
-    g.setIndex(this.indices);g.computeVertexNormals();g.computeBoundingSphere();
+    const g=new THREE.BufferGeometry(),n=this.vertexCount;
+    // Retain exactly the finished tile's data. Every tile can then reuse the same
+    // staging arrays without touching geometry that's already on the screen.
+    g.setAttribute('position',new THREE.BufferAttribute(this.xyz.slice(0,n*3),3));
+    g.setAttribute('color',new THREE.BufferAttribute(this.rgb.slice(0,n*3),3,true));
+    g.setAttribute('uv',new THREE.BufferAttribute(this.uv.slice(0,n*2),2));
+    const used=this.indices.subarray(0,this.indexCount);
+    const index=n>65535?new Uint32Array(used):new Uint16Array(used);
+    g.setIndex(new THREE.BufferAttribute(index,1));g.computeVertexNormals();g.computeBoundingSphere();
     return g;
   }
 }
@@ -62,11 +95,11 @@ function addBuilding(surface:Surface,rings:XZ[][],height:number,bottom:number,ta
   const ground=flats.map(([px,pz])=>bayReliefGround(px,pz));
   const base=ground.reduce((sum,h)=>sum+h,0)/ground.length;
   const top=base+height;
-  const start=surface.positions.length/3;
+  const start=surface.vertexCount;
   const loop=rings.map(r=>r.map(p=>new THREE.Vector2(...p)));
   const faces=THREE.ShapeUtils.triangulateShape(loop[0],loop.slice(1));
   for(const [px,pz] of flats)surface.vertex(px,top,pz,roof);
-  for(const [a,b,c] of faces)surface.indices.push(start+c,start+b,start+a);
+  for(const [a,b,c] of faces)surface.triangle(start+c,start+b,start+a);
   let offset=0;
   for(const r of rings){
     for(let i=0;i<r.length;i++){
@@ -141,9 +174,9 @@ function addRoad(surface:Surface,path:XZ[],kind:number){
   }
 }
 
-function buildTile(tile:Tile,material:THREE.Material){
+function buildTile(tile:Tile,material:THREE.Material,surface:Surface){
   const [x,z,buildings,roads]=tile;
-  const surface=new Surface();
+  surface.reset();
   const b=new Reader(buildings),r=new Reader(roads);
   while(b.offset<b.view.byteLength){
     const height=b.u16()/100*scale,bottom=b.u16()/100*scale,tag=b.u8(),wall=b.u8(),roof=b.u8(),levels=b.u8();
@@ -178,23 +211,35 @@ function neighborhoodMaterial(){
   return material;
 }
 
-/** Municipal survey tiles are decoded only when their world bounds enter the camera frustum. */
+/** Decode the visible municipal survey once per new camera frustum. The LOD
+ * hook runs before Three walks the children, so a tile appears on its first frame. */
 export function createUrbanContext(){
-  const root=new THREE.Group();root.name='San Francisco municipal neighborhood survey';
-  const material=neighborhoodMaterial(),frustum=new THREE.Frustum(),projection=new THREE.Matrix4(),last=new THREE.Matrix4();
-  for(const data of tileData){
-    const [x,z]=data;
-    const node=new THREE.LOD();
-    node.name=`Neighborhood survey ${x},${z}`;
+  const root=new THREE.LOD();root.name='San Francisco municipal neighborhood survey';
+  const material=neighborhoodMaterial(),frustum=new THREE.Frustum();
+  const projection=new THREE.Matrix4(),last=new THREE.Matrix4();
+  const pending=tileData.map(data=>{
     const [xmin,zmin,xmax,zmax]=data[4];
     const box=new THREE.Box3(new THREE.Vector3(xmin-1,-4,zmin-1),new THREE.Vector3(xmax+1,32,zmax+1));
-    node.update=camera=>{
-      if(node.children.length)return;
-      projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
-      if(!projection.equals(last)){frustum.setFromProjectionMatrix(projection);last.copy(projection);}
-      if(frustum.intersectsBox(box))node.add(buildTile(data,material));
-    };
-    root.add(node);
-  }
+    return {data,box};
+  });
+  let surface:Surface|undefined;
+  root.update=camera=>{
+    if(!pending.length)return;
+    projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(root.matrixWorld);
+    if(projection.equals(last))return;
+    last.copy(projection);
+    frustum.setFromProjectionMatrix(projection);
+    let waiting=0;
+    for(const tile of pending){
+      if(!frustum.intersectsBox(tile.box)){pending[waiting++]=tile;continue;}
+      surface??=new Surface();
+      const mesh=buildTile(tile.data,material,surface);
+      mesh.matrixAutoUpdate=false;
+      mesh.matrixWorld.copy(root.matrixWorld);
+      root.add(mesh);
+    }
+    pending.length=waiting;
+    if(!waiting)surface=undefined;
+  };
   return root;
 }

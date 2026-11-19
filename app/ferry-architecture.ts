@@ -1,5 +1,6 @@
 import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
 import {createMarketPaving} from './market-paving.ts';
+import {createFerryBikeRacks} from './ferry-bike-racks.ts';
 import {addMarketStreet} from './market-street.ts';
 import {addPlazaBenches,southPlazaTop} from './plaza-survey.ts';
 import * as THREE from 'three';
@@ -277,6 +278,7 @@ export function ferryPublicRealm() {
   const metal='#586f70';
   root.add(createMarketPaving());
   addMarketStreet(mesh,root);
+  root.add(createFerryBikeRacks());
   // The Ferry Building's forecourt has its own single-head plaza lights.
   for(const z of [-2.05,-4.1,-7.45])for(const side of [-1,1]){
     const streetX=-.13+z*.133;

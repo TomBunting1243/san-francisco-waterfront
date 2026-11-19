@@ -3,7 +3,7 @@ import {batchTraffic} from './traffic-batches.ts';
 import {StreetAssembly,createStreetAmenities,streetPassenger} from './street-amenities.ts';
 import routes from '../public/data/promenade-transit.json' with {type:'json'};
 
-const scale=.06,steel='#848e8a',glass='#719099',red='#a84f48',cream='#c6c7bb';
+const scale=.06,steel='#848e8a',glass='#719099',red='#a84f48';
 const clamp=(v:number)=>Math.min(1,Math.max(0,v));
 const steuartYaw=.146;
 type Point=number[];
@@ -34,11 +34,20 @@ const inbound=route(routes.inbound),outbound=route(routes.outbound);
 const pace=.60,brake=3,layover=31;
 const outboundTime=outbound.length/pace+brake*.5,inboundTime=inbound.length/pace+brake*.5;
 const period=layover+outboundTime+inboundTime;
+const kerbOffset=.81, longitudinalOffset=-.58, thresholdHeight=.365; // metres
+const stopHeading=outbound.pose(0).yaw;
 const travel=(t:number)=>pace*(t<brake?t*t/(2*brake):t-brake*.5);
 export function busPose(time:number){
   const t=((time%period)+period)%period;
-  if(t<=layover)return {...outbound.pose(0),t,stopped:true};
-  return {...(t<layover+outboundTime?outbound.pose(travel(t-layover)):inbound.pose(inbound.length-travel(period-t))),t,stopped:false};
+  const leaving=t<layover+outboundTime;
+  const distance=t<=layover?0:travel(leaving?t-layover:period-t);
+  const pose=t<=layover?outbound.pose(0):leaving?outbound.pose(distance):inbound.pose(inbound.length-distance);
+  // GTFS marks the lane axis. Ease the last 22 metres onto the stopping line
+  // measured against the Steuart curb. Keep the coach aligned during dwell.
+  const u=clamp(1-distance/(22*scale)),blend=u*u*(3-2*u)*scale;
+  const c=Math.cos(stopHeading),s=Math.sin(stopHeading);
+  return {x:pose.x+blend*(longitudinalOffset*c+kerbOffset*s),
+    z:pose.z+blend*(kerbOffset*c-longitudinalOffset*s),yaw:pose.yaw,t,stopped:t<=layover};
 }
 
 function shelter(){
@@ -127,8 +136,8 @@ function shelterRider(){
   return {root,update};
 }
 function coach(){
-  const a=new StreetAssembly(),ink='#45565a',redBand='#ad504b';
-  a.box(0,.45,0,11.98,.31,2.49,'#838c88');a.box(0,2.85,0,12.12,.29,2.51,cream);
+  const a=new StreetAssembly(),ink='#45565a',redBand='#bc4843',silver='#babcba';
+  a.box(0,thresholdHeight-.09,0,11.98,.18,2.52,'#687373');a.box(0,2.85,0,12.12,.29,2.55,silver);
   a.box(-.92,3.18,0,6.24,.44,1.89,'#a3aba4');
   for(let i=0;i<10;i++)a.box(-3.68+i*.52,3.414,0,.11,.031,1.67,'#7f8b88');
   for(const side of [-1,1]){
@@ -136,7 +145,8 @@ function coach(){
     const sections=side<0?[[-6,6]]:[[-6,-2.55],[-1.31,4.00],[5.18,6.00]];
     for(const [lo,hi] of sections){
       const mid=(lo+hi)/2,w=hi-lo,z=side*1.245;
-      a.box(mid,.84,z,w,.67,.071,cream);a.box(mid,1.16,z+side*.010,w,.17,.075,redBand);
+      a.box(mid,.81,z,w,.87,.071,silver);a.box(mid,.49,z+side*.015,w,.24,.076,redBand);
+      a.box(mid,2.82,z+side*.025,w,.16,.071,redBand);
       a.box(mid,2.00,z,w,1.52,.083,ink);
       const n=Math.max(1,Math.round(w/1.23));
       for(let k=0;k<n;k++)a.box(lo+(k+.5)*w/n,2.04,z+side*.05,w/n-.078,1.27,.027,glass);
@@ -147,16 +157,33 @@ function coach(){
     }
   }
   for(const x of [-6.01,6.01]){
-    a.box(x,.97,0,.099,.93,2.50,cream);a.box(x,1.99,0,.095,1.23,2.49,ink);
+    a.box(x,.95,0,.099,.97,2.50,silver);a.box(x,1.99,0,.095,1.23,2.49,ink);
     for(const s of [-1,1])a.box(x+Math.sign(x)*.057,2.00,s*.59,.019,1.08,1.08,glass);
     a.box(x,.54,0,.145,.16,2.5,'#717772');
     for(const s of [-1,1])a.box(x+Math.sign(x)*.068,.96,s*.95,.021,.15,.27,x>0?'#e8d7ab':'#af5a4a');
   }
   a.box(6.07,2.70,0,.055,.40,2.19,ink);
-  a.label('2  SUTTER',6.104,2.60,0,.179,'#e3b367',Math.PI/2);
-  a.box(6.14,.81,0,.13,.14,1.57,'#929b93');
-  a.box(-3.22,1.42,-1.302,1.01,.18,.015,redBand);a.label('Muni',-3.22,1.35,-1.32,.13,'#f2e2cd',Math.PI);
-  const door=new StreetAssembly();door.box(0,1.58,0,.578,2.16,.061,ink);
+  a.label('2  SUTTER',6.104,2.59,0,.228,'#e3b367',Math.PI/2);
+  // Folded front bicycle rack, paired mirror arms and upper clearance lamps.
+  for(const y of [.70,.97])a.box(6.14,y,0,.075,.05,1.65,ink);
+  for(const z of [-.74,-.24,.24,.74])a.box(6.14,.835,z,.075,.27,.036,ink);
+  for(const side of [-1,1]){
+    a.box(5.81,2.49,side*1.395,.064,.065,.27,ink);
+    a.box(5.81,2.33,side*1.53,.095,.35,.14,ink);
+    a.box(5.75,2.33,side*1.53,.018,.27,.11,glass);
+    a.box(6.075,2.89,side*1.01,.026,.047,.115,'#dda652');
+    // Rear powertrain access panel and louvers behind the last side window.
+    a.box(-5.51,2.05,side*1.32,.85,1.26,.024,silver);
+    for(let i=0;i<6;i++)a.box(-5.51,1.58+i*.17,side*1.339,.69,.055,.018,ink);
+    a.label('Muni',.0,.81,side*1.296,.22,redBand,side>0?0:Math.PI);
+  }
+  a.box(2.93,2.42,1.319,1.70,.36,.032,ink);
+  a.label('2 SUTTER',2.93,2.32,1.34,.15,'#dfae61');
+  // Flush, stowed front ramp at the low-floor entry. Its nosing remains
+  // inside the door sweep while the coach is underway.
+  a.box(4.59,thresholdHeight+.006,.78,1.09,.012,.89,'#858c87');
+  a.box(4.59,thresholdHeight+.015,1.20,1.09,.008,.052,'#d1ad54');
+  const door=new StreetAssembly();door.box(0,1.52,0,.578,2.29,.061,ink);
   for(const h of [1.12,2.10])door.box(0,h,.04,.42,.82,.018,glass);
   const leaf=door.bake('Coach folding door leaf');
   return {body:a.bake('Forty-foot silver and red Muni coach'),leaf};
@@ -189,11 +216,14 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const alight=streetPassenger('#90778a','#bb9277'),board=streetPassenger('#58867d','#c69c80');
   poses.add(alight.root,board.root);alight.root.name='Alighting passenger';board.root.name='Boarding passenger';
   board.root.scale.setScalar(scale);alight.root.scale.setScalar(scale);
-  const terminal=outbound.pose(0),forward=new THREE.Vector2(Math.cos(terminal.yaw),-Math.sin(terminal.yaw)),right=new THREE.Vector2(-forward.y,forward.x);
+  const terminal=busPose(0),forward=new THREE.Vector2(Math.cos(terminal.yaw),-Math.sin(terminal.yaw)),right=new THREE.Vector2(-forward.y,forward.x);
   function passenger(actor:typeof board,along:number,across:number,t:number,walking:boolean,heading:number){
     const x=terminal.x+scale*(along*forward.x+across*right.x),z=terminal.z+scale*(along*forward.y+across*right.y);
     // Low-floor threshold leads down to the surveyed sidewalk.
-    actor.root.position.set(x,.045+(.031+.50*scale-.045)*clamp((1.83-across)/.58),z);
+    const kerb=.040644;
+    const walk=THREE.MathUtils.lerp(kerb,.045,clamp((across-1.60)/.34));
+    const sill=.031+scale*(thresholdHeight+(along>3?.012:0));
+    actor.root.position.set(x,THREE.MathUtils.lerp(walk,sill,clamp((1.50-across)/.25)),z);
     actor.root.rotation.y=terminal.yaw+heading;actor.stride(t,walking);
   }
   const {batch,sync}=batchTraffic(poses,material??model.body.material.clone(),'Batched Muni vehicles, passengers and street furniture');
@@ -216,7 +246,9 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
       if(t>=2&&t<22){
         board.root.visible=true;
         const approach=clamp((t-2)/12),cross=clamp((t-17.5)/4.5);
-        passenger(board,4.59+(1-approach)*11.5,2.90-cross*2.10,t,t<14||t>=17.5,t<14?-Math.PI/2:Math.PI);
+        // Pass the exiting rider on the sidewalk side, then turn to the front door.
+        const lane=clamp((approach-.55)/.45);
+        passenger(board,4.59-(1-approach)*8.8,3.90-lane-2.10*cross,t,t<14||t>=17.5,t<14?Math.PI/2:Math.PI);
       }
     }
     sync();

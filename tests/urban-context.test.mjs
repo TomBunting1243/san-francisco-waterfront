@@ -9,7 +9,7 @@ import {approachLengths,approachPose} from '../app/approach-road.ts';
 function above(group,x,z) {
   const camera=new THREE.PerspectiveCamera(35,1,.1,52);
   camera.position.set(x,24,z);camera.up.set(0,0,-1);camera.lookAt(x,0,z);camera.updateMatrixWorld();
-  for(const tile of group.children)tile.update(camera);
+  group.update(camera);
   group.updateMatrixWorld();
   return new THREE.Raycaster(new THREE.Vector3(x,30,z),new THREE.Vector3(0,-1,0)).intersectObjects(group.children,true)[0];
 }
@@ -48,10 +48,10 @@ test('both motorway carriageways continue at approach grade into the US-101 inte
 test('opening orbit uses bounded, frustum-built spatial batches and indexed geometry',()=>{
   const group=createUrbanContext(),camera=new THREE.PerspectiveCamera(20,1.6,.35,1800);
   assert.ok(mapped.counts.survey>48000&&mapped.counts.osmParts>380);
-  assert.ok(group.children.every(tile=>tile.children.length===0));
+  assert.equal(group.children.length,0);
   camera.position.set(49,10.9,16.9);camera.lookAt(0,2.4,0);camera.setFocalLength(40);camera.updateMatrixWorld();
-  for(const tile of group.children)tile.update(camera);
-  const cells=group.children.flatMap(tile=>tile.children);
+  group.update(camera);
+  const cells=group.children.slice();
   assert.ok(cells.length>10&&cells.length<55);
   assert.equal(new Set(cells.map(cell=>cell.material)).size,1);
   assert.ok(cells.reduce((sum,c)=>sum+c.geometry.index.count/3,0)<270000);
@@ -59,4 +59,20 @@ test('opening orbit uses bounded, frustum-built spatial batches and indexed geom
     assert.ok(cell.geometry.boundingSphere.radius>0&&Number.isFinite(cell.geometry.boundingSphere.radius));
     assert.equal(cell.geometry.getAttribute('uv').count,cell.geometry.getAttribute('position').count);
   }
+});
+
+
+test('the neighborhood LOD reuses tiles when a camera returns and honors a transformed root on the first frame',()=>{
+  const group=createUrbanContext(),camera=new THREE.PerspectiveCamera(35,1,.1,52);
+  group.position.set(3,.4,-2);group.updateMatrixWorld();
+  const look=(x,z)=>{
+    camera.position.set(x+3,24,z-2);camera.up.set(0,0,-1);camera.lookAt(x+3,.4,z-2);camera.updateMatrixWorld();
+    group.update(camera);
+  };
+  look(-119,-62);
+  const first=group.children.slice();assert.ok(first.length);
+  assert.ok(first.every(m=>m.matrixWorld.equals(group.matrixWorld)));
+  look(-119,-62);assert.deepEqual(group.children,first);
+  look(60,-80);const second=group.children.slice();assert.ok(second.length>first.length);
+  look(-119,-62);assert.deepEqual(group.children,second);
 });

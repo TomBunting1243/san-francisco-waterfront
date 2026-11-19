@@ -81,6 +81,12 @@ import {add360Spear} from './360-spear.ts';
 import {add160Spear} from './160-spear.ts';
 import {add211Main} from './211-main.ts';
 import {add300Mission} from './300-mission.ts';
+import {add100Pine} from './100-pine.ts';
+import {addMarketCenterPlaza} from './market-center-plaza.ts';
+import {addMarketCenter} from './market-center.ts';
+import {add333Market} from './333-market.ts';
+import {addCaliforniaCenter} from './california-center.ts';
+import {addHarrison} from './harrison.ts';
 import {addParkTower} from './park-tower.ts';
 import {surveyedShopfrontFactory} from './surveyed-shopfronts.ts';
 import {addBechtelPlaza} from './bechtel-plaza.ts';
@@ -198,6 +204,7 @@ export function createLandscape() {
   const gardens=waterfrontGardens(detailedBuildings,font);root.add(gardens.root);
   const centerComplex=createEmbarcaderoCenter(waterfrontLandscape.areas,waterfrontLandscape.paths,detailedBuildings);
   root.add(centerComplex.root);windowPositions.push(...centerComplex.windows);
+  addMarketCenterPlaza(root);
   const buildingParents=new Set(detailedBuildings.map(b=>b.parent).filter(Boolean));
   [...detailedBuildings,...smallHarborBuildings].forEach(b=>{
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
@@ -215,8 +222,9 @@ export function createLandscape() {
     if(add221Main(b,root,windowPositions,font)||addAppraisersBuilding(b,root,windowPositions,font))return;
     if(add360Spear(b,root,windowPositions)||add160Spear(b,root,windowPositions,font))return;
     if(add211Main(b,root,windowPositions)||add300Mission(b,root,windowPositions))return;
-    if(addParkTower(b,root,windowPositions))return;
-    if(addMarketFlatiron(b,root,windowPositions))return;
+    if(addParkTower(b,root,windowPositions)||addHarrison(b,root,windowPositions)||add100Pine(b,root,windowPositions))return;
+    if(add333Market(b,root,windowPositions)||addCaliforniaCenter(b,root,windowPositions))return;
+    if(addMarketCenter(b,root,windowPositions)||addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
     if(addFiftyFremont(b,root,windowPositions)||addProvidianBuilding(b,root,windowPositions))return;
     if(addFolgerBuilding(b,root,windowPositions)||addHyattRegency(b,root,windowPositions))return;
