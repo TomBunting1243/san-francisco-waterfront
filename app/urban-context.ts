@@ -174,22 +174,24 @@ function addRoad(surface:Surface,path:XZ[],kind:number){
   }
 }
 
-function buildTile(tile:Tile,material:THREE.Material,surface:Surface){
+// Keep both stream cursors and the staging surface between boarding frames.
+// A complete building (including its courtyard rings) is the smallest bake.
+function tileReader(tile:Tile){
   const [x,z,buildings,roads]=tile;
-  surface.reset();
   const b=new Reader(buildings),r=new Reader(roads);
-  while(b.offset<b.view.byteLength){
-    const height=b.u16()/100*scale,bottom=b.u16()/100*scale,tag=b.u8(),wall=b.u8(),roof=b.u8(),levels=b.u8();
-    const rings=Array.from({length:b.u8()},()=>b.path(x,z));
-    addBuilding(surface,rings,height,bottom,tag,wall,roof,levels);
-  }
-  while(r.offset<r.view.byteLength){
-    const kind=r.u8();
-    addRoad(surface,r.path(x,z),kind);
-  }
-  const mesh=new THREE.Mesh(surface.geometry(),material);
-  mesh.name='Surveyed neighborhood roofs, facades and streets';
-  return mesh;
+  return (surface:Surface,deadline:number)=>{
+    while(b.offset<b.view.byteLength){
+      const height=b.u16()/100*scale,bottom=b.u16()/100*scale,tag=b.u8(),wall=b.u8(),roof=b.u8(),levels=b.u8();
+      const rings=Array.from({length:b.u8()},()=>b.path(x,z));
+      addBuilding(surface,rings,height,bottom,tag,wall,roof,levels);
+      if(deadline!==Infinity&&performance.now()>=deadline)return false;
+    }
+    while(r.offset<r.view.byteLength){
+      const kind=r.u8();addRoad(surface,r.path(x,z),kind);
+      if(deadline!==Infinity&&performance.now()>=deadline)return false;
+    }
+    return true;
+  };
 }
 
 function neighborhoodMaterial(){
@@ -211,35 +213,81 @@ function neighborhoodMaterial(){
   return material;
 }
 
-/** Decode the visible municipal survey once per new camera frustum. The LOD
- * hook runs before Three walks the children, so a tile appears on its first frame. */
-export function createUrbanContext(){
-  const root=new THREE.LOD();root.name='San Francisco municipal neighborhood survey';
+type Cell={data:Tile;box:THREE.Box3;priority:number};
+type UrbanContext=THREE.LOD & {
+  prepareRideView:(camera:THREE.Camera,budgetMs:number)=>boolean;
+  endRideView:()=>void;
+};
+
+/** The normal waterfront builds the visible survey on its first frame. During
+ * a ride the same tiles are assembled in slices, publishing only complete meshes. */
+export function createUrbanContext():UrbanContext{
+  const root=new THREE.LOD() as UrbanContext;root.name='San Francisco municipal neighborhood survey';
   const material=neighborhoodMaterial(),frustum=new THREE.Frustum();
-  const projection=new THREE.Matrix4(),last=new THREE.Matrix4();
-  const pending=tileData.map(data=>{
+  const projection=new THREE.Matrix4(),last=new THREE.Matrix4(),inverseRoot=new THREE.Matrix4();
+  const eye=new THREE.Vector3(),center=new THREE.Vector3(),forward=new THREE.Vector3();
+  const pending=new Set(tileData.map(data=>{
     const [xmin,zmin,xmax,zmax]=data[4];
     const box=new THREE.Box3(new THREE.Vector3(xmin-1,-4,zmin-1),new THREE.Vector3(xmax+1,32,zmax+1));
-    return {data,box};
-  });
-  let surface:Surface|undefined;
-  root.update=camera=>{
-    if(!pending.length)return;
+    return {data,box,priority:0};
+  }));
+  let queue:Cell[]=[],next=0,valid=false,surface:Surface|undefined;
+  let current:{tile:Cell;read:ReturnType<typeof tileReader>}|undefined;
+  let rideCamera:THREE.Camera|undefined,boarding=false;
+  function advance(camera:THREE.Camera,deadline:number){
+    if(!pending.size)return true;
     projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(root.matrixWorld);
-    if(projection.equals(last))return;
-    last.copy(projection);
-    frustum.setFromProjectionMatrix(projection);
-    let waiting=0;
-    for(const tile of pending){
-      if(!frustum.intersectsBox(tile.box)){pending[waiting++]=tile;continue;}
-      surface??=new Surface();
-      const mesh=buildTile(tile.data,material,surface);
-      mesh.matrixAutoUpdate=false;
-      mesh.matrixWorld.copy(root.matrixWorld);
-      root.add(mesh);
+    if(!valid||!projection.equals(last)){
+      valid=true;last.copy(projection);frustum.setFromProjectionMatrix(projection);
+      queue=[];next=0;
+      inverseRoot.copy(root.matrixWorld).invert();
+      eye.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(inverseRoot);
+      forward.set(0,0,-1).transformDirection(camera.matrixWorld).transformDirection(inverseRoot);
+      for(const tile of pending){
+        if(!frustum.intersectsBox(tile.box))continue;
+        if(rideCamera){
+          tile.box.getCenter(center).sub(eye);
+          const depth=center.dot(forward);
+          // Nearby blocks and those directly along the driver's line of sight first.
+          tile.priority=tile.box.distanceToPoint(eye)+.35*Math.sqrt(Math.max(0,center.lengthSq()-depth*depth));
+        }
+        queue.push(tile);
+      }
+      if(rideCamera)queue.sort((a,b)=>a.priority-b.priority);
+      if(current){
+        const i=queue.indexOf(current.tile);
+        if(i<0)current=undefined;
+        else queue.splice(i,1);
+      }
     }
-    pending.length=waiting;
-    if(!waiting)surface=undefined;
+    while(current||next<queue.length){
+      surface??=new Surface();
+      if(!current){
+        const tile=queue[next++];surface.reset();current={tile,read:tileReader(tile.data)};
+      }
+      if(!current.read(surface,deadline))return false;
+      const mesh=new THREE.Mesh(surface.geometry(),material);
+      mesh.name='Surveyed neighborhood roofs, facades and streets';mesh.matrixAutoUpdate=false;
+      mesh.matrixWorld.copy(root.matrixWorld);root.add(mesh);
+      pending.delete(current.tile);current=undefined;
+      if(deadline!==Infinity&&performance.now()>=deadline)break;
+    }
+    if(!pending.size)surface=undefined;
+    return !current&&next===queue.length;
+  }
+  root.prepareRideView=(camera,budgetMs)=>{
+    rideCamera=camera;boarding=true;
+    const ready=advance(camera,performance.now()+Math.max(0,budgetMs));
+    if(ready)boarding=false;
+    return ready;
+  };
+  root.endRideView=()=>{
+    if(!rideCamera)return;
+    rideCamera=undefined;boarding=false;current=undefined;queue=[];next=0;valid=false;
+  };
+  root.update=camera=>{
+    if(rideCamera&&(boarding||camera!==rideCamera))return;
+    advance(camera,rideCamera?performance.now()+3:Infinity);
   };
   return root;
 }

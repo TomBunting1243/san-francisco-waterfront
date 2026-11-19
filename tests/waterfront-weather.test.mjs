@@ -104,6 +104,15 @@ test('sunset light follows the western sun through twilight',async()=>{
   assert.equal(pacificLighting(new Date('2026-11-21T06:00:00Z')).sunset,0);
 });
 
+test('east and west low sun have distinct washes that converge at solar noon and through the night',async()=>{
+  const {harborWash}=await import('../app/lighting.ts');
+  const dawn=harborWash(6,105),dusk=harborWash(6,255);
+  for(const field of ['sky','horizon','sun','water','fill','bounce'])assert.notEqual(dawn[field],dusk[field],field);
+  for(const altitude of [-55,-15,26,71])assert.deepEqual(harborWash(altitude,179.99),harborWash(altitude,180.01));
+  const neutral=harborWash(35,180);
+  for(const lowSun of [dawn,dusk])assert.ok(lowSun.sunIntensity/lowSun.ambient>neutral.sunIntensity/neutral.ambient);
+});
+
 test('a clear day casts shadows and a solid cloud deck or a sun below the horizon removes the shadow pass',async()=>{
   const {directSunVisibility}=await import('../app/lighting.ts');
   assert.equal(directSunVisibility(30,.1,0),1);

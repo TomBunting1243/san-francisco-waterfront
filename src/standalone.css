@@ -70,3 +70,22 @@ main[data-harbor-light=dark] .standalone-custom-reset:disabled{color:#afbab8}
 .standalone-ride-toolbar button+button{border-inline-start:1px solid #f4efcc66}
 .standalone-ride-toolbar button:hover,.standalone-ride-toolbar button:focus-visible{background:#29464a}
 .standalone-ride-toolbar button:focus-visible,.standalone-custom-trigger:focus-visible{outline:2px solid #ffd394;outline-offset:-4px}
+
+.world:is([data-view=bridge],[data-view=streetcar]) .world-scene{touch-action:none;cursor:grab}
+.world:is([data-view=bridge],[data-view=streetcar]) .world-scene:active{cursor:grabbing!important}
+.ride-boarding{
+  position:absolute;inset:0;z-index:5;pointer-events:none;display:grid;place-items:center;
+  background:radial-gradient(ellipse at 50% 60%,#284c53,#122b36 80%);color:#faf0d8;
+}
+.ride-boarding[data-ready=true]{opacity:0;visibility:hidden;transition:opacity .28s ease-out,visibility 0s .28s}
+.ride-boarding strong,.ride-boarding span{display:block;text-align:center}
+.ride-boarding strong{font:normal clamp(28px,4vw,48px)/1.1 Georgia,serif}
+.ride-boarding span{margin-top:.7em;font:14px/1.5 var(--sans);color:#d7e6e0}
+
+.ride-boarding span::after{
+  content:"";display:block;width:50px;height:1px;margin:14px auto 0;
+  background:linear-gradient(90deg,transparent,#c69768 20%,#ffe8bd 50%,#c69768 80%,transparent);
+  animation:boarding-breathe 1.4s ease-in-out infinite alternate;
+}
+.ride-boarding[data-ready=true] span::after{animation:none}
+@keyframes boarding-breathe{from{opacity:.36;transform:scaleX(.55)}to{opacity:1;transform:scaleX(1)}}

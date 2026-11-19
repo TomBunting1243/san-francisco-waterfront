@@ -138,10 +138,35 @@ const illumination=`
   }
 `;
 
+// Match the cab's 5.4-unit, .35-radian spotlight with 78% penumbra
+// and zero decay. Evaluate the same Three material response without changing
+// the scene's light count when a driver enters or leaves a ride.
+const cabColor=new THREE.Color('#fff0cf');
+const cabUniforms='uniform vec3 cabLampPosition; uniform vec3 cabLampDirection; uniform float cabLampIntensity;\n';
+const cabIllumination=`
+  if(cabLampIntensity>.08){
+    vec3 lampToSurface=waterfrontLightPosition-cabLampPosition;
+    float distance2=dot(lampToSurface,lampToSurface);
+    if(distance2<5.4*5.4 && distance2>.0000001){
+      float distanceToCab=sqrt(distance2);
+      vec3 ray=lampToSurface/distanceToCab;
+      float cone=getSpotAttenuation(${Math.cos(.35).toFixed(9)},${Math.cos(.35*(1-.78)).toFixed(9)},dot(ray,cabLampDirection));
+      if(cone>0.){
+        IncidentLight cab;
+        cab.visible=true;
+        cab.direction=-(mat3(viewMatrix)*ray);
+        cab.color=vec3(${cabColor.toArray().map(v=>v.toFixed(8)).join(',')})*cabLampIntensity*cone*getDistanceAttenuation(distanceToCab,5.4,0.);
+        RE_Direct(cab,geometryPosition,geometryNormal,geometryViewDir,geometryClearcoatNormal,material,reflectedLight);
+      }
+    }
+  }
+`;
+
 /** One field lookup for nearby opaque surfaces. The same shader evaluates
  * current instance/batch coordinates for moving coats, cars and the tram. */
-export function createStreetIllumination(root:THREE.Group,globes:number[],water:THREE.Material){
+export function createStreetIllumination(root:THREE.Group,globes:number[],water:THREE.Material,enableRides=false){
   const field=createStreetField(globes),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
+  const cabPosition={value:new THREE.Vector3()},cabDirection={value:new THREE.Vector3(0,0,-1)},cabIntensity={value:0};
   const lenses=signalLenses();root.add(lenses.mesh);
   const materials=new Set<THREE.MeshStandardMaterial>();
   root.traverse(o=>{if(o instanceof THREE.Mesh)for(const m of Array.isArray(o.material)?o.material:[o.material])
@@ -152,7 +177,15 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
     mat.onBeforeCompile=(shader:Shader,renderer)=>{
       previous.call(mat,shader,renderer);
       Object.assign(shader.uniforms,{waterfrontStreetField:{value:field},waterfrontStreetNight:night,waterfrontStreetWet:wet,waterfrontMainSignal:main,waterfrontCrossSignal:cross});
-      if(shader.fragmentShader.includes(marker)||!shader.vertexShader.includes('#include <project_vertex>')||!shader.fragmentShader.includes('#include <opaque_fragment>'))return;
+      if(!shader.fragmentShader.includes(marker)&&(!shader.vertexShader.includes('#include <project_vertex>')||!shader.fragmentShader.includes('#include <opaque_fragment>')))return;
+      if(enableRides||shader.fragmentShader.includes(cabUniforms)){
+        Object.assign(shader.uniforms,{cabLampPosition:cabPosition,cabLampDirection:cabDirection,cabLampIntensity:cabIntensity});
+      }
+      if(enableRides&&!shader.fragmentShader.includes(cabUniforms)){
+        shader.fragmentShader=cabUniforms+shader.fragmentShader.replace('#include <lights_fragment_begin>',
+          '#include <lights_fragment_begin>\n'+cabIllumination);
+      }
+      if(shader.fragmentShader.includes(marker))return;
       const hasWorldPosition=shader.fragmentShader.includes('varying vec3 harborPosition;');
       if(!hasWorldPosition)shader.vertexShader='varying vec3 waterfrontLightPosition;\n'+shader.vertexShader.replace('#include <project_vertex>',`
         #include <project_vertex>
@@ -169,7 +202,7 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
       shader.fragmentShader=uniforms+shader.fragmentShader.replace('#include <opaque_fragment>',illumination+'\n#include <opaque_fragment>');
     };
     const installed=mat.onBeforeCompile;
-    mat.customProgramCacheKey=()=>key+'|street-surface-light-v1';mat.needsUpdate=true;
+    mat.customProgramCacheKey=()=>key+(enableRides?'|street-surface-cab-v1':'|street-surface-light-v1');mat.needsUpdate=true;
     restore.push(()=>{if(mat.onBeforeCompile===installed){mat.onBeforeCompile=previous;mat.customProgramCacheKey=cache;mat.needsUpdate=true;}});
 
   }
@@ -179,5 +212,10 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
     main.value.copy(colors[phase[0]]);cross.value.copy(colors[phase[1]]);lenses.update(phase,enabled);
   }
   update(0,0);
-  return {update,dispose(){restore.forEach(reset=>reset());field.dispose();},lenses:lenses.mesh};
+  function setCabLamp(position:THREE.Vector3,direction:THREE.Vector3,intensity:number){
+    if(!enableRides)return;
+    cabIntensity.value=intensity;
+    if(intensity>.08){cabPosition.value.copy(position);cabDirection.value.copy(direction).normalize();}
+  }
+  return {update,setCabLamp,dispose(){restore.forEach(reset=>reset());field.dispose();},lenses:lenses.mesh};
 }

@@ -34,6 +34,10 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
   const top=pitch?.eave??(compatible?scan[0]:nominal);
   const height=top-bottom;
   if(height<=.025)return;
+  // Preserve the original low seven bits for both the daylight seed and old grids.
+  const parcelUse=use||profiles[b.parent??b.id]?.[2];
+  const occupancy=parcelUse==='RESIDENT'||parcelUse==='MIXRES'?1:parcelUse==='MIPS'?2:parcelUse==='PDR'?3:0;
+  const facadeKey=occupancy*128+Math.abs(b.id)%89;
   const warehouse=use==='PDR';
   const early=year>0&&year<1946;
   const glazed=!!framedWall||b.glass||cladding==='glass'||(!early&&!warehouse&&use==='MIPS'&&top>2.6);
@@ -67,7 +71,7 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
       const width=high-low,count=Math.max(1,Math.round(width/bay));
       for(;i<end;i++){
         const along=positions.getX(i)*nz-positions.getZ(i)*nx,up=(positions.getY(i)+layerBase-bottom)/height*floors;
-        grid.set([(along-low)/Math.max(width,.00001)*count,up,width>.075&&height>.14?style:-1,Math.abs(b.id)%89],i*4);
+        grid.set([(along-low)/Math.max(width,.00001)*count,up,width>.075&&height>.14?style:-1,facadeKey],i*4);
         faceColor.toArray(colors,i*3);
       }
     }
@@ -94,12 +98,43 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
   }
 }
 
-export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,night:{value:number}){
+export function createFacadeClock(){
+  const night={value:0},quiet={value:0};
+  let lastMinute=-1;
+  return {night,quiet,setFacadeClock(hours:number,minutes:number,darkness:number){
+    night.value=darkness;
+    const minute=hours*60+minutes;
+    if(minute===lastMinute)return;
+    lastMinute=minute;
+    const h=hours+minutes/60+(hours<12?24:0);
+    quiet.value=THREE.MathUtils.smoothstep(h,21,25)*(1-THREE.MathUtils.smoothstep(h,29,32));
+  }};
+}
+type FacadeClock=ReturnType<typeof createFacadeClock>;
+
+/** Rebind after copying the source material's complete shader chain into a vignette. */
+export function bindFacadeClock(material:THREE.Material,clock:FacadeClock){
+  const compile=material.onBeforeCompile;
+  material.onBeforeCompile=function(shader,renderer){
+    compile.call(this,shader,renderer);
+    shader.uniforms.roomNight=clock.night;
+    shader.uniforms.roomQuiet=clock.quiet;
+  };
+}
+
+export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:FacadeClock){
+  material.userData.surveyedDowntownGlazing=true;
   material.onBeforeCompile=shader=>{
-    shader.uniforms.roomNight=night;
     shader.vertexShader='attribute vec4 facadeGrid; varying vec4 buildingGrid;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nbuildingGrid=facadeGrid;');
-    shader.fragmentShader='varying vec4 buildingGrid; uniform float roomNight;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      float roomLight=0.;
+    shader.fragmentShader=`varying vec4 buildingGrid;
+      uniform float roomNight,roomQuiet;
+      float facadeHash(vec2 cell,float seed){
+        vec3 p=fract(vec3(cell.x,cell.y,seed)*vec3(.1031,.1030,.0973));
+        p+=dot(p,p.yzx+33.33);
+        return fract((p.x+p.y)*p.z);
+      }
+    `+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+      vec3 roomEmission=vec3(0.);
       if(buildingGrid.z>-.5){
         vec2 uv=buildingGrid.xy,cell=fract(uv)-.5,aa=max(fwidth(uv),vec2(.0001));
         bool early=buildingGrid.z==1.,glass=buildingGrid.z==2.,loft=buildingGrid.z==3.;
@@ -111,14 +146,39 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,night:{
         float transom=1.-smoothstep(.018-aa.y*.5,.018+aa.y*.5,abs(cell.y-.14));
         float frame=max(bar,transom*(loft||early?1.:.28))*(1.-lod);
         vec3 wall=diffuseColor.rgb;
-        float id=fract(sin(dot(floor(uv)+buildingGrid.w,vec2(39.23,57.87)))*4375.15);
+        float kind=floor((buildingGrid.w+.25)/128.);
+        float seed=buildingGrid.w-kind*128.;
+        float id=fract(sin(dot(floor(uv)+seed,vec2(39.23,57.87)))*4375.15);
         float daylight=mix(.80+.28*id,.94,lod);
         vec3 glassColor=mix(vec3(.097,.165,.174),wall*.59,glass?.61:.27)*daylight;
         float reveal=(1.-smoothstep(0.,.073+aa.y,opening.y-cell.y))*(1.-lod);
         glassColor*=1.-.20*reveal;
         diffuseColor.rgb=mix(wall,mix(glassColor,wall*.77,frame),pane);
-        roomLight=roomNight*pane*(1.-frame)*mix(smoothstep(.70,.88,id),.20,lod);
-      }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=vec3(.22,.145,.068)*roomLight;');
+        if(roomNight>.0001){
+          bool home=kind==1.,office=kind==2.,warehouse=kind==3.;
+          float bays=office?5.:home?2.:1.;
+          float course=floor(uv.y);
+          float suite=facadeHash(vec2(floor((uv.x+mod(seed+course,3.))/bays),course),seed+1.);
+          float probability=home?mix(.44,.13,roomQuiet):office?mix(.22,.045,roomQuiet):
+            warehouse?mix(.085,.025,roomQuiet):mix(.24,.085,roomQuiet);
+          float spread=smoothstep(.30,1.15,max(aa.x/bays,aa.y));
+          float on=mix(smoothstep(1.-probability-.025,1.-probability+.025,suite),probability,spread);
+          if(office){
+            // Entire working floors persist farther away than individual glazed suites.
+            float floorChance=mix(.28,.035,roomQuiet);
+            float floorId=facadeHash(vec2(course,11.),seed+7.);
+            float occupied=mix(smoothstep(1.-floorChance-.025,1.-floorChance+.025,floorId),
+              floorChance,smoothstep(.30,1.15,aa.y));
+            on=occupied+(1.-occupied)*on;
+          }
+          vec3 warm=vec3(.34,.208,.103),cool=vec3(.182,.231,.243);
+          float tone=home?.19:office?.72:warehouse?.60:.45;
+          float tint=mix(clamp(tone+.28*(suite-.5),0.,1.),tone,spread);
+          float blinds=mix(.64+.36*id,.82,lod);
+          roomEmission=mix(warm,cool,tint)*on*blinds*roomNight*pane*(1.-frame);
+        }
+      }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=roomEmission;');
   };
-  material.customProgramCacheKey=()=> 'measured-downtown-facades-v1';
+  bindFacadeClock(material,clock);
+  material.customProgramCacheKey=()=> 'measured-downtown-facades-v2';
 }

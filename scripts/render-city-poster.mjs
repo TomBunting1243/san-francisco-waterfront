@@ -25,7 +25,7 @@ const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     url: { type: 'string' }, help: { type: 'boolean', short: 'h' },
-    'check-interactions': { type: 'boolean' }, 'check-fog': { type: 'boolean' }, 'evidence-dir': { type: 'string' },
+    'check-interactions': { type: 'boolean' }, 'check-rides': { type: 'boolean' }, 'check-fog': { type: 'boolean' }, 'evidence-dir': { type: 'string' },
   },
 });
 
@@ -262,8 +262,8 @@ async function render(url) {
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Page.bringToFront');
-    if(values['check-interactions']){
-      await verifyWaterfront(send,evaluate,url,signal,{checkFog:values['check-fog'],evidenceDir:values['evidence-dir']});
+    if(values['check-interactions']||values['check-rides']){
+      await verifyWaterfront(send,evaluate,url,signal,{checkRides:values['check-rides'],ridesOnly:!values['check-interactions'],checkFog:values['check-fog'],evidenceDir:values['evidence-dir']});
       return;
     }
     const images = [];
@@ -304,11 +304,13 @@ async function render(url) {
 if (values.help) {
   console.log('Usage: node scripts/render-city-poster.mjs [--url URL]\n' +
     'Browser regression: add --check-interactions [--check-fog] [--evidence-dir PATH]\n' +
+    'Standalone driver camera regression: add --check-rides [--evidence-dir PATH]\n' +
     'Default: ' + localhost + '\nSet CHROME_PATH to override Chrome discovery.');
 } else {
   if (positionals.length > 1 || (values.url && positionals.length)) throw new Error('Pass one capture URL.');
-  if (!values['check-interactions'] && (values['check-fog'] || values['evidence-dir'])) {
-    throw new Error('--check-fog and --evidence-dir require --check-interactions.');
+  if(values['check-fog']&&!values['check-interactions'])throw new Error('--check-fog requires --check-interactions.');
+  if(values['evidence-dir']&&!values['check-interactions']&&!values['check-rides']){
+    throw new Error('--evidence-dir requires --check-interactions or --check-rides.');
   }
   const url = new URL(values.url ?? positionals[0] ?? localhost);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('The capture URL must use HTTP or HTTPS.');

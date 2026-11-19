@@ -1,4 +1,5 @@
 import {approachPose} from './approach-road.ts';
+import {bridgeLaneCenters} from './bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
 import {pccDimensions} from './streetcar.ts';
 import {streetcarPose} from './streets.ts';
@@ -21,22 +22,31 @@ export function rideDuration(mode:RideMode){
   return mode==='bridge'?(bridgeStart+approachEnd)/bridgeSpeed:firstLeg+dwell+lastLeg;
 }
 
+// OSM 8921938 / 1343738800 mark lane five Fremont/Folsom exit-only.
+// Lane four continues onto the right edge of the four-lane I-80 mainline.
+const throughLane=1;
+const throughOffset=bridgeLaneCenters[3];
+const spanJoint=bridgePoint(throughOffset,0),approachJoint=approachPose(false,0,throughLane);
+
 function bridgeRoad(station:number):Point{
   if(station<0){
-    const p=approachPose(false,-station,0);
+    const p=approachPose(false,-station,throughLane);
     // approachPose places the animated body's wheel reference .01375 below the actual pavement.
     // The lane count changes five-to-four over a 2 m survey segment. A
     // driver shifts half a lane over the adjoining carriageway, not in 2 m.
     const spacing=Math.min(-station/2,.52);
     let x=p.x*3,z=p.z*3;
     for(const k of [-2,-1,1,2]){
-      const sample=approachPose(false,-station+k*spacing,0),w=3-Math.abs(k);
+      const sample=approachPose(false,-station+k*spacing,throughLane),w=3-Math.abs(k);
       x+=w*sample.x;z+=w*sample.z;
     }
-    return {x:x/9,y:p.y+.01375,z:z/9};
+    // Match the painted span tangent at the joint before following the first surveyed chord.
+    const jointWeight=Math.max(0,1+station/2)**2;
+    return {x:x/9+(spanJoint.x-approachJoint.x)*jointWeight,y:p.y+.01375,
+      z:z/9+(spanJoint.z-approachJoint.z)*jointWeight};
   }
   // The suspension asphalt and its YBI continuation have the same wearing surface.
-  return {...bridgePoint(0,station),y:bridgeLayout.upperDeck+.0755};
+  return {...bridgePoint(throughOffset,station),y:bridgeLayout.upperDeck+.0755};
 }
 
 function sedanEye(station:number):Point{

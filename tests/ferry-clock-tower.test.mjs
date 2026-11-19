@@ -4,10 +4,30 @@ import * as THREE from 'three';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 import {ferryClockTower,setFerryClockTime} from '../app/ferry-clock-tower.ts';
+import {ferryHall} from '../app/ferry-architecture.ts';
+import {bakeRigidChunk} from '../app/city-blocks.ts';
 
 const font=new FontLoader().parse(fontData);
 const foot=.3048*.06;
 const near=(a,b)=>assert.ok(Math.abs(a-b)<.00001,`${a} differs from ${b}`);
+
+test('the historic entry, shaft and four inner dials retain distinct baked light at night',()=>{
+  const hall=ferryHall(font),tower=ferryClockTower(font);
+  tower.root.position.set(hall.towerX,0,hall.towerZ);hall.root.add(tower.root);hall.root.updateMatrixWorld(true);
+  const columns=hall.root.getObjectsByProperty('name','Portico engaged column');
+  assert.equal(columns.length,8);
+  const type=new THREE.MeshStandardMaterial();
+  const lights=bakeRigidChunk('Stone entry columns',columns,type).geometry.getAttribute('signLight');
+  const samples=Array.from({length:lights.count},(_,i)=>lights.getX(i));
+  assert.ok(Math.max(...samples)>.55&&Math.min(...samples)<.25,'Light rakes the curved faces of the paired columns');
+  const dials=tower.root.getObjectsByProperty('name','Inner illuminated clock dial');
+  assert.equal(dials.length,4);
+  const warm=bakeRigidChunk('Backlit dials',dials,type).geometry.getAttribute('signLight');
+  assert.ok(warm.getX(0)>.7&&warm.getX(0)>warm.getY(0)&&warm.getZ(0)<.6);
+  const crown=tower.root.getObjectByName('Twenty-two foot clock dial');
+  const at=new THREE.Vector3(hall.towerX+.28,2.71,hall.towerZ);
+  assert.ok(crown.userData.uplight(at,new THREE.Vector3(-1,0,0))>crown.userData.uplight(at,new THREE.Vector3(1,0,0)));
+});
 
 test('Four 22-foot dials and their measured hands share fixed spindles through time changes',()=>{
   const {root,hands}=ferryClockTower(font);root.updateMatrixWorld(true);

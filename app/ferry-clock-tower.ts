@@ -91,7 +91,8 @@ export function ferryClockTower(font:Font){
     disk(radius,'#eee8d5',wall+.017,g,'Twenty-two foot clock dial');
     bezel(radius,.0043,wall+.022,iron,g);
     disk(radius*.687,'#6b6858',wall+.023,g);
-    disk(radius*.612,'#a7aa99',wall+.025,g);
+    const dialGlass=disk(radius*.612,'#a7aa99',wall+.025,g,'Inner illuminated clock dial');
+    dialGlass.userData.signLight=[.78,.71,.51];
     bezel(radius*.61,.0026,wall+.028,bronze,g);
     bezel(radius*.447,.0018,wall+.029,'#d6cbb2',g);
     for(let i=0;i<60;i++){
@@ -136,6 +137,19 @@ export function ferryClockTower(font:Font){
   round(.024,.012,.027,0,3.738,0,bronze);
   const top=235*foot;
   round(.0038,.002,(top-3.75),0,(top+3.75)/2,0,'#b6ae92');
+  // Roof-mounted floods rake up the shaft; lights inside the upper stages
+  // catch cornice soffits and the backs of the columns. HLB restoration design.
+  // https://hlblighting.com/project/san-francisco-ferry-building/
+  function towerUplight(p:THREE.Vector3,n:THREE.Vector3){
+    if(p.y<.94||p.y>3.75)return 0;
+    const dx=p.x-root.position.x,dz=p.z-root.position.z;
+    const radius=Math.max(.001,Math.hypot(dx,dz));
+    const outward=(dx*n.x+dz*n.z)/radius;
+    const shaft=(.55+.35*Math.max(0,outward))*(.62+.38*THREE.MathUtils.smoothstep(p.y,1.03,2.15));
+    const gallery=.29+.72*Math.max(0,-outward)+.42*Math.max(0,-n.y);
+    return THREE.MathUtils.lerp(shaft,gallery,THREE.MathUtils.smoothstep(p.y,2.48,2.58));
+  }
+  root.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=towerUplight;});
   const flag=createFerryFlag();flag.position.y=top-.007;root.add(flag);
   return {root,hands,flag};
 }

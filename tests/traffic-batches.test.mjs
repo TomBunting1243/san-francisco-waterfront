@@ -43,7 +43,7 @@ test('the driver has a reserved moving gap, neighboring passes, and physically s
   for(const [i,c] of cars.entries()){
     const speed=Math.round((c.position.z-initial[i])*10000)/100;
     (c.rotation.y>0?westSpeeds:eastSpeeds).add(speed);
-    if(c.rotation.y>0&&c.position.x===0)assert.equal(speed,-1.1);
+    if(c.rotation.y>0&&c.position.x===bridgeLaneCenters[3])assert.equal(speed,-1.1);
     assert.ok(c.rotation.y>0?speed<0:speed>0);
   }
   assert.equal(westSpeeds.size,5);assert.equal(eastSpeeds.size,5);
@@ -59,7 +59,11 @@ test('the driver has a reserved moving gap, neighboring passes, and physically s
     let neighbors=0;
     for(const car of upper){
       const delta=car.position.z-station;
-      if(car.position.x===0){assert.ok(Math.abs(delta)>4);continue;}
+      if(car.position.x===bridgeLaneCenters[3]){
+        const length=bridgeLayout.length+8.6;
+        const around=THREE.MathUtils.euclideanModulo(delta,length);
+        assert.ok(Math.min(around,length-around)>6.7);continue;
+      }
       if(delta<0&&delta>-18)neighbors++;
       const old=seen.get(car);
       // Count crossings of the driver's station; exclude a vehicle re-entering at the portal.

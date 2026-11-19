@@ -53,3 +53,28 @@ test('field derives from the scene globes, is local, and reaches the same shader
   console.log(globes.length/3,'globes;',market.length,'Path of Gold;',field.image.data.byteLength,'field bytes');
   light.dispose();copy.dispose();field.dispose();
 });
+
+test('ride headlamp updates a fixed material cone without changing scene lights or material programs',()=>{
+  const group=new T.Group(),road=new T.MeshStandardMaterial(),water=new T.MeshStandardMaterial();
+  group.add(new T.Mesh(new T.PlaneGeometry(1,1),road));
+  const city=createStreetIllumination(group,[],water,true),shader=compile(road),u=shader.uniforms;
+  const key=road.customProgramCacheKey(),version=road.version;
+  const position=new T.Vector3(13,4,-3),direction=new T.Vector3(2,-.1,-8);
+  assert.equal(u.cabLampIntensity.value,0);
+  city.setCabLamp(position,direction,1.4);
+  assert.deepEqual(u.cabLampPosition.value.toArray(),position.toArray());
+  assert.ok(u.cabLampDirection.value.distanceTo(direction.clone().normalize())<1e-12);
+  assert.equal(u.cabLampIntensity.value,1.4);
+  position.set(0,0,0);assert.equal(u.cabLampPosition.value.x,13);
+  city.setCabLamp(position,direction,0);assert.equal(u.cabLampIntensity.value,0);
+  assert.equal(road.version,version);assert.equal(road.customProgramCacheKey(),key);
+  assert.equal(group.getObjectsByProperty('isLight',true).length,0);
+  const cone=shader.fragmentShader.match(/getSpotAttenuation\(([\d.]+),([\d.]+),dot\(ray,cabLampDirection\)\)/);
+  assert.ok(Math.abs(Number(cone[1])-Math.cos(.35))<1e-9&&Math.abs(Number(cone[2])-Math.cos(.35*.22))<1e-9);
+  assert.ok(shader.fragmentShader.includes('getDistanceAttenuation(distanceToCab,5.4,0.)'));
+  assert.ok(shader.fragmentShader.includes('RE_Direct(cab,geometryPosition,geometryNormal'));
+  city.dispose();
+  const vignette=createStreetIllumination(group,[],water);
+  assert.ok(!compile(road).fragmentShader.includes('cabLampIntensity'));
+  vignette.dispose();
+});

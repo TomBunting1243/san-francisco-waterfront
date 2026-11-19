@@ -37,3 +37,44 @@ test('sunlight reaches the measured lower terrace of Two Transamerica Center aft
   assert.ok(Math.abs(roofAt(24.5523,-37.3959)-4.455)<.002);
   assert.ok(Math.abs(roofAt(23.8892,-37.0997)-4.715)<.002);
 });
+
+test('recorded use fits alongside the original daylight seed without changing wall styles or packing',()=>{
+  const cases=[[37058253,1],[32610816,1],[28319289,2],[32947711,3],[32862740,0]];
+  for(const [id,category] of cases){
+    const b=mappedBuildings.find(b=>b.id===id),parts=[],material=new THREE.MeshStandardMaterial();
+    downtownBuilding((g,c,x,y,z)=>{const m=new THREE.Mesh(g,material);m.position.set(x,y,z);parts.push(m);return m;},b,b.h,false);
+    const [chunk]=bakeBlocks(parts.filter(p=>p.geometry.hasAttribute('facadeGrid')),material);
+    const grid=chunk.geometry.getAttribute('facadeGrid');assert.equal(grid.itemSize,4);
+    let walls=0;
+    for(let i=0;i<grid.count;i++){
+      if(grid.getZ(i)<0)continue;
+      walls++;
+      assert.equal(Math.floor(grid.getW(i)/128),category);
+      assert.equal(grid.getW(i)%128,id%89);
+    }
+    assert.ok(walls);
+  }
+});
+
+test('the full city and both vignette shaders follow independent local clocks across midnight and dawn',async()=>{
+  const {createLandscape,createCityVignette}=await import('../app/landscape.ts');
+  const full=createLandscape(),street=createCityVignette('street'),plaza=createCityVignette('plaza');
+  function uniforms(scene){
+    const mesh=scene.architectureChunks.find(m=>m.geometry.hasAttribute('facadeGrid'));
+    const shader={vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader,uniforms:{}};
+    mesh.material.onBeforeCompile(shader,{});
+    assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance+=roomEmission;'));
+    assert.ok(shader.fragmentShader.includes('if(roomNight>.0001)'));
+    return shader.uniforms;
+  }
+  const f=uniforms(full),s=uniforms(street),p=uniforms(plaza);
+  full.setFacadeClock(20,45,.92);street.setFacadeClock(2,0,1);plaza.setFacadeClock(12,0,0);
+  assert.deepEqual([f.roomQuiet.value,s.roomQuiet.value,p.roomQuiet.value],[0,1,0]);
+  assert.deepEqual([f.roomNight.value,s.roomNight.value,p.roomNight.value],[.92,1,0]);
+  full.setFacadeClock(23,59,.96);const midnight=f.roomQuiet.value;
+  full.setFacadeClock(0,0,.98);assert.ok(Math.abs(f.roomQuiet.value-midnight)<.01);
+  full.setFacadeClock(0,0,1);assert.equal(f.roomNight.value,1);
+  full.setFacadeClock(6,30,.3);assert.equal(f.roomQuiet.value,.5);
+  full.setFacadeClock(8,0,0);assert.equal(f.roomQuiet.value,0);
+  assert.equal(s.roomQuiet.value,1);assert.equal(p.roomQuiet.value,0);
+});

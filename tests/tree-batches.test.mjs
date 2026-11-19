@@ -98,7 +98,58 @@ test('canopy detail uses a filtered relief texture on foliage and leaves bark un
   assert.equal(mask.normalized,true);assert.equal(mask.getX(0),0);
   assert.equal(mask.getX(mask.count-1),1);assert.equal(tile.low.getAttribute('foliageMask'),mask);
   const texture=leafReliefTile();assert.equal(texture.generateMipmaps,true);
-  assert.equal(texture.minFilter,THREE.LinearMipmapLinearFilter);assert.equal(texture.image.width,128);
+  assert.equal(texture.minFilter,THREE.LinearMipmapLinearFilter);assert.equal(texture.image.width,128);assert.equal(texture.image.depth,2);
+  assert.notDeepEqual(texture.image.data.subarray(0,128*128*4),texture.image.data.subarray(128*128*4));
   const red=texture.image.data.filter((_v,i)=>i%4===0);
   assert.ok(Math.max(...red)-Math.min(...red)>64);texture.dispose();
+});
+
+// Orthographic coverage at a 120-pixel-high crown. Count daylight large
+// enough to see through the lower boughs, independently of fragment alpha.
+function crownPixels(vertices,indices,bounds,angle){
+  const size=120,mask=new Uint8Array(size*size);
+  const coords=vertices.map(p=>[p.x*Math.cos(angle)+p.z*Math.sin(angle),p.y]);
+  const half=bounds.getSize(new THREE.Vector3()).length()*.43;
+  const project=([x,y])=>[60+55*x/half,118-116*(y-bounds.min.y)/(bounds.max.y-bounds.min.y)];
+  const uv=coords.map(project);
+  for(let j=0;j<indices.length;j+=3){
+    const [a,b,c]=[uv[indices[j]],uv[indices[j+1]],uv[indices[j+2]]];
+    const side=(p,q,x,y)=>(q[0]-p[0])*(y-p[1])-(q[1]-p[1])*(x-p[0]);
+    for(let y=Math.max(0,Math.floor(Math.min(a[1],b[1],c[1])));y<Math.min(120,Math.ceil(Math.max(a[1],b[1],c[1])));y++){
+      for(let x=Math.max(0,Math.floor(Math.min(a[0],b[0],c[0])));x<Math.min(120,Math.ceil(Math.max(a[0],b[0],c[0])));x++){
+        const d=[side(a,b,x+.5,y+.5),side(b,c,x+.5,y+.5),side(c,a,x+.5,y+.5)];
+        if(Math.min(...d)>=0||Math.max(...d)<=0)mask[x+y*size]=1;
+      }
+    }
+  }
+  return mask;
+}
+
+test('London planes preserve measured extent but admit daylight between separate supported sprays',async(t)=>{
+  const {observedCanopy}=await import('../app/surveyed-canopies.ts');
+  const {waterfrontTree}=await import('../app/waterfront-trees.ts');
+  const {default:data}=await import('../public/data/plaza-canopies.json',{with:{type:'json'}});
+  let oldPixels=0,open=0,triangles=0,samples=0;
+  for(const key of Object.keys(data)){
+    const id=Number(key),source=observedCanopy(id,true),parts=[];
+    waterfrontTree(g=>{const m=new THREE.Mesh(g,material);parts.push(m);return m;},0,0,0,id,1,'Platanus x hispanica',11);
+    const crown=parts.find(m=>m.userData.plantCrown).geometry;
+    const measured=new THREE.Box3().setFromPoints(source.points);
+    crown.computeBoundingBox();
+    assert.ok(crown.boundingBox.min.distanceTo(measured.min)<1e-6&&crown.boundingBox.max.distanceTo(measured.max)<1e-6);
+    assert.equal(crown.userData.crownSourceId,id);assert.equal(crown.userData.planeLeaf,true);assert.equal(parts.length,2);
+    triangles+=crown.index.count/3;
+    if(samples++%4)continue;
+    const points=Array.from({length:crown.attributes.position.count},(_,i)=>new THREE.Vector3().fromBufferAttribute(crown.attributes.position,i));
+    for(const az of [0,1.3]){
+      const orig=crownPixels(source.points,source.faces,measured,az),next=crownPixels(points,crown.index.array,measured,az);
+      for(let y=53;y<114;y++)for(let x=2;x<118;x++){
+        const n=y*120+x;if(!orig[n])continue;oldPixels++;
+        if(!next[n]&&!next[n+2]&&!next[n-2]&&!next[n+240]&&!next[n-240])open++;
+      }
+    }
+  }
+  assert.ok(triangles<=25608);
+  t.diagnostic((100*open/oldPixels).toFixed(1)+'% of previously filled lower canopies now admit sky with a two-pixel clearance');
+  assert.ok(open/oldPixels>.13&&open/oldPixels<.66);
 });

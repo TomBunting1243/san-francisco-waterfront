@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // A tile of overlapping, folded leaflets. Red stores opacity-weighted pigment,
 // green and blue its two local slopes. Mipmaps average the marks as the tree recedes.
-export function leafReliefTile(){
+function leafLayer(lobed:boolean){
   const size=128,paint=new Float32Array(size*size).fill(.46);
   const coverageMask=new Float32Array(size*size);
   let state=514923;
@@ -13,7 +13,10 @@ export function leafReliefTile(){
     for(let y=Math.floor(cy)-reach;y<=cy+reach;y++)for(let x=Math.floor(cx)-reach;x<=cx+reach;x++){
       const dx=x-cx,dy=y-cy,along=(dx*cos+dy*sin)/length;
       if(Math.abs(along)>=1)continue;
-      const cross=(-dx*sin+dy*cos)/width,edge=1-along*along-Math.abs(cross);
+      const cross=(-dx*sin+dy*cos)/width;
+      // Three pointed lobes around a midrib, with a smaller basal pair.
+      const lobes=Math.max(1-Math.abs(along+.21)*2.9,.80-Math.abs(along-.28)*2.5,.49-Math.abs(along+.65)*3.6,.32*(1-along*along));
+      const edge=(lobed?lobes:1-along*along)-Math.abs(cross);
       if(edge<=0)continue;
       const coverage=Math.min(1,edge*width),fold=.085*(1-Math.abs(cross))+(cross>0?.055:-.045);
       const i=index(x,y);
@@ -26,7 +29,7 @@ export function leafReliefTile(){
     for(let j=0;j<3;j++)for(const side of [-1,1]){
       const turn=angle+side*(.56+random()*.46);
       const along=j*2.7,dx=x+Math.cos(angle)*along,dy=y+Math.sin(angle)*along;
-      leaflet(dx+Math.cos(turn)*2.5,dy+Math.sin(turn)*2.5,turn,3+random()*2.8,1.2+random()*1.1,light+j*.022);
+      leaflet(dx+Math.cos(turn)*2.5,dy+Math.sin(turn)*2.5,turn,(lobed?3.6:3)+random()*(lobed?2.6:2.8),(lobed?2.8:1.2)+random()*(lobed?1.6:1.1),light+j*.022);
     }
   }
   const bytes=new Uint8Array(size*size*4);
@@ -36,7 +39,14 @@ export function leafReliefTile(){
     bytes[j+1]=Math.round(128+120*(paint[index(x+1,y)]-paint[index(x-1,y)]));
     bytes[j+2]=Math.round(128+120*(paint[index(x,y+1)]-paint[index(x,y-1)]));bytes[j+3]=Math.round(255*coverageMask[i]);
   }
-  const tile=new THREE.DataTexture(bytes,size,size);
+  return bytes;
+}
+
+export function leafReliefTile(){
+  const regular=leafLayer(false),plane=leafLayer(true);
+  const bytes=new Uint8Array(regular.length+plane.length);
+  bytes.set(regular);bytes.set(plane,regular.length);
+  const tile=new THREE.DataArrayTexture(bytes,128,128,2);
   tile.wrapS=tile.wrapT=THREE.RepeatWrapping;tile.generateMipmaps=true;
   tile.minFilter=THREE.LinearMipmapLinearFilter;tile.magFilter=THREE.LinearFilter;tile.anisotropy=4;tile.needsUpdate=true;
   return tile;
@@ -84,16 +94,22 @@ export function createCanopyMaterial(base:THREE.MeshStandardMaterial,sun:{value:
     shader.uniforms.leafPigment={value:tile};shader.uniforms.sprayField={value:sprays};shader.uniforms.leafSun=sun;
     shader.vertexShader='attribute float foliageMask; varying float leafWeight; varying vec3 leafPosition;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\nleafPosition=position;leafWeight=foliageMask;');
-    shader.fragmentShader='uniform highp sampler3D sprayField; uniform sampler2D leafPigment; uniform vec3 leafSun; varying float leafWeight; varying vec3 leafPosition;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+    shader.fragmentShader='uniform highp sampler3D sprayField; uniform highp sampler2DArray leafPigment; uniform vec3 leafSun; varying float leafWeight; varying vec3 leafPosition;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       vec3 spraySlope=vec3(0.);
       if(leafWeight>.1){
-        vec4 layer=texture(sprayField,leafPosition*4.2);
+        // Shallow, ascending fans of leaves follow the boughs. The packed
+        // gradient is transformed by the same chart as the density sample.
+        vec3 sprayChart=vec3(leafPosition.x*2.9,leafPosition.y*6.4-leafPosition.x*1.1-leafPosition.z*.8,leafPosition.z*3.2);
+        float plane=1.-step(.025,abs(leafWeight-224./255.));
+        vec4 layer=texture(sprayField,mix(leafPosition*4.2,sprayChart,plane));
         float density=layer.r-.50;
-        spraySlope=(layer.gba-.5)*step(.8,leafWeight);
+        vec3 slope=layer.gba-.5;
+        spraySlope=mix(slope,vec3(.69*slope.x-.26*slope.y,1.52*slope.y,.76*slope.z-.19*slope.y),plane)*step(.8,leafWeight);
         vec3 orientation=abs(inverseTransformDirection(normalize(vNormal),viewMatrix));
         vec2 chart=orientation.y>max(orientation.x,orientation.z)?leafPosition.xz:
           (orientation.x>orientation.z?leafPosition.zy:leafPosition.xy);
-        vec4 mark=texture2D(leafPigment,chart*8.7);
+        float frequency=mix(8.7,7.2,plane);
+        vec4 mark=texture(leafPigment,vec3(chart*frequency,plane));
         float fiber=mark.r-.46;
         float fold=dot(mark.gb-vec2(.5),leafSun.xz);
         float strength=leafWeight>.8?1.:.28;
@@ -101,12 +117,15 @@ export function createCanopyMaterial(base:THREE.MeshStandardMaterial,sun:{value:
         diffuseColor.rgb*=mix(vec3(.90,1.01,1.06),vec3(1.12,1.02,.94),smoothstep(-.19,.23,density)*strength);
         // Thin the contour only where the drawn leaflets remain at least a pixel across.
         // Coverage is fixed to the crown and filtered by MSAA. The distant skyline stays solid.
-        float footprint=max(length(dFdx(chart)),length(dFdy(chart)))*8.7*128.;
+        float pixelSpan=max(length(dFdx(leafPosition)),length(dFdy(leafPosition)));
+        float footprint=pixelSpan*frequency*128.;
         float visibleLeaves=1.-smoothstep(1.8,4.5,footprint);
-        float edge=1.-smoothstep(.045,.39,abs(dot(normalize(vNormal),normalize(vViewPosition))));
-        float veil=edge*visibleLeaves*step(.8,leafWeight)*.68;
-        diffuseColor.a=mix(1.,smoothstep(.13,.65,mark.a+density*.85),veil);
-        if(diffuseColor.a<.015)discard;
+        float edge=1.-smoothstep(.14,.67,abs(dot(normalize(vNormal),normalize(vViewPosition))));
+        float resolvedSprays=1.-smoothstep(.013,.040,pixelSpan);
+        float gap=density+(mark.a-.43)*.30*visibleLeaves;
+        float cover=smoothstep(-.16,-.055,gap);
+        diffuseColor.a=mix(1.,cover,edge*resolvedSprays*step(.8,leafWeight)*(1.-plane));
+        if(diffuseColor.a<.30)discard;
         diffuseColor.rgb+=vec3(.018,.014,.002)*max(0.,fiber+fold)*strength;
       }`).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
       normal=normalize(normal-mat3(viewMatrix)*spraySlope*.86);`).replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
@@ -120,6 +139,6 @@ export function createCanopyMaterial(base:THREE.MeshStandardMaterial,sun:{value:
         }
       #endif`);
   };
-  material.customProgramCacheKey=()=>'waterfront-leaf-relief-v2';
+  material.customProgramCacheKey=()=>'waterfront-leaf-relief-v4';
   return material;
 }

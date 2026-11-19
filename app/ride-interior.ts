@@ -21,6 +21,23 @@ function cabGeometry(){
     const side=(p:Point,w:number):Point=>[p[0]+nx*w,p[1]+ny*w,p[2]];
     panel(side(a,startWidth/2),side(a,-startWidth/2),side(b,-endWidth/2),side(b,endWidth/2),tint);
   }
+  function side(x:number,bottom:number,top:number,front:number,back:number,tint:string){
+    panel([x,bottom,front],[x,bottom,back],[x,top,back],[x,top,front],tint);
+  }
+  function cross(z:number,left:number,right:number,bottom:number,top:number,tint:string){
+    panel([left,bottom,z],[right,bottom,z],[right,top,z],[left,top,z],tint);
+  }
+  function level(y:number,left:number,right:number,front:number,back:number,tint:string){
+    panel([left,y,front],[right,y,front],[right,y,back],[left,y,back],tint);
+  }
+  function seat(left:number,right:number,z:number,cushion:number,top:number,cloth:string){
+    level(cushion,left,right,z-.41,z,cloth);
+    panel([left,cushion,z],[right,cushion,z],[right,top,z+.09],[left,top,z+.09],cloth);
+    cross(z-.41,left,right,cushion-.07,cushion,'#4e5550');
+    const middle=(left+right)/2;
+    cross(z-.21,middle-.058,middle+.058,cushion-.44,cushion,'#545c52');
+    side(middle-.058,cushion-.44,cushion,z-.27,z-.15,'#62695c');
+  }
   function finish(){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
@@ -28,7 +45,7 @@ function cabGeometry(){
     g.setIndex(indices);g.computeVertexNormals();g.computeBoundingSphere();
     return g;
   }
-  return {panel,strip,finish};
+  return {panel,strip,side,cross,level,seat,finish};
 }
 
 function sedan(){
@@ -52,6 +69,24 @@ function sedan(){
     g.strip(bottom,top,.070,.053,'#70726a');
     g.strip([bottom[0],bottom[1],bottom[2]+.005],[top[0],top[1],top[2]+.005],.040,.029,'#828176');
   }
+  const left=-.56,right=1.22;
+  for(const x of [left,right]){
+    const topX=x===left?-.61:1.13;
+    g.side(x,-1.08,-.31,-.73,1.70,'#555d59');
+    g.side(x,-.34,-.30,-.73,1.70,'#878779');
+    g.panel([x,-.30,.32],[x,-.30,.41],[topX,.48,.39],[topX,.48,.31],'#666963');
+    g.panel([x,-.30,1.47],[x,-.30,1.70],[topX,.48,1.30],[topX,.48,1.15],'#88877a');
+    g.panel([x,-.30,-.73],[topX,.48,-.43],[topX,.48,-.48],[x,-.30,-.78],'#73756b');
+  }
+  g.level(.48,-.61,1.13,-.44,1.30,'#aaa797');
+  g.level(-1.08,left,right,-.50,1.69,'#454b47');
+  g.cross(1.69,left,right,-1.08,-.25,'#666e63');
+  g.level(-.25,left,right,1.36,1.69,'#797c70');
+  g.seat(-.39,.26,.28,-.68,-.19,'#747a70');
+  g.seat(.47,1.07,.28,-.68,-.19,'#818678');
+  for(const x of [-.065,.77])g.cross(.38,x-.135,x+.135,-.20,-.065,'#6c736a');
+  g.seat(-.45,1.12,1.34,-.66,-.25,'#737a6d');
+  for(const x of [-.20,.86])g.cross(1.44,x-.14,x+.14,-.26,-.115,'#696f63');
   return g.finish();
 }
 
@@ -71,6 +106,36 @@ function pcc(){
   g.strip([.30,-.431,-1.036],[.30,.70,-.937],.025,.023,'#d8ccae');
   g.strip([-.576,-.435,-.885],[-.655,.63,-.78],.046,.036,'#bdb69e');
   g.strip([1.22,-.435,-.898],[1.27,.63,-.79],.045,.036,'#bdb69e');
+  // The PCC is 48 ft 5 in long with a right-hand front and rear door.
+  // Window heads, belt rail and seat backs leave clear views through the open glazing.
+  const left=-.90,right=1.50,back=13.49;
+  g.level(-1.19,left,right,-.68,back,'#696d5e');
+  g.level(.71,left+.07,right-.07,-.70,back,'#c8c3a9');
+  for(const x of [left,right]){
+    g.side(x,-1.19,-.48,-.71,back,'#839079');
+    g.side(x,-.51,-.46,-.71,back,'#b7ab88');
+    g.side(x,.37,.41,-.71,back,'#a29e87');
+    g.side(x,.61,.71,-.71,back,'#b9b7a0');
+    for(let i=0;i<12;i++){
+      const z=-.69+i*1.16;
+      g.side(x,-.47,.62,z,z+.052,'#a9a68e');
+    }
+    const railX=x===left?x+.15:x-.15;
+    g.side(railX,.40,.427,1.95,12.70,'#b5a983');
+    for(const z of [2.2,5.67,9.15,12.62])g.cross(z,railX-.014,railX+.014,-1.19,.42,'#bcb399');
+  }
+  // Door leaves use narrow vertical stiles, echoed by the exterior door model.
+  for(const z of [1.34,8.26])for(const offset of [-.58,-.20,.20,.58]){
+    g.side(right-.012,-.46,.36,z+offset,z+offset+.032,'#757d71');
+  }
+  for(let i=0;i<9;i++){
+    const z=2.22+i*1.16;
+    g.seat(left+.08,-.13,z,-.75,-.18,'#917765');
+    if(i!==5)g.seat(.65,right-.08,z,-.75,-.18,'#997f6d');
+  }
+  g.cross(back,left,right,-1.19,-.47,'#85917c');
+  g.cross(back,left,right,.46,.71,'#b6b39a');
+  g.cross(back,.27,.315,-.47,.46,'#afa98e');
   return g.finish();
 }
 

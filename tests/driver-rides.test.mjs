@@ -22,7 +22,7 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
     return m;
   };
   addBridgeDeck(bridge,make,bridgeLayout.length,bridgeLayout.lowerDeck,bridgeLayout.upperDeck);
-  buildApproachRoad(make,road);road.updateMatrixWorld(true);
+  const updateApproach=buildApproachRoad(make,road);road.updateMatrixWorld(true);
   const start=driverPose('bridge',0),end=driverPose('bridge',Infinity);
   assert.ok(start.station<bridgeLayout.length+8.6-1.15/2);
   assert.ok(start.eye.y-bayReliefGround(start.eye.x,start.eye.z)>.7);
@@ -47,14 +47,34 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
   for(const station of [...bridgeLayout.towers,bridgeLayout.anchor,15.64,1,-1,-12,-26,-32]){
     const p=driverPose('bridge',(start.station-station)/1.10);
     near(p.station,station);
-    const center=station>=0?bridgePoint(0,station):approachPose(false,-station,0);
-    near(Math.hypot(p.eye.x-center.x,p.eye.z-center.z),.38*.06);
+    const center=station>=0?bridgePoint(.216,station):approachPose(false,-station,1);
+    near(Math.hypot(p.eye.x-center.x,p.eye.z-center.z),.38*.06,station<0?.003:.000001);
+    const dx=p.look.x-p.eye.x,dz=p.look.z-p.eye.z;
+    near(((center.x-p.eye.x)*-dz+(center.z-p.eye.z)*dx)/Math.hypot(dx,dz),.38*.06,.003);
     const hit=new T.Raycaster(new T.Vector3(p.eye.x,p.eye.y,p.eye.z),down,0,.2).intersectObjects(meshes,false)[0];
     assert.ok(hit,'the westbound tire contact must be on real asphalt at '+station);
     near(p.eye.y-hit.point.y,1.18*.06,.001);
     assert.ok(p.look.z<p.eye.z-2.4);
   }
   near(end.station,-32);assert.ok(end.eye.y<start.eye.y-.95);
+  const streams=[];
+  road.traverse(node=>{if(node.isInstancedMesh&&node.name==='Skyway traffic')streams.push(node);});
+  assert.equal(streams.length,4);
+  const matrix=new T.Matrix4(),point=new T.Vector3();
+  // Include the joint from the span side and every frame of the descending approach.
+  for(let tick=Math.floor((start.station-6)/1.1*30);tick<=Math.ceil(rideDuration('bridge')*30);tick++){
+    const t=tick/30,p=driverPose('bridge',t);
+    updateApproach(t);
+    const dx=p.look.x-p.eye.x,dz=p.look.z-p.eye.z,n=Math.hypot(dx,dz);
+    const centerX=p.eye.x-.38*.06*dz/n,centerZ=p.eye.z+.38*.06*dx/n;
+    for(const stream of streams)for(let i=0;i<stream.count;i++){
+      stream.getMatrixAt(i,matrix);point.setFromMatrixPosition(matrix);
+      if(Math.abs(point.y-p.eye.y)>.26)continue;
+      const x=point.x-centerX,z=point.z-centerZ;
+      const lateral=Math.abs((-dz*x+dx*z)/n),along=Math.abs((dx*x+dz*z)/n);
+      assert.ok(lateral>.14||along>2.7,'west approach vehicle clearance at '+t);
+    }
+  }
   const join=start.station/1.1;
   assert.ok(distance(driverPose('bridge',join-.001).eye,driverPose('bridge',join+.001).eye)<.003);
 });

@@ -76,3 +76,37 @@ test('the neighborhood LOD reuses tiles when a camera returns and honors a trans
   look(60,-80);const second=group.children.slice();assert.ok(second.length>first.length);
   look(-119,-62);assert.deepEqual(group.children,second);
 });
+
+test('boarding slices reuse the same urban tiles without renderer updates draining the queue',()=>{
+  const orbit=createUrbanContext(),ride=createUrbanContext();
+  const camera=new THREE.PerspectiveCamera(43,1.2,.1,62);
+  function view(x,z){
+    camera.position.set(x,22,z);camera.up.set(0,0,-1);camera.lookAt(x,0,z);camera.updateMatrixWorld();
+  }
+  const ids=g=>g.children.map(m=>m.geometry.boundingSphere.center.toArray().join(',')).sort();
+  view(-119,-62);orbit.update(camera);
+  assert.ok(orbit.children.length>1);
+  assert.equal(ride.prepareRideView(camera,0),false);
+  const partial=ride.children.length;
+  for(let i=0;i<3;i++)ride.update(camera);
+  assert.equal(ride.children.length,partial,'the automatic LOD cannot finish a pending boarding bake');
+  for(let i=0;!ride.prepareRideView(camera,.5);i++)assert.ok(i<500);
+  assert.deepEqual(ids(ride),ids(orbit));
+  const same=ride.children.slice();assert.ok(ride.prepareRideView(camera,0));ride.update(camera);
+  assert.deepEqual(ride.children,same);
+  view(62,-86);orbit.update(camera);
+  for(let i=0;ride.children.length<orbit.children.length;i++){ride.update(camera);assert.ok(i<500);}
+  assert.deepEqual(ids(ride),ids(orbit));
+});
+
+test('switching or cancelling a partial boarding bake drops stale work and restores the synchronous waterfront',()=>{
+  const ride=createUrbanContext(),waterfront=createUrbanContext(),camera=new THREE.PerspectiveCamera(30,1,.1,45);
+  function view(x,z){camera.position.set(x,18,z);camera.up.set(0,0,-1);camera.lookAt(x,0,z);camera.updateMatrixWorld();}
+  view(-119,-62);assert.equal(ride.prepareRideView(camera,0),false);
+  view(60,-80);waterfront.update(camera);
+  assert.ok(ride.prepareRideView(camera,Infinity));
+  const bounds=g=>g.children.map(c=>c.geometry.boundingSphere.center.toArray().join(',')).sort();
+  assert.deepEqual(bounds(ride),bounds(waterfront));
+  view(-119,-62);assert.equal(ride.prepareRideView(camera,0),false);ride.endRideView();
+  ride.update(camera);waterfront.update(camera);assert.deepEqual(bounds(ride),bounds(waterfront));
+});

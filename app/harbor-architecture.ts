@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { center, footprintGeometry, mappedBuildings, sfMap } from './sf-map.ts';
+import {pierFive} from './pier-five.ts';
 import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import type { FerryConnection } from './ferry-terminal.ts';
 import {addPier14Corpus} from './pier14-corpus.ts';
@@ -534,6 +535,7 @@ const buildingModels=new Map<number,(building:Building,model:Model)=>void>([
 export const smallHarborBuildings=sfMap.buildings.filter(b=>buildingModels.has(b.id)&&!mappedBuildings.some(mapped=>mapped.id===b.id));
 
 export function harborBuilding(b:Building,font:Font){
+  if(b.id===91913148)return pierFive(b.p,font);
   const stylized=!b.name&&!b.part&&!b.parent&&b.h>3&&b.h<14&&b.p.length<=10&&center(b.p)[1]>-56;
   const build=buildingModels.get(b.id)??(stylized?anonymousSkyline:undefined);
   if(!build)return;

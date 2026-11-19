@@ -12,8 +12,8 @@ test('cab foregrounds clear the eye near plane and leave the center view through
     for(const mode of ['sedan','tram']){
       show(mode);
       const mesh=root.children.find(m=>m.visible),position=mesh.geometry.getAttribute('position');
-      assert.ok(mesh.geometry.index.count/3<64);
-      for(let i=0;i<position.count;i++)assert.ok(-position.getZ(i)>camera.near);
+      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?145:365));
+      for(let i=0;i<position.count;i++)assert.ok(Math.hypot(position.getX(i),position.getY(i),position.getZ(i))>camera.near);
       let covered=0,left=0,right=0,bottom=0;
       for(let row=0;row<48;row++)for(let col=0;col<48;col++){
         ndc.set((col+.5)/24-1,(row+.5)/24-1);
@@ -70,6 +70,31 @@ test('each wiper turns on a sill-mounted spindle, freezes on pause and finishes 
     for(let i=0;i<35;i++)updateRain(0,.06,false);
     assert.equal(Math.abs(wiper.rotation.z),0);updateRain(0,1,false);assert.equal(Math.abs(wiper.rotation.z),0);
     show(null);updateRain(1,.7,false);assert.equal(Math.abs(wiper.rotation.z),0);
+  }
+  dispose();
+});
+
+test('both cabs surround the seat and preserve exterior sightlines through both sides and the rear',()=>{
+  const {root,show,dispose}=createRideInteriors();
+  for(const mode of ['sedan','tram']){
+    show(mode);
+    const cab=root.children.find(child=>child.visible);
+    const hit=(x,y,z)=>new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(cab,false)[0];
+    for(const side of [-1,1]){
+      assert.ok(!hit(side,.07,0),'eye-level side window');
+      assert.ok(hit(side,-1,0),'door interior below glass');
+      assert.ok(hit(side,2,.2),'headlining above side glass');
+    }
+    assert.ok(!hit(0,.015,1),'rear glass remains open towards the horizon');
+    assert.ok(hit(0,-1,1),'seat or floor when turning back');
+    if(mode==='tram'){
+      const end=hit(.30,-.6,13.49);
+      assert.ok(end&&end.distance>.79,'clear saloon aisle to rear bulkhead');
+      assert.ok(hit(-.42,-.35,2.22).distance<.18,'first seat beside the aisle');
+    }else{
+      assert.ok(hit(.77,-.13,.38).distance<.06,'adjacent passenger headrest');
+      assert.ok(hit(-.2,-.15,1.44),'rear seat below backlight');
+    }
   }
   dispose();
 });

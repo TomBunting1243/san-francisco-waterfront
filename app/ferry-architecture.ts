@@ -149,7 +149,17 @@ export function ferryHall(font:Font) {
       box(r*1.91,.024,.035,x,.406,-.086,'#8e8876',portico);
       if(i!==2)storefront(portico,x,r*1.97,.113,.45,-.610,'#687a6d');
     }
-    if(i>0)box(.065,.832,.075,cursor,.56,.009,pale,portico);
+    if(i>0){
+      box(.065,.832,.075,cursor,.56,.009,pale,portico);
+      for(const side of [-1,1]){
+        const cx=cursor+side*.044;
+        box(.069,.144,.088,cx,.178,.038,ashlar,portico);
+        box(.075,.023,.096,cx,.257,.040,pale,portico);
+        mesh(new THREE.CylinderGeometry(.030,.034,.582,12),pale,cx,.558,.052,portico).name='Portico engaged column';
+        mesh(new THREE.CylinderGeometry(.046,.030,.055,8),pale,cx,.875,.052,portico);
+        box(.089,.019,.096,cx,.911,.046,pale,portico);
+      }
+    }
     cursor+=span;
   }
   for(const side of [-1,1])box(.082,.896,streetZ-porticoZ+.046,side*porticoWidth/2,.558,-.258,ashlar,portico);
@@ -298,6 +308,18 @@ export function ferryHall(font:Font) {
     }
     line([centerX+x-span/2,bayZ-.184],[centerX+x+span/2,bayZ-.184],1.161,.012,.017,'#83938b');
   }
+  // HLB's restoration lights the west entry pedestals, paired columns, arches
+  // and entablature. The recessed glazed openings retain their darker centers.
+  // https://hlblighting.com/project/san-francisco-ferry-building/
+  function hallUplight(p:THREE.Vector3,n:THREE.Vector3){
+    const west=p.z<streetZ+.12;
+    const side=west?-1:1;
+    const column=west&&Math.abs(p.x-towerX)<porticoWidth/2&&p.z<streetZ-.09;
+    const height=THREE.MathUtils.smoothstep(p.y,.075,.27)*(1-THREE.MathUtils.smoothstep(p.y,.97,1.08));
+    const incidence=.25+.66*Math.max(0,n.z*side)+.28*Math.max(0,-n.y);
+    return height*incidence*(column?.96:west?.65:.40);
+  }
+  for(const side of [street,bay])side.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=hallUplight;});
   return {root,towerX,towerZ:(porticoZ+streetZ)/2+.24};
 }
 

@@ -5,7 +5,9 @@ import {bayLightPattern} from './bay-lights.ts';
 import {pierThreeShelter,waterSurface,waveAmplitudes} from './water-surface.ts';
 import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
-import {center,mappedBuildings} from './sf-map.ts';
+import surveyShore from '../public/data/survey-shore.json' with {type:'json'};
+import {insideBuilding} from './building-character.ts';
+import {center,mappedBuildings,sfMap} from './sf-map.ts';
 
 /** One extra row around the wave grid carries the water out to the horizon.
  * The interior vertices keep the spacing sampled by hulls and floating docks. */
@@ -31,6 +33,24 @@ export const marineDistanceFog = `
     gl_FragColor.rgb=mix(gl_FragColor.rgb,bayHorizon,distanceMist);
   #endif`;
 
+// The only water eligible for a hall reflection is open water east of the
+// seawall. Rasterise the same fixed aprons and floating landings as the scene.
+function ferryReflectionWater(){
+  const width=256,height=192,pitch=.125,water=new Uint8Array(width*height).fill(255);
+  const plans=[...surveyShore.decks,...sfMap.piers.filter(p=>p.closed).map(p=>[p.p])];
+  for(const [outer,...holes] of plans){
+    const xx=outer.map(p=>p[0]),zz=outer.map(p=>p[1]);
+    const left=Math.max(0,Math.floor((Math.min(...xx)+16)/pitch)),right=Math.min(width-1,Math.floor((Math.max(...xx)+16)/pitch));
+    const front=Math.max(0,Math.floor(Math.min(...zz)/pitch)),back=Math.min(height-1,Math.floor(Math.max(...zz)/pitch));
+    for(let j=front;j<=back;j++)for(let i=left;i<=right;i++){
+      const x=-16+(i+.5)*pitch,z=(j+.5)*pitch;
+      if(insideBuilding(x,z,outer)&&!holes.some(h=>insideBuilding(x,z,h)))water[i+j*width]=0;
+    }
+  }
+  const texture=new THREE.DataTexture(water,width,height,THREE.RedFormat);
+  texture.magFilter=texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;return texture;
+}
+
 /** Three shallow skyline strips approximate shore reflections without drawing the city a second time. */
 export function configureBayWater(material:THREE.MeshStandardMaterial, time:{value:number}, hulls:THREE.Vector4[],night:{value:number},artClock:{value:number}) {
   const ferryWakes={value:new Float32Array(hulls.length-2)};
@@ -55,6 +75,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       bytes[i]=Math.max(bytes[i],height);
     }
   }
+  const openWater=ferryReflectionWater();
   const profiles=new THREE.DataTexture(bytes,columns,3,THREE.RedFormat);
   profiles.minFilter=profiles.magFilter=THREE.LinearFilter;
   profiles.needsUpdate=true;
@@ -62,11 +83,11 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
   const sunset={value:new THREE.Vector3()};
   const sun={value:new THREE.Vector4()};
   const wind={value:new THREE.Vector2(.188,.982)},chop={value:.5};
-  material.addEventListener('dispose',()=>profiles.dispose());
+  material.addEventListener('dispose',()=>{profiles.dispose();openWater.dispose();});
   material.onBeforeCompile=shader=>{
     shader.uniforms.harborTime=time;shader.uniforms.bayLightTime=artClock;shader.uniforms.hullSize=hullSize;
     shader.uniforms.hullShadows={value:hulls};shader.uniforms.ferryWakes=ferryWakes;shader.uniforms.bayNight=night;
-    shader.uniforms.shoreProfiles={value:profiles};
+    shader.uniforms.shoreProfiles={value:profiles};shader.uniforms.ferryReflectionWater={value:openWater};
     shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
     shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
     shader.vertexShader='uniform float harborTime; varying vec2 baySurface; varying float bayElevation;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
@@ -78,6 +99,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.fragmentShader=`
       uniform float harborTime;
       uniform sampler2D shoreProfiles;
+      uniform sampler2D ferryReflectionWater;
       uniform vec3 sunsetGlitter;
       uniform vec4 waterfrontSun;
       uniform vec4 hullShadows[${hulls.length}];
@@ -126,18 +148,25 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       float bank=max(reflectedBank(mirrorRay,-1.5,1./6.,wobble),max(
         reflectedBank(mirrorRay,-14.,.5,wobble*1.6),reflectedBank(mirrorRay,-39.,5./6.,wobble*2.1)));
       diffuseColor.rgb *= mix(vec3(1.),vec3(.63,.72,.76),bank*.76);
-      if(waterfrontSun.w>.01){
-        // Small crests catch a narrow band of daylight around the solar reflection.
-        // It travels across the bay with the same vector that lights the buildings.
-        float sunPath=pow(max(0.,dot(mirrorRay,waterfrontSun.xyz)),46.);
-        float facets=smoothstep(.18,.86,ripple)*mix(.28,1.,detail);
-        diffuseColor.rgb+=vec3(.49,.43,.29)*sunPath*facets*waterfrontSun.w*(1.-bank*.82);
-      }
-      if(sunsetGlitter.z>.005){
+      // Separate the sun track from the lit water pigment. One hash staggers the
+      // start, length and brightness of each short reflected crest along the wind.
+      vec3 solarGlitter=vec3(0.);
+      float solarWeight=max(waterfrontSun.w,sunsetGlitter.z);
+      if(solarWeight>.005){
+        float across=dot(p,vec2(bayWind.y,-bayWind.x))*mix(1.45,2.45,bayChop)+lanes*.63+harborTime*.047;
+        float seed=waveHash(vec2(floor(windPhase*.159155),floor(across)));
+        float center=.29+.42*seed;
+        float extent=.085+.12*fract(seed*11.37);
+        float fw=max(.006,fwidth(across));
+        float segment=1.-smoothstep(extent,extent+fw,abs(fract(across)-center));
+        float crest=smoothstep(.67,.96,windCrest);
+        float resolved=detail*(1.-smoothstep(.28,.75,fw+fwidth(windPhase)*.159155));
+        float strokes=segment*crest*resolved*smoothstep(.27,.79,lanes+.26*(seed-.5));
+        float sunPath=pow(max(0.,dot(mirrorRay,waterfrontSun.xyz)),56.)*waterfrontSun.w;
         vec2 toward=normalize(mirrorRay.xz+vec2(.00001));
-        float align=max(0.,dot(toward,sunsetGlitter.xy));
-        float path=pow(align,22.)*(.36+.64*smoothstep(-.48,.8,ripple));
-        diffuseColor.rgb+=vec3(.51,.153,.044)*sunsetGlitter.z*path*(1.-bank*.82);
+        float lowSunPath=pow(max(0.,dot(toward,sunsetGlitter.xy)),32.)*sunsetGlitter.z;
+        solarGlitter=(vec3(.28,.235,.157)*sunPath+vec3(.31,.124,.047)*lowSunPath)
+          *(.045+.955*strokes)*(1.-bank*.82);
       }
       // Low, feathered contact beneath the vessels is evaluated at their current pose.
       for(int i=0;i<${hulls.length};i++) {
@@ -145,7 +174,8 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         if(dot(off,off)>100.)continue;
         vec2 along=hull.zw, size=hullSize[i].xy;
         vec2 local=vec2(dot(off,along),dot(off,vec2(-along.y,along.x)))/size;
-        diffuseColor.rgb *= .67+.33*smoothstep(.24,1.45,dot(local,local));
+        float contact=.67+.33*smoothstep(.24,1.45,dot(local,local));
+        diffuseColor.rgb*=contact;solarGlitter*=contact;
         if(i<${hulls.length-2}){
           float aft=hullSize[i].z-dot(off,along);
           float width=abs(dot(off,vec2(-along.y,along.x)));
@@ -180,27 +210,44 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
           }
         }
       }
-      // Glints lie between the viewer and actual lantern positions. The virtual image
-      // of each bulb is below the bay plane; a broken reflection widens around it.
-      if(bayNight>.001 && dot(p,p)<900.) {
-        float lights=0.;
-        for(int i=0;i<6;i++){
-          vec2 lamp=vec2(-6.+float(i)*2.4,1.98);
-          vec2 eye=cameraPosition.xz-lamp;
-          vec2 toward=eye/max(.001,length(eye));
-          vec2 across=vec2(-toward.y,toward.x);
-          float depthFraction=1.80/max(1.82,cameraPosition.y+2.50);
-          vec2 reflection=lamp+eye*depthFraction;
-          vec2 delta=p-reflection;
-          float along=dot(delta,toward), lateral=dot(delta,across);
-          float trail=.52+.032*length(eye);
-          float width=.065+.04*abs(along)+.025*windStrength;
-          float blade=lateral+(lanes-.5)*width*.95;
-          float glow=exp(-blade*blade/(width*width)-along*along/(trail*trail));
-          float chop=windPatch(p*vec2(7.,22.)+vec2(harborTime*.06,-harborTime*.13));
-          lights+=glow*(.17+.83*smoothstep(.41,.79,chop));
+      // Reflect the illuminated east arcade and clock tower already in the
+      // scene. The ripple shifts the source image, keeping its perspective.
+      if(bayNight>.001 && p.y>1.64 && p.y<24. && abs(p.x)<16. && mirrorRay.z<-.035){
+        vec2 waterUV=(p+vec2(16.,0.))/vec2(32.,24.);
+        float openWater=texture2D(ferryReflectionWater,waterUV).r;
+        if(openWater>.96){
+          float spread=mix(.60,1.50,bayChop);
+          float shoreTravel=(1.636-p.y)/mirrorRay.z;
+          float crossShift=(.16*windCrest+.09*swell)*spread;
+          vec2 arcadeHit=vec2(p.x+mirrorRay.x*shoreTravel+crossShift,bayElevation+mirrorRay.y*shoreTravel);
+          float heightShift=ripple*spread*(.12+.014*shoreTravel);
+          float arcadeY=arcadeHit.y+heightShift;
+          // The elevation has 23 bays between its OSM wing ends. Their stone
+          // piers reflect through the darker recesses of the glazed arcade.
+          float bays=(arcadeHit.x+6.219)*23./12.101;
+          float columns=1.-smoothstep(.035,.24,abs(fract(bays+.5)-.5));
+          float hall=step(0.,bays)*step(bays,23.)*smoothstep(.18,.43,arcadeY)
+            *(1.-smoothstep(.79,.98,arcadeY))*(.14+.86*columns);
+          // Project against the vertical axis of the four-sided tower. These
+          // are the modeled clock centre, 22-foot dial and upper lantern tiers.
+          vec2 tower=vec2(-.1185,-1.2465);
+          float t=dot(tower-p,mirrorRay.xz)/max(.01,dot(mirrorRay.xz,mirrorRay.xz));
+          vec2 miss=p+t*mirrorRay.xz-tower;
+          float side=dot(miss,normalize(vec2(-mirrorRay.z,mirrorRay.x)))+crossShift;
+          float ty=bayElevation+mirrorRay.y*t+heightShift;
+          float dial=1.-smoothstep(.16,.27,length(vec2(side,ty-2.035)));
+          float shaft=(1.-smoothstep(.21,.39,abs(side)))*smoothstep(1.20,1.78,ty)*(1.-smoothstep(2.29,2.58,ty));
+          float lantern=(1.-smoothstep(.08,.22,abs(side)))*smoothstep(2.48,2.83,ty)*(1.-smoothstep(3.47,3.75,ty));
+          float hallBlocks=step(-6.219,arcadeHit.x)*step(arcadeHit.x,5.882)*(1.-smoothstep(.94,1.20,arcadeHit.y));
+          float clock=(.46*dial+.15*shaft+.22*lantern)*step(0.,t)*(1.-hallBlocks);
+          // Ignore reflected rays that hit a deck before rising above its edge.
+          vec2 edgeUV=waterUV+mirrorRay.xz*(.12-bayElevation)/max(.025,mirrorRay.y)/vec2(32.,24.);
+          float clear=smoothstep(.82,1.,texture2D(ferryReflectionWater,mix(waterUV,edgeUV,.55)).r)
+                     *smoothstep(.82,1.,texture2D(ferryReflectionWater,edgeUV).r);
+          float crests=smoothstep(.33,.82,.54+.30*windCrest+.21*swell+.23*(lanes-.5));
+          float strokes=(.08+.92*crests)*detail*clear*bayNight;
+          totalEmissiveRadiance+=strokes*(hall*vec3(.086,.042,.016)+clock*vec3(.35,.216,.102));
         }
-        diffuseColor.rgb+=bayNight*vec3(.56,.29,.105)*min(1.,lights)*detail;
       }
       diffuseColor.rgb*=mix(vec3(.85,.94,1.01),vec3(1.13,1.06,.93),windStrength);
       diffuseColor.rgb*=1.+ripple*mix(.009,.037,bayChop)*detail+(.06*lanes-.03);
@@ -209,8 +256,17 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       glint*=smoothstep(.40,.71,lanes)*smoothstep(.32,.66,windStrength);
       glint*=.32+.68*smoothstep(-.5,.78,sin(crossPhase*.44+lanes));
       diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82)*mix(.52,1.48,bayChop);
+    `).replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
+      // A smooth bay plane can send the whole directional GGX lobe into the
+      // camera. Roll off its peak before tone mapping, preserving its color.
+      float specPeak=max(reflectedLight.directSpecular.r,max(reflectedLight.directSpecular.g,reflectedLight.directSpecular.b));
+      reflectedLight.directSpecular/=1.+specPeak*7.5*solarWeight;
+    `).replace('#include <opaque_fragment>',`
+      float litPeak=max(outgoingLight.r,max(outgoingLight.g,outgoingLight.b));
+      outgoingLight+=solarGlitter*(1.-smoothstep(.50,1.28,litPeak));
+      #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v7-'+hulls.length;
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v9-'+hulls.length;
   return {ferryWakes,baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

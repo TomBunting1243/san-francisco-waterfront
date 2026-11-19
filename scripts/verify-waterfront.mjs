@@ -5,6 +5,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import sharp from 'sharp';
+import {Matrix4,Vector3} from 'three';
 
 function observeArrivalFog() {
   if(window!==window.top)return;
@@ -99,6 +100,7 @@ function visibleControl(label){
 }
 
 const keys={
+  Home:{key:'Home',code:'Home',windowsVirtualKeyCode:36},
   Enter:{key:'Enter',code:'Enter',windowsVirtualKeyCode:13},
   Escape:{key:'Escape',code:'Escape',windowsVirtualKeyCode:27},
   E:{key:'e',code:'KeyE',windowsVirtualKeyCode:69},
@@ -112,7 +114,7 @@ function validatePlacement(placement){
   assert.ok(!clamped,'The selected passerby should be below the top bubble-placement clamp');
 }
 
-export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,checkFog}={}){
+export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,checkFog,checkRides,ridesOnly}={}){
   const read=fn=>evaluate(send,`(${fn})()`);
   async function waitFor(description,readValue,accept,timeout=7500){
     const end=Date.now()+timeout;
@@ -148,6 +150,44 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
     const {x,y}=await waitFor(ariaLabel,()=>evaluate(send,`(${visibleControl})(${JSON.stringify(ariaLabel)})`),Boolean);
     await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,x,y});
     await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,x,y});
+  }
+  const readMatrices=()=>evaluate(send,'globalThis.waterfrontMatrices');
+  async function verifyRides(){
+    const waterfront=await waitFor('waterfront matrices',readMatrices,m=>m?.viewMatrix&&m.projectionMatrix);
+    const eye=m=>new Vector3().setFromMatrixPosition(new Matrix4().fromArray(m).invert());
+    for(const mode of ['bridge','streetcar']){
+      // The native select change goes through the same React handler as keyboard selection.
+      await evaluate(send,`document.querySelector('.standalone-custom-trigger').click()`);
+      const selected=await evaluate(send,`(() => {
+        const select=document.querySelector('.standalone-custom-view select');
+        if(!select?.getClientRects().length)return false;
+        select.value=${JSON.stringify(mode)};
+        return select.dispatchEvent(new Event('change',{bubbles:true}));
+      })()`);
+      assert.ok(selected,'The standalone View selector must be visible');
+      await waitFor(mode+' boarding',()=>evaluate(send,`document.querySelector('.world').dataset.view===${JSON.stringify(mode)}&&!!document.querySelector('.ride-boarding[data-ready="true"]')`),Boolean,90_000);
+      await evaluate(send,`document.querySelector('button[aria-label="Pause ride"]').click()`);
+      await awaitScene('paused '+mode,state=>state.motion==='paused');
+      const seated=await readMatrices();
+      const aspect=seated.projectionMatrix[5]/seated.projectionMatrix[0];
+      const u=Math.max(0,Math.min(1,(aspect-.65)/.8));
+      const expectedFov=71-19*u*u*(3-2*u);
+      assert.ok(Math.abs(2*Math.atan(1/seated.projectionMatrix[5])*180/Math.PI-expectedFov)<.02,'ride vertical field of view');
+      await focusWorld();await press('ArrowRight');
+      const looking=await waitFor(mode+' head turn',readMatrices,m=>seated.viewMatrix.slice(0,12).some((v,i)=>Math.abs(v-m.viewMatrix[i])>.025));
+      assert.deepEqual(looking.projectionMatrix,seated.projectionMatrix,'looking must preserve the lens');
+      assert.ok(eye(looking.viewMatrix).distanceTo(eye(seated.viewMatrix))<.0001,'looking must preserve the seated eye');
+      const center=await evaluate(send,`(() => {const r=document.querySelector('.world-scene canvas').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await send('Input.dispatchMouseEvent',{type:'mouseWheel',...center,deltaX:0,deltaY:-100,modifiers:2});
+      await press('Home');
+      const forward=await waitFor(mode+' forward reset',readMatrices,m=>seated.viewMatrix.every((v,i)=>Math.abs(v-m.viewMatrix[i])<.0001));
+      assert.deepEqual(forward.projectionMatrix,seated.projectionMatrix,'wheel zoom must leave the ride lens fixed');
+      await screenshot(mode+'-fixed-lens');
+      await evaluate(send,`document.querySelector('button[aria-label="Return to waterfront"]').click()`);
+      await waitFor('restored waterfront camera',readMatrices,m=>['viewMatrix','projectionMatrix'].every(
+        name=>waterfront[name].every((v,i)=>Math.abs(v-m[name][i])<.0001)));
+    }
+    console.log('Both paused driver views turned and recentered with a fixed lens and returned to the waterfront camera.');
   }
   async function screenshot(name){
     if(!evidenceDir)return;
@@ -195,6 +235,9 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
   if(checkFog)assert.ok(running.fog?.loading&&running.fog.shown&&running.fog.masked&&running.fog.moving,
     'On normal load the masked arrival fog must appear and drift before the scene becomes ready');
 
+  if(checkRides)await verifyRides();
+  if(ridesOnly)return;
+
   await clickControl('Pause landscape motion');
   const stopped=await awaitScene('the scene to pause',paused);
   const persisted=await reloadAfter(stopped,'pause preference after a full reload',paused);
@@ -228,7 +271,6 @@ export async function verifyWaterfront(send,evaluate,url,signal,{evidenceDir,che
     ()=>evaluate(send,"!document.querySelector('.world > .passerby-bubble')"),Boolean);
   await awaitScene('Escape to restore the opening view',state=>state.exploring==='false');
   const opening=await scenePixels();
-  const readMatrices=()=>evaluate(send,'globalThis.waterfrontMatrices');
   const homeCamera=await readMatrices();
   await clickControl('Zoom in');
   await awaitScene('the zoomed view',state=>state.exploring==='true');

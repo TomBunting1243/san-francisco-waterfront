@@ -120,7 +120,7 @@ test('recorded plots distinguish Market bronze grates, open beds, pavement cutou
   const air=treeWell(mesh,-870100,0,.04,0,0,true);assert.equal(air.name,'Tree cutout');
 });
 
-test('every measured Ferry crown is a single closed density surface with baked canopy shading',async()=>{
+test('each surveyed envelope remains available as a closed, shaded crown for other broadleaf taxa',async()=>{
   const {observedCanopy}=await import('../app/surveyed-canopies.ts');
   const {waterfrontTree}=await import('../app/waterfront-trees.ts');
   const {default:data}=await import('../public/data/plaza-canopies.json',{with:{type:'json'}});
@@ -129,7 +129,7 @@ test('every measured Ferry crown is a single closed density surface with baked c
   for(const key of Object.keys(data)){
     const id=Number(key),source=observedCanopy(id,true);
     const group=new THREE.Group();
-    waterfrontTree((g,c)=>{const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c}));group.add(m);return m;},0,0,0,id,1,'Platanus',7);
+    waterfrontTree((g,c)=>{const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c}));group.add(m);return m;},0,0,0,id,1,'Fraxinus',7);
     assert.ok(group.children.reduce((tri,m)=>tri+m.geometry.index.count/3,0)<=1230);
     const g=group.children.find(o=>o.userData.plantCrown).geometry;
     assert.equal(g.userData.crownSource,'individual lidar envelope');

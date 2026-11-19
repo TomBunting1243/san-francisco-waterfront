@@ -37,10 +37,8 @@ export function createHarborSky() {
         float elevation = max(0., dir.y);
         float daylight = 1. - nightAmount;
         float horizon = exp(-elevation * 8.);
-        vec3 zenith = skyTint * vec3(.62,.83,1.);
-        vec3 mist = mix(skyTint, vec3(.93,.85,.70), daylight * .53);
-        vec3 color = mix(zenith, mist, horizon);
-        color+=vec3(.023,.013,.009)*nightAmount*pow(horizon,2.5);
+        vec3 zenith = skyTint;
+        vec3 color = mix(zenith, coastalHorizon, horizon);
         vec2 sheet=dir.xz / max(.065,elevation+.055);
         sheet+=vec2(cloudDrift*.006,cloudDrift*.002);
         float cloud=noise(sheet*vec2(.72,1.65))*.65+noise(sheet*vec2(2.5,5.5))*.25+noise(sheet*9.)*.1;
@@ -55,11 +53,9 @@ export function createHarborSky() {
         color+=sunTint*daylight*direct*(pow(solar,30.)*.14+smoothstep(.99975,.9999,solar)*.82);
         float veil=smoothstep(.48,.76,cloud)*smoothstep(.01,.08,elevation)*(1.-smoothstep(.25,.55,elevation));
         color=mix(color,vec3(.97,.92,.82),veil*(.37*daylight+.012*nightAmount));
-        float light=dot(mist,vec3(.2126,.7152,.0722));
-        vec3 greyHorizon=light*mix(vec3(.94,.98,1.015),vec3(.82,.94,1.06),nightAmount);
         float overhead=smoothstep(.015,.46,elevation);
-        vec3 stratus=greyHorizon*mix(1.,.83+(cloud-.5)*.32,overhead);
-        stratus*=1.-rain*(.24+.25*overhead);
+        vec3 stratus=coastalHorizon*mix(1.,.83+(cloud-.5)*.32,overhead);
+        stratus*=1.-rain*.25*overhead;
         // At the marine horizon distant cloud layers merge into a uniform silver-grey band.
         float distant=smoothstep(.18,.88,cover)*(1.-smoothstep(.012,.12,elevation));
         color=mix(color,stratus,max(opacity,distant));
@@ -67,7 +63,9 @@ export function createHarborSky() {
         // Sea fog lies in long banks below a lighter deck. Its ridges soften into the horizon.
         float bank=noise(vec2(dir.x*5.6+dir.z*2.7+cloudDrift*.011,dir.y*17.-dir.z*2.4));
         float low=1.-smoothstep(.006,.155,elevation+(bank-.5)*.06);
-        vec3 silver=mix(coastalHorizon,vec3(.60,.71,.74)*(.55+.45*daylight),.29+.11*bank);
+        // The bank meets the same horizon seen on water and hills. Its relief
+        // comes from available light, so night fog keeps the depth of the bay.
+        vec3 silver=coastalHorizon*mix(.84,1.15,bank);
         color=mix(color,silver,seaMist*(.23+.71*low));
         // Toward the setting sun the underside of broken cloud catches salmon light.
         // The opposite horizon keeps a cooler belt of violet above the earth's shadow.
@@ -77,12 +75,15 @@ export function createHarborSky() {
         float litEdge=smoothstep(.36,.68,cloud)*exp(-abs(elevation-.13)*5.);
         color=mix(color,blush,afterglow*belt*(.29+.33*west+.14*litEdge));
         color+=vec3(.56,.22,.051)*afterglow*pow(west,12.)*exp(-elevation*8.)*(1.-opacity*.80);
+        color=mix(color,coastalHorizon,(1.-smoothstep(0.,.065,elevation))*max(seaMist,deck));
         gl_FragColor = vec4(color, 1.);
         #include <colorspace_fragment>
       }`,
   });
   const dome = new THREE.Mesh(new THREE.SphereGeometry(440,36,18),material);
   dome.frustumCulled = false;
-  dome.renderOrder = -10;
+  // Opaque geometry has already filled the depth buffer. Shade the expensive
+  // cloud field only through gaps in its silhouette, before transparent layers.
+  dome.renderOrder = 1000;
   return {dome, uniforms};
 }

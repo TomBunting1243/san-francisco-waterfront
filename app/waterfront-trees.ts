@@ -74,12 +74,13 @@ class Paint {
     g.computeVertexNormals();g.userData.paintVertices=true;
     const part=mesh(g,'#ffffff',x,y,z);part.name=name;
     if(name.endsWith('foliage')){part.userData.plantCrown=true;g.userData.plantCrown=true;}
+    return part;
   }
   // Connected, tapered rings model trunk mottling and leave every winter twig attached.
-  stem(a:Point,b:Point,r:number,tip:number,tones:THREE.Color[],phase:number,rings=2){
+  stem(a:Point,b:Point,r:number,tip:number,tones:THREE.Color[],phase:number,rings=2,n=6){
     const axis=b.clone().sub(a).normalize();
     const u=vec(0,0,1).cross(axis).normalize(),v=axis.clone().cross(u);
-    const first=this.xyz.length/3,n=6;
+    const first=this.xyz.length/3;
     for(let j=0;j<rings;j++){
       const t=j/(rings-1),center=a.clone().lerp(b,t),radius=THREE.MathUtils.lerp(r,tip,t);
       for(let k=0;k<n;k++){
@@ -140,6 +141,130 @@ class Paint {
   }
 }
 
+// Partition each measured surface once (also reused by trees borrowing its
+// form). Farthest-point seeds follow high returns and spreading side branches.
+const planeClusters=new WeakMap<Point[],number[][]>();
+function observedSprays(points:Point[]){
+  const cached=planeClusters.get(points);if(cached)return cached;
+  const centers=[points.reduce((a,b)=>a.y>b.y?a:b).clone()];
+  const distances=new Float64Array(points.length).fill(Infinity);
+  while(centers.length<10){
+    let far=0;
+    for(let i=0;i<points.length;i++){
+      distances[i]=Math.min(distances[i],points[i].distanceToSquared(centers[centers.length-1]));
+      if(distances[i]>distances[far])far=i;
+    }
+    centers.push(points[far].clone());
+  }
+  let groups:number[][]=[];
+  for(let pass=0;pass<5;pass++){
+    groups=centers.map(()=>[]);
+    for(const [i,p] of points.entries()){
+      let closest=0,d=Infinity;
+      for(const [k,c] of centers.entries()){const ds=c.distanceToSquared(p);if(ds<d){closest=k;d=ds;}}
+      groups[closest].push(i);
+    }
+    groups.forEach((indices,k)=>{
+      if(indices.length)centers[k].set(0,0,0);
+      for(const i of indices)centers[k].add(points[i]);
+      if(indices.length)centers[k].divideScalar(indices.length);
+    });
+  }
+  planeClusters.set(points,groups);return groups;
+}
+
+function planeSprays(points:Point[],groups:number[][],phase:number,id:number,h:number,r:number,tones:THREE.Color[],wood:Paint,crown:Paint,fork:Point,spine:Point){
+  const measured=new THREE.Box3().setFromPoints(points),out=new THREE.Box3();
+  const supports:{center:Point;tip:Point}[]=[];
+  const hue=new THREE.Color(),v=vec(0,0,0);
+  groups.forEach((indices,k)=>{
+    const group=indices.map(i=>points[i]);
+    const mid=group.reduce((sum,p)=>sum.add(p),vec(0,0,0)).divideScalar(group.length);
+    const height=(mid.y-measured.min.y)/(measured.max.y-measured.min.y);
+    const az=Math.atan2(mid.z,mid.x)+.19*Math.sin(phase+k);
+    const dir=vec(Math.cos(az),0,Math.sin(az)),side=vec(-dir.z,0,dir.x);
+    const axes=new THREE.Box3();
+    for(const p of group){v.copy(p).sub(mid);axes.expandByPoint(vec(v.dot(dir),v.y,v.dot(side)));}
+    const extent=axes.getSize(vec(0,0,0));
+    const len=Math.max(.085*h,extent.x*.61),width=Math.max(.053*h,extent.z*(.36+.13*height));
+    const depth=Math.max(.042*h,extent.y*(.27+.13*height));
+    // Two forked sprays per bough. Sparse lateral twigs show beneath broad,
+    // overlapping upper fans. Stagger the layers to avoid a ring of equal tufts.
+    const base=mid.clone().addScaledVector(dir,-len*.85);
+    base.y-=depth*.6;
+    const to=mid.clone().addScaledVector(side,width*.40);
+    supports.push({center:base,tip:to});
+    for(const sign of [-1,1]){
+      const n=sign===1?6:5,layers=sign===1?3:2,first=crown.xyz.length/3;
+      const shoot=dir.clone().addScaledVector(side,sign*(.34+.30*seed(id,k+42))).normalize();
+      const cross=vec(-shoot.z,0,shoot.x),scale=sign===1?1:.78;
+      const origin=base;
+      const end=mid.clone().addScaledVector(shoot,len*(sign===1?1.13:.81)).addScaledVector(side,sign*width*.51);
+      end.y+=depth*(sign===1?.91:.25);
+      const hueAt=(value:number)=>{
+        value=THREE.MathUtils.clamp(value,0,1)*2;
+        return hue.copy(tones[Math.floor(value)]).lerp(tones[Math.ceil(value)],value%1);
+      };
+      crown.vertex(origin,hueAt(.20+.20*height));
+      for(let j=0;j<layers;j++){
+        const t=(j+1)/(layers+1),c=origin.clone().lerp(end,t);c.y+=Math.sin(t*Math.PI)*depth*.25;
+        for(let a=0;a<n;a++){
+          const ang=tau*(a+.13*j+.17*seed(id,k+3))/n;
+          const spread=(.83+.28*seed(id,43*k+7*j+a))*Math.sin(Math.PI*t)**.55;
+          const pt=c.clone().addScaledVector(cross,Math.cos(ang)*width*scale*spread);
+          pt.y+=Math.sin(ang)*depth*scale*spread;
+          pt.addScaledVector(shoot,len*.32*Math.sin(ang*3+k+j));
+          crown.vertex(pt,hueAt(.40+.21*height+.24*Math.sin(ang)+.16*(seed(id,k*37+j*5+a)-.5)));
+        }
+      }
+      const tip=crown.vertex(end,hueAt(.65+.15*height));
+      for(let a=0;a<n;a++){
+        const b=(a+1)%n,i=first+1+a,j=first+1+b;
+        crown.indices.push(first,i,j);
+        for(let row=0;row<layers-1;row++)crown.quad(i+row*n,i+(row+1)*n,j+(row+1)*n,j+row*n);
+        crown.indices.push(i+(layers-1)*n,tip,j+(layers-1)*n);
+      }
+      // A short terminal spray breaks each outline into attached folded
+      // leaf tips, even when the leaf texture is smaller than a pixel.
+      const rim=first+1+(layers-1)*n+(sign>0?0:Math.floor(n/2));
+      const pin=vec(0,0,0).fromArray(crown.xyz,rim*3);
+      const along=shoot.clone().addScaledVector(cross,sign*.68);
+      const scaleTip=Math.min(len,width)*.66;
+      const pattern=[[.88,-.37],[.68,-.07],[1.18,.10],[.65,.17],[.88,.42],[.38,.25]];
+      const edge=pattern.map(([u,v],j)=>{
+        const pt=pin.clone().addScaledVector(along,u*scaleTip).addScaledVector(cross,v*scaleTip);
+        pt.y+=scaleTip*(.14*Math.sin(j*1.4)-u*.16);
+        return crown.vertex(pt,hueAt(.48+.16*height+.08*Math.sin(j*2)));
+      });
+      for(let j=1;j<edge.length;j++)crown.indices.push(rim,edge[j-1],edge[j]);
+      const fold=pin.clone().addScaledVector(along,scaleTip*.36);fold.y-=scaleTip*.14;
+      const underside=crown.vertex(fold,hueAt(.36+.14*height));
+      crown.indices.push(underside,edge[2],edge[0],underside,edge[4],edge[2]);
+    }
+  });
+  for(let i=0;i<crown.xyz.length;i+=3)out.expandByPoint(v.fromArray(crown.xyz,i));
+  const stretch=measured.getSize(vec(0,0,0)).divide(out.getSize(vec(0,0,0)));
+  const fit=(p:Point)=>p.sub(out.min).multiply(stretch).add(measured.min);
+  for(let i=0;i<crown.xyz.length;i+=3)fit(v.fromArray(crown.xyz,i)).toArray(crown.xyz,i);
+  const scaffold=Array.from({length:5},()=>[] as {mid:Point;tip:Point}[]);
+  for(const s of supports){
+    const mid=fit(s.center),tip=fit(s.tip);
+    const sector=Math.floor(((Math.atan2(mid.z,mid.x)-phase+tau*2)%tau)/tau*5);
+    scaffold[sector].push({mid,tip});
+  }
+  for(const [i,arms] of scaffold.entries()){
+    if(!arms.length)continue;
+    const origin=fork.clone().lerp(spine,.26+.42*seed(id,i+51));
+    const mean=arms.reduce((v,s)=>v.add(s.mid),vec(0,0,0)).divideScalar(arms.length);
+    const elbow=origin.clone().lerp(mean,.54);elbow.y-=h*.047;
+    wood.stem(origin,elbow,r*.52,r*.28,planeBark,id+i,2,5);
+    for(const {mid,tip} of arms){
+      wood.stem(elbow,mid,r*.26,r*.11,planeBark,id+i+11,2,4);
+      wood.stem(mid,tip,r*.12,r*.025,planeBark,id+i+21,2,3);
+    }
+  }
+}
+
 export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:number,height:number,species='',seasonMonth=month,trunkRadius?:number){
   const habit=treeHabit(species),f=forms[habit],h=height,phase=seed(id,7)*tau;
   const evergreen=['privet','magnolia','live oak','broadleaf'].includes(habit);
@@ -164,6 +289,15 @@ export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:numb
     wood.stem(vec(0,0,0),fork,r,r*.65,timber,id,5);
     const spine=vec(fork.x+.036*h*Math.cos(phase+.5),fork.y+h*.18,fork.z+.036*h*Math.sin(phase+.5));
     wood.stem(fork,spine,r*.65,r*.31,timber,id+22,3);
+    if(habit==='plane'){
+      planeSprays(points,observedSprays(shell.points),phase,id,h,r,tones,wood,crown,fork,spine);
+      wood.finish(tagged,x,y,z,'plane branches');
+      const foliage=crown.finish(tagged,x,y,z,'plane foliage')!;
+      foliage.geometry.userData.planeLeaf=true;
+      foliage.geometry.userData.crownSource=direct?'individual lidar sprays':'local lidar sprays';
+      foliage.geometry.userData.crownSourceId=shell.source;
+      return;
+    }
     const sectors:Point[][]=Array.from({length:6},()=>[]);
     for(const p of points){
       const az=Math.atan2(p.z,p.x)+Math.PI;
@@ -174,17 +308,17 @@ export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:numb
       const mean=sector.reduce((v,p)=>v.add(p),vec(0,0,0)).multiplyScalar(1/sector.length);
       const origin=fork.clone().lerp(spine,((j*5)%6)/6);
       const elbow=vec(mean.x*.53,origin.y+(mean.y-origin.y)*(.32+.12*seed(id,j)),mean.z*.53);
-      wood.stem(origin,elbow,r*(.39+.13*seed(id,j+12)),r*.21,timber,id+j);
+      wood.stem(origin,elbow,r*(.39+.13*seed(id,j+12)),r*.21,timber,id+j,2,6);
       for(const side of [-1,1]){
         const ranked=sector.slice().sort((a,b)=>(a.y+side*a.x*.48)-(b.y+side*b.x*.48));
         const tip=ranked[Math.floor(ranked.length*(side>0?.74:.43))].clone().lerp(mean,.22);
-        wood.stem(elbow,tip,r*.23,r*.052,timber,id+j+side);
+        wood.stem(elbow,tip,r*.23,r*.052,timber,id+j+side,2,6);
       }
     }
     wood.finish(tagged,x,y,z,habit+' branches');
-    const geometry=new THREE.BufferGeometry().setFromPoints(points).setIndex(new THREE.BufferAttribute(shell.faces,1));
     const center=points.reduce((v,p)=>v.add(p),vec(0,0,0)).multiplyScalar(1/points.length);
-    const extent=new THREE.Box3().setFromPoints(points).getSize(vec(0,0,0));
+    const bounds=new THREE.Box3().setFromPoints(points),extent=bounds.getSize(vec(0,0,0));
+    const geometry=new THREE.BufferGeometry().setFromPoints(points).setIndex(new THREE.BufferAttribute(shell.faces,1));
     const ellipsoid=vec(1/extent.x**2,1/extent.y**2,1/extent.z**2);
     const color=new THREE.Color(),direction=vec(0,0,0),outer=vec(0,0,0);
     const colors=new Float32Array(points.length*3),normals=new Float32Array(points.length*3);

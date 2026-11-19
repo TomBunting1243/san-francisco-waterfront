@@ -12,7 +12,7 @@ import {ferryClockTower} from './ferry-clock-tower.ts';
 import {createFerryFlag} from './ferry-flag.ts';
 export {updateFerryFlag,ferryFlagFlutterRate} from './ferry-flag.ts';
 export {setFerryClockTime} from './ferry-clock-tower.ts';
-import {downtownBuilding,applyDowntownGlazing} from './downtown-buildings.ts';
+import {downtownBuilding,applyDowntownGlazing,bindFacadeClock,createFacadeClock} from './downtown-buildings.ts';
 import {createUrbanContext} from './urban-context.ts';
 import {addSurveyShore,seawallAt} from './survey-shore.ts';
 import {bayReliefBankHeight,createBayRelief} from './bay-relief.ts';
@@ -653,7 +653,8 @@ export function createLandscape() {
   });
   const walkMaterial=architectureMaterial.clone();applyWalkPanelJoints(walkMaterial);
   const facadeMaterial=architectureMaterial.clone();
-  applyDowntownGlazing(facadeMaterial,nightInk);
+  const facadeClock=createFacadeClock();
+  applyDowntownGlazing(facadeMaterial,facadeClock);
   const leafSun={value:new THREE.Vector3()};
   const canopyMaterial=createCanopyMaterial(architectureMaterial,leafSun);
   const treeBatches=bakeTreeBatches(staticMeshes,canopyMaterial);
@@ -749,7 +750,6 @@ export function createLandscape() {
       if(marine){shader.uniforms.bayHorizon=bayWeather.bayHorizon;shader.fragmentShader='uniform vec3 bayHorizon;\n'+shader.fragmentShader;}
       shader.uniforms.edgeFogColor=edgeFogColor;shader.uniforms.seaMistBank=seaMist;shader.uniforms.rainOnStone=rainOnStone;
       shader.uniforms.pigmentSheet={value:pigment};shader.uniforms.nightInk=nightInk;
-      const towerCenter=new THREE.Vector2(hall.towerX,hall.towerZ);shader.uniforms.ferryTowerCenter={value:towerCenter};
       shader.vertexShader='varying vec3 pigmentPosition; varying vec3 harborPosition;\n'+shader.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
         vec4 harborWorld=vec4(transformed,1.0);
         #ifdef USE_BATCHING
@@ -764,7 +764,7 @@ export function createLandscape() {
         shader.vertexShader='attribute vec3 signLight; varying vec3 nightSignLight;\n'+
           shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nnightSignLight=signLight;');
       }
-      shader.fragmentShader='uniform float rainOnStone; uniform vec2 seaMistBank; uniform float nightInk; uniform vec2 ferryTowerCenter; uniform sampler2D pigmentSheet; varying vec3 pigmentPosition; uniform vec3 edgeFogColor; varying vec3 harborPosition;\n'+shader.fragmentShader.replace('#include <fog_fragment>',`
+      shader.fragmentShader='uniform float rainOnStone; uniform vec2 seaMistBank; uniform float nightInk; uniform sampler2D pigmentSheet; varying vec3 pigmentPosition; uniform vec3 edgeFogColor; varying vec3 harborPosition;\n'+shader.fragmentShader.replace('#include <fog_fragment>',`
         float value=dot(gl_FragColor.rgb,vec3(.24,.61,.15));
         ${washSurface?`
         // Oblique coordinates span quay paving, wall faces and roofs continuously.
@@ -790,14 +790,8 @@ export function createLandscape() {
           gl_FragColor.rgb=mix(gl_FragColor.rgb,gl_FragColor.rgb*.74+edgeFogColor*sheen,damp);
         }
         `:''}
-        ${mat===waterMaterial?'':`vec3 P=harborPosition;
-        // Warm floodlighting on the Ferry Building and clock; pale concrete takes ink in shadow.
-        vec2 fromTower=P.xz-ferryTowerCenter;
-        float towerLight=(1.-smoothstep(.45,.83,length(fromTower)))*smoothstep(1.0,2.4,P.y)*(1.-smoothstep(4.6,5.,P.y));
-        float arcade=(1.-smoothstep(5.7,7.3,abs(P.x)))*(1.-smoothstep(.25,1.2,abs(P.z-1.52)))*(1.-smoothstep(.9,1.9,P.y));
-        float wash=nightInk*(towerLight*.83+arcade*.49);
-        gl_FragColor.rgb*=mix(vec3(1.),vec3(.68,.80,.99),nightInk*(1.-min(1.,wash)));
-        gl_FragColor.rgb+=vec3(.60,.34,.09)*wash*max(.2,value);
+        ${mat===waterMaterial?'':`
+        gl_FragColor.rgb*=mix(vec3(1.),vec3(.77,.85,.99),nightInk);
          ${mat===illuminatedArchitecture?'gl_FragColor.rgb+=nightSignLight*smoothstep(.18,.95,nightInk);':''}`}
         float sightline=distance(cameraPosition,harborPosition);
         ${marine?'':`float boundary=max(smoothstep(65.,102.,harborPosition.x),smoothstep(128.,198.,-harborPosition.z));
@@ -827,7 +821,7 @@ export function createLandscape() {
   for(const [name,x,y,z,w,h,d] of [['waterfront',0,2.2,0,16,4.7,3],['bridge',bridgePoint(0,36.85).x,4.8,bridgePoint(0,36.85).z,2.8,10,2.8],['pyramid',26.75,7.8,-40.4,3,16,3]] as const){
     const target=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),hitMaterial);target.position.set(x,y,z);target.userData.landmark=name;root.add(target);hitTargets.push(target);
   }
-  const relief=createBayRelief();root.add(relief.root,createUrbanContext());
+  const relief=createBayRelief(),urbanContext=createUrbanContext();root.add(relief.root,urbanContext);
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);
   ferries.forEach((boat,i)=>{
@@ -836,7 +830,7 @@ export function createLandscape() {
     boardingBrows.update(i,pose);
   });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, urbanContext, setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   cityTemplate=result;
   return result;
 }
@@ -847,9 +841,12 @@ let cityTemplate:ReturnType<typeof createLandscape>|undefined;
 export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof createLandscape>{
   const source=cityTemplate||createLandscape(),root=new THREE.Group(),waterTime={value:0};
   const bounds=variant==='street'?new THREE.Box3(new THREE.Vector3(-62,-5,-28),new THREE.Vector3(-15,40,14)):new THREE.Box3(new THREE.Vector3(-22,-5,-32),new THREE.Vector3(32,40,22));
+  const facadeClock=createFacadeClock();
   const materialCopies=new Map<THREE.Material,THREE.Material>();
   function copiedMaterial(mat:THREE.Material){
-    let copy=materialCopies.get(mat);if(!copy){copy=mat.clone();copy.onBeforeCompile=mat.onBeforeCompile;copy.customProgramCacheKey=mat.customProgramCacheKey;materialCopies.set(mat,copy);}return copy;
+    let copy=materialCopies.get(mat);if(!copy){copy=mat.clone();copy.onBeforeCompile=mat.onBeforeCompile;copy.customProgramCacheKey=mat.customProgramCacheKey;
+      if(mat.userData.surveyedDowntownGlazing)bindFacadeClock(copy,facadeClock);
+      materialCopies.set(mat,copy);}return copy;
   }
   function copyMesh(mesh:THREE.Mesh){const m=mesh.clone();m.geometry=mesh.geometry;m.userData.sharedGeometry=true;m.material=Array.isArray(mesh.material)?mesh.material.map(copiedMaterial):copiedMaterial(mesh.material);return m;}
   const treeBatches=source.treeBatches.filter(t=>t.high.boundingBox!.intersectsBox(bounds)).map(t=>{const mesh=copyMesh(t.mesh);return {...t,mesh};});
@@ -918,7 +915,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   }
   const ferryMarket=variant==='plaza'?createFerryMarket():source.ferryMarket;if(variant==='plaza')root.add(ferryMarket.root);
   const transit=variant==='plaza'&&source.transit?createPromenadeTransit(copiedMaterial(source.transit.batch.material) as THREE.MeshStandardMaterial):undefined;if(transit)root.add(transit.root);
-  return {...source,root,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
+  return {...source,root,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
     streetcarGlazing:copiedMaterial(source.streetcarGlazing) as THREE.MeshStandardMaterial,streetcarLamp:copiedMaterial(source.streetcarLamp) as THREE.MeshStandardMaterial,
     coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cyclists,hitTargets:[],
     seaLion:new THREE.Group(),sealFlippers:[]};

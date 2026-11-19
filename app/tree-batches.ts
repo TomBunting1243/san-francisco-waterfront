@@ -14,14 +14,15 @@ function reducedCrown(high:THREE.BufferGeometry,part:PaintedMesh,start:number,in
   const p=high.getAttribute('position'),count=part.geometry.getAttribute('position').count;
   box.copy(part.geometry.boundingBox!).applyMatrix4(part.matrixWorld);
   const scale=box.getSize(new THREE.Vector3());
-  scale.set(5/Math.max(.00001,scale.x),5/Math.max(.00001,scale.y),5/Math.max(.00001,scale.z));
+  const divisions=part.geometry.userData.planeLeaf?4:5,last=divisions-1;
+  scale.set(divisions/Math.max(.00001,scale.x),divisions/Math.max(.00001,scale.y),divisions/Math.max(.00001,scale.z));
   const remap=new Uint32Array(count),cells=new Map<number,{index:number;distance:number}>();
   for(let i=0;i<count;i++){
     point.fromBufferAttribute(p,start+i).sub(box.min).multiply(scale);
-    const x=Math.min(4,Math.max(0,Math.floor(point.x))),y=Math.min(4,Math.max(0,Math.floor(point.y))),z=Math.min(4,Math.max(0,Math.floor(point.z)));
+    const x=Math.min(last,Math.max(0,Math.floor(point.x))),y=Math.min(last,Math.max(0,Math.floor(point.y))),z=Math.min(last,Math.max(0,Math.floor(point.z)));
     const key=x+5*y+25*z,old=cells.get(key);
     // Favor the envelope in the outer cells to keep the measured silhouette.
-    const target=(k:number)=>k===0?0:k===4?5:k+.5;
+    const target=(k:number)=>k===0?0:k===last?divisions:k+.5;
     const distance=(point.x-target(x))**2+(point.y-target(y))**2+(point.z-target(z))**2;
     if(!old||distance<old.distance)cells.set(key,{index:start+i,distance});
     remap[i]=key;
@@ -63,7 +64,7 @@ export function bakeTreeBatches(meshes:PaintedMesh[],material:THREE.MeshStandard
     for(const part of parts){
       const g=part.geometry,n=g.getAttribute('position').count,index=g.index;
       const isCrown=part.userData.plantCrown||g.userData.plantCrown;
-      if(isCrown)foliage.fill(part.userData.waterfrontPlant==='palm'?128:255,start,start+n);
+      if(isCrown)foliage.fill(part.userData.waterfrontPlant==='palm'?128:g.userData.planeLeaf?224:255,start,start+n);
       if(isCrown&&(index?.count??n)>300)reducedCrown(high,part,start,indices);
       else for(let i=0;i<(index?.count??n);i++)indices.push(start+(index?index.getX(i):i));
       start+=n;

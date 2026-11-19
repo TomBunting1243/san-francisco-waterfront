@@ -61,7 +61,7 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   const positions = new Float32Array(vertices * 3);
   const normals = new Int16Array(vertices * 3);
   const colors = new Uint8Array(vertices * 3);
-  const signLights = parts.some(mesh=>mesh.userData.signLight) ? new Uint8Array(vertices * 3) : null;
+  const signLights = parts.some(mesh=>mesh.userData.signLight||mesh.userData.uplight) ? new Uint8Array(vertices * 3) : null;
   const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
   const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
   const printUv=parts[0].geometry.hasAttribute('billboardPrint')?new Float32Array(vertices*2):null;
@@ -75,6 +75,7 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
     const {r,g,b} = mesh.material.color;
     const paint = mesh.material.vertexColors || geometry.userData.paintVertices ? geometry.attributes.color : undefined;
     const light = mesh.userData.signLight as [number,number,number]|undefined;
+    const uplight=mesh.userData.uplight as ((p:THREE.Vector3,n:THREE.Vector3)=>number)|undefined;
     if (signLights && light) {
       const [r,g,b]=light.map(value=>Math.round(value*255));
       for (let j=vertex*3; j<(vertex+pos.count)*3; j+=3) {
@@ -95,6 +96,14 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
         colors[j+2] = Math.round(255*b*paint.getZ(i));
       } else {
         colors[j] = red; colors[j+1] = green; colors[j+2] = blue;
+      }
+      // Sample the permanent floodlights once, on the stone they actually
+      // illuminate. Their contribution rides in the existing night-light batch.
+      if(signLights&&uplight&&!light){
+        const irradiance=uplight(point,normal);
+        signLights[j]=Math.min(255,colors[j]*irradiance);
+        signLights[j+1]=Math.min(255,colors[j+1]*irradiance*.82);
+        signLights[j+2]=Math.min(255,colors[j+2]*irradiance*.59);
       }
     }
     const count = geometry.index?.count ?? pos.count;

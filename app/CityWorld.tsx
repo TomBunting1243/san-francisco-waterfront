@@ -39,6 +39,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   const [zoom,setZoom]=useState(openingCamera.zoom);
   const changeZoom=(amount:number)=>setZoom(value=>clampZoom(value*Math.exp(amount)));
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
+  const [renderedRide,setRenderedRide]=useState<RideMode|null>(null);
+  const seatLook=useRef({yaw:0,pitch:0});
   const settings = useRef({ paused, zoom, tilt: 0, yaw: openingCamera.yaw });
   const travelKeys=useRef(new Set<string>());
   const tapKeys=useRef(new Set<string>());
@@ -89,8 +91,13 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const precipitation=createHarborRain();scene.add(precipitation.mesh);
       const camera = new THREE.PerspectiveCamera(20,1,.35,1800);
       let interiors:ReturnType<typeof import('./ride-interior').createRideInteriors>|undefined;
-      let headlamp:InstanceType<typeof THREE.SpotLight>|undefined;
-      let rideMode:RideMode|null=null,rideSeconds=0,rideEnded=false;
+      const lampPosition=new THREE.Vector3(),lampAim=new THREE.Vector3();
+      let preparedRide:RideMode|null=null,presentedRide:RideMode|null=null;
+      const gl=renderer.getContext() as WebGL2RenderingContext;
+      let rideFence:WebGLSync|null=null;
+      let lookDrag:{id:number;x:number;y:number;yaw:number;pitch:number}|null=null;
+      const clampHeadPitch=(r:number)=>THREE.MathUtils.clamp(r,-1.10,1.04);
+      let rideMode:RideMode|null=null,rideSeconds=0,rideEnded=false,rideMoving=false;
       scene.add(camera);
       const ambient = new THREE.HemisphereLight('#d5e5f2','#99a6b5',2.1); scene.add(ambient);
       const sun = new THREE.DirectionalLight('#fff0d2',3.2); sun.position.set(-30,55,28); sun.castShadow=true;
@@ -102,7 +109,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       sun.shadow.normalBias=.023; sun.shadow.bias=-.00008; scene.add(sun);
       const fill = new THREE.DirectionalLight('#bed8e9',.4); fill.position.set(40,20,-20); scene.add(fill);
       const world = streetView?createCityVignette(variant):createLandscape(); scene.add(world.root);
-      const streetIllumination=createStreetIllumination(world.root,world.streetGlobes,world.waterMaterial);
+      const streetIllumination=createStreetIllumination(world.root,world.streetGlobes,world.waterMaterial,enableRides);
       let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
       let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
@@ -131,8 +138,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let figureViewX=NaN,figureViewZ=NaN;
       let snowfall=false,customEpoch:number|undefined;
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
-      const mistTint=new THREE.Color(.93,.85,.70);
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
+      const horizonColor=new THREE.Color(lighting.horizon),fillColor=new THREE.Color(lighting.fill),groundColor=new THREE.Color(lighting.bounce);
       const marineGray=new THREE.Color('#b4c1c4'),rainWater=new THREE.Color('#687f86'),weatherTint=new THREE.Color();
       const coastalHorizon=new THREE.Color(),stratusHorizon=new THREE.Color();
       const weatherTarget=new THREE.Vector4(0,0,0,465),weatherNow=weatherTarget.clone();
@@ -296,7 +303,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
       function pick(e:PointerEvent){const rect=host.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);return raycaster.intersectObjects(world.hitTargets)[0]?.object.userData.landmark as Landmark|undefined;}
       function zoomHere(){
-        if(streetView||rideRef.current)return;
+        if(rideRef.current){seatLook.current.yaw=0;seatLook.current.pitch=0;requestFrame();return;}
+        if(streetView)return;
         conversation=null;setSpeech(null);setZoom(value=>clampZoom(value*1.65));setFocus(null);wake.current();
       }
       host.addEventListener('dblclick',zoomHere);
@@ -311,7 +319,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       }
       const resizeObserver=new ResizeObserver(resize); resizeObserver.observe(host); resize();
       const onDown=(e:PointerEvent)=>{
-        if(streetView||rideRef.current||e.button!==0)return;requestFrame();
+        if(streetView||e.button!==0)return;
+        if(rideRef.current){
+          if(!e.isPrimary){lookDrag=null;return;}
+          lookDrag={id:e.pointerId,x:e.clientX,y:e.clientY,...seatLook.current};
+          host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});
+          return;
+        }
+        requestFrame();
         lastInput=performance.now();
         if(e.pointerType==='touch'){
           touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -321,7 +336,17 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         pointer.down=true;pointer.startX=e.clientX;pointer.startY=e.clientY;pointer.startYaw=cameraAxes.yaw.value;pointer.startTilt=cameraAxes.tilt.value;settings.current.yaw=pointer.startYaw;cameraAxes.yaw.velocity=0;host.setPointerCapture(e.pointerId);host.focus({preventScroll:true});
       };
       const onMove=(e:PointerEvent)=>{
-        if(streetView||rideRef.current)return;requestFrame();
+        if(streetView)return;
+        if(rideRef.current){
+          if(lookDrag?.id===e.pointerId){
+            const scale=Math.PI/Math.max(320,Math.min(width,height));
+            seatLook.current.yaw=lookDrag.yaw+(e.clientX-lookDrag.x)*scale;
+            seatLook.current.pitch=clampHeadPitch(lookDrag.pitch+(e.clientY-lookDrag.y)*scale);
+            lastInput=performance.now();requestFrame();
+          }
+          return;
+        }
+        requestFrame();
         lastInput=performance.now();
         if(touches.has(e.pointerId)){
           touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -347,12 +372,12 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const onTouchEnd=(e:TouchEvent)=>{if(e.touches.length<2){nativeTouchPair=false;pair=null;}};
       host.addEventListener('touchstart',onTouchStart,{passive:false});host.addEventListener('touchmove',onTouchMove,{passive:false});
       host.addEventListener('touchend',onTouchEnd);host.addEventListener('touchcancel',onTouchEnd);
-      const onWheel=(e:WheelEvent)=>{if(!streetView&&!rideRef.current&&e.ctrlKey){lastInput=performance.now();e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
+      const onWheel=(e:WheelEvent)=>{if(rideRef.current){e.preventDefault();return;}if(!streetView&&e.ctrlKey){lastInput=performance.now();e.preventDefault();setZoom(value=>clampZoom(value*Math.exp(-e.deltaY*.008)));}};
       host.addEventListener('wheel',onWheel,{passive:false});
       const onLeave=()=>{hoveredPerson=-1;};
-      const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;};
+      const onCancel=(e:PointerEvent)=>{if(lookDrag?.id===e.pointerId)lookDrag=null;touches.delete(e.pointerId);pointer.down=false;};
       const onUp=(e:PointerEvent)=>{
-        if(rideRef.current)return;
+        if(rideRef.current){if(lookDrag?.id===e.pointerId)lookDrag=null;return;}
         lastInput=performance.now();touches.delete(e.pointerId);
         if(wasPinch){if(touches.size===0){wasPinch=false;pair=null;}pointer.down=false;return;}
         if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){
@@ -386,30 +411,39 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       function animate(now:number) {
         frame=0;if(disposed||!visible||!rendering||document.hidden)return;
         const ride=rideRef.current,mode=ride?.mode??null;
+        // Let the browser paint the route change before issuing the first cab draw.
+        if(preparedRide!==mode){
+          preparedRide=mode;presentedRide=null;setRenderedRide(null);rideMoving=false;
+          if(rideFence){gl.deleteSync(rideFence);rideFence=null;}
+          if(mode){requestFrame();return;}
+          world.urbanContext.endRideView();
+        }
+        if(rideFence){
+          const result=gl.clientWaitSync(rideFence,0,0);
+          if(result===gl.TIMEOUT_EXPIRED){requestFrame();return;}
+          gl.deleteSync(rideFence);rideFence=null;
+          if(gl.isContextLost())return;
+          // On a driver sync error, fall back to presentation on the next animation frame.
+          if(result===gl.WAIT_FAILED){lastVisual='';}
+          presentedRide=mode;setRenderedRide(mode);
+        }
         const modeChanged=mode!==rideMode;
         if(modeChanged){
           rideMode=mode;rideSeconds=0;rideEnded=false;
           if(mode&&rides&&!interiors){
-            interiors=rides[1].createRideInteriors();camera.add(interiors.root);
-            // One soft, unshadowed beam lights the running surface directly ahead of the cab.
-            headlamp=new THREE.SpotLight('#fff0cf',0,5.4,.35,.78,0);
-            camera.add(headlamp,headlamp.target);headlamp.visible=false;
+            interiors=rides[1].createRideInteriors();scene.add(interiors.root);
           }
-          if(headlamp){
-            const tram=mode==='streetcar';
-            headlamp.position.set(tram ? .018:.023,tram?-.072:-.038,tram?-.075:-.13);
-            headlamp.target.position.set(0,-.23,-2.7);
-            headlamp.visible=false;
-          }
+          seatLook.current.yaw=0;seatLook.current.pitch=0;lookDrag=null;
+          if(!mode){presentedRide=null;setRenderedRide(null);streetIllumination.setCabLamp(lampPosition,lampAim,0);}
           interiors?.show(mode==='bridge'?'sedan':mode==='streetcar'?'tram':null);
           world.tram.visible=mode!=='streetcar';
           clearKeys();touches.clear();pointer.down=false;pair=null;nativeTouchPair=false;
           hoveredPerson=-1;closeConversation();identifyFerry(-1);setFocus(null);
-          host.style.cursor=mode?'default':'grab';
+          host.style.cursor='grab';
           lastVisual='';lastMotion=-1;
         }
         const usingKeys=travelKeys.current.size>0||tapKeys.current.size>0;
-        const movingCamera=ride?!ride.paused:usingKeys||pointer.down||touches.size>0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.tilt.value-settings.current.tilt)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005;
+        const movingCamera=ride?(!ride.paused||usingKeys||lookDrag!==null):usingKeys||pointer.down||touches.size>0||now-lastInput<1200||Math.abs(cameraAxes.yaw.value-settings.current.yaw)>.0005||Math.abs(cameraAxes.tilt.value-settings.current.tilt)>.0005||Math.abs(cameraAxes.zoom.value-settings.current.zoom)>.0005;
         // A stationary visitor can watch the waterfront at 30 fps. Give gestures
         // up to 60 fps, including on displays that refresh at 120 or 144 Hz.
         const interval=1000/(movingCamera&&!economy&&!streetView?60:30);
@@ -431,20 +465,28 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           if(nextQuality!==quality){quality=nextQuality;resize();lastVisual='';}
         }
         const config=settings.current, still=ride?.paused??config.paused;
-        if(mode&&rides&&!still&&!modeChanged){
+        const advancing=!!mode&&!still&&presentedRide===mode;
+        if(mode&&rides&&advancing&&rideMoving){
           const duration=rides[0].rideDuration(mode);
           rideSeconds=Math.min(rideSeconds+dt,duration);
           if(rideSeconds===duration&&!rideEnded){rideEnded=true;endRideRef.current?.();}
         }
+        rideMoving=advancing;
         const driver=mode&&rides?rides[0].driverPose(mode,rideSeconds):null;
         if(!still)elapsed+=dt;
         if(usingKeys){
           const key=(...names:string[])=>Number(names.some(k=>travelKeys.current.has(k)||tapKeys.current.has(k)));
           const turn=key('e')-key('q');
           const keyDt=tapKeys.current.size?Math.max(dt,.09):dt;
-          config.yaw+=turn*1.22*keyDt;
-          const next=moveWaterfrontFocus(target.x,target.z,cameraAxes.yaw.value,key('w','arrowup')-key('s','arrowdown'),key('d','arrowright')-key('a','arrowleft'),keyDt);
-          target.x=next.x;target.z=next.z;lastInput=now;tapKeys.current.clear();
+          if(mode){
+            seatLook.current.yaw+=(key('arrowleft','q')-key('arrowright','e'))*1.55*keyDt;
+            seatLook.current.pitch=clampHeadPitch(seatLook.current.pitch+(key('arrowup')-key('arrowdown'))*1.15*keyDt);
+          }else{
+            config.yaw+=turn*1.22*keyDt;
+            const next=moveWaterfrontFocus(target.x,target.z,cameraAxes.yaw.value,key('w','arrowup')-key('s','arrowdown'),key('d','arrowright')-key('a','arrowleft'),keyDt);
+            target.x=next.x;target.z=next.z;
+          }
+          lastInput=now;tapKeys.current.clear();
         }
         // A ride owns the projection for its duration. Keep the waterfront's
         // position, lens and in-flight damping state for the return trip.
@@ -454,6 +496,13 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           focalLength=camera.getFilmHeight()/(2*Math.tan(THREE.MathUtils.degToRad(viewAngle*.5)));
           camera.position.set(driver.eye.x,driver.eye.y,driver.eye.z);
           camera.lookAt(driver.look.x,driver.look.y,driver.look.z);
+          // The cab and headlights follow the vehicle. Turning your head changes only the view.
+          if(interiors){interiors.root.position.copy(camera.position);interiors.root.quaternion.copy(camera.quaternion);}
+          const tram=mode==='streetcar';
+          lampPosition.set(tram ? .018:.023,tram?-.072:-.038,tram?-.075:-.13);
+          lampAim.set(0,-.23,-2.7).sub(lampPosition).normalize().applyQuaternion(camera.quaternion);
+          lampPosition.applyQuaternion(camera.quaternion).add(camera.position);
+          camera.rotateY(seatLook.current.yaw);camera.rotateX(seatLook.current.pitch);
         }else{
           yaw=dampCameraAxis(cameraAxes.yaw,config.yaw,dt,pointer.down?9:4.5,reducedMotion.current);
           magnification=dampCameraAxis(cameraAxes.zoom,config.zoom,dt,4,reducedMotion.current);
@@ -473,6 +522,12 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(focalLength!==appliedFocalLength||camera.near!==near){
           camera.near=near;camera.setFocalLength(focalLength);appliedFocalLength=focalLength;
         }
+        let neighborhoodsReady=true;
+        if(mode){
+          camera.updateMatrixWorld();
+          neighborhoodsReady=world.urbanContext.prepareRideView(camera,7);
+          if(!neighborhoodsReady&&presentedRide!==mode){requestFrame();return;}
+        }
         stars.position.copy(camera.position);
         const lightChanged=lastLightingCheck===0;
         if(lightChanged||now-lastLightingCheck>30000||lastLightingCheck===0){
@@ -484,14 +539,16 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           host.dataset.clock=String(local.hours).padStart(2,'0')+':'+String(local.minutes).padStart(2,'0');
           host.dataset.precipitation=snowfall?'snow':weatherTarget.y>.004?'rain':'dry';
           if(!streetView&&host.parentElement)host.parentElement.dataset.solar=local.night>.55?'night':'day';
-          lighting=nightPrint?{...local,sky:0x253b59,water:0x234854,sun:0x91b9dc,night:1,ambient:.87,sunIntensity:.83}:local;
-          host.dataset.light=nightPrint?'night-print':lighting.phase;lastLightingCheck=now;skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);}
+          lighting=nightPrint?{...local,sky:0x253b59,horizon:0x394657,water:0x234854,sun:0x91b9dc,fill:0xa9b8d1,bounce:0x777985,night:1,ambient:.87,sunIntensity:.83}:local;
+          host.dataset.light=nightPrint?'night-print':lighting.phase;
+          lastLightingCheck=now;
+          skyColor.setHex(lighting.sky);waterColor.setHex(lighting.water);sunColor.setHex(lighting.sun);
+          horizonColor.setHex(lighting.horizon);fillColor.setHex(lighting.fill);groundColor.setHex(lighting.bounce);
+        }
         const lightEase=still||reducedMotion.current||lightChanged||!presented?1:1-Math.exp(-dt*4.2);
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
-        if(headlamp&&mode){
-          headlamp.intensity=2.1*Math.max(duskAmount,Math.min(.36,fog*.4+rain*.22));
-          headlamp.visible=headlamp.intensity>.08;
-        }
+        world.setFacadeClock(lighting.hours,lighting.minutes,duskAmount);
+        if(mode)streetIllumination.setCabLamp(lampPosition,lampAim,2.1*Math.max(duskAmount,Math.min(.36,fog*.4+rain*.22)));
         interiors?.updateRain(snowfall?0:rain,dt,still||reducedMotion.current);
         const directSun=nightPrint?0:directSunVisibility(lighting.altitude,cloud,fog);
         sun.shadow.intensity=directSun;
@@ -513,12 +570,12 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const marineFog=scene.fog as InstanceType<typeof THREE.Fog>;
         marineFog.near=Math.min(118,weatherNow.w*.36)*(1-fog*.30);
         marineFog.far=weatherNow.w;
-        coastalHorizon.copy(skyBackground).lerp(mistTint,(1-duskAmount)*.53);
+        coastalHorizon.copy(horizonColor);
         const horizonLight=coastalHorizon.r*.2126+coastalHorizon.g*.7152+coastalHorizon.b*.0722;
-        stratusHorizon.setRGB(.94-.12*duskAmount,.98-.04*duskAmount,1.015+.045*duskAmount).multiplyScalar(horizonLight*(1-rain*.24));
+        stratusHorizon.setRGB(.91-.15*duskAmount,.98-.04*duskAmount,1.025+.07*duskAmount).multiplyScalar(horizonLight*(1-rain*.24));
         const ceiling=Math.max(cloud,rain*.84);
         coastalHorizon.lerp(stratusHorizon,THREE.MathUtils.smoothstep(ceiling,.18,.88));
-        marineFog.color.copy(skyBackground).lerp(coastalHorizon,Math.max(ceiling,fog));
+        marineFog.color.copy(coastalHorizon);
         // Edge haze is mixed after Three's output colour-space conversion.
         world.edgeFogColor.value.copy(scene.background as InstanceType<typeof THREE.Color>);
         if(sky)world.edgeFogColor.value.copy(coastalHorizon);
@@ -532,6 +589,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.waterMaterial.color.lerp(weatherTint.copy(waterColor).lerp(rainWater,Math.max(cloud*.56,rain*.72)*(1-duskAmount)),lightEase);
         world.windowMaterial.emissiveIntensity=duskAmount*2.15;
         ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,lighting.ambient*(.78+cloud*.15),lightEase);
+        ambient.color.lerp(fillColor,lightEase);
+        ambient.groundColor.lerp(groundColor,lightEase);
         sun.intensity=THREE.MathUtils.lerp(sun.intensity,lighting.sunIntensity*(1-Math.max(cloud*.88,fog*.79)),lightEase);
         sun.color.lerp(sunColor,lightEase);fill.intensity=.32+duskAmount*.29;
         if(shadows&&!streetView){
@@ -628,7 +687,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.sailboats.forEach((boat,i)=>world.hullShadows[i+world.ferries.length].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));
         precipitation.update(camera,width,height,rain,windTarget,chopTarget,duskAmount,still||reducedMotion.current?0:frameMs/1000,snowfall?'snow':'rain',quality);
         const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
-        const visual=[mode,rideSeconds,marketRevision,snowfall,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
+        const visual=[mode,rideSeconds,world.urbanContext.children.length,seatLook.current.yaw,seatLook.current.pitch,marketRevision,snowfall,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
         const exploring=Math.hypot(target.x,target.z)>.03||Math.abs(magnification-1)>.07||Math.abs(Math.sin((yaw-startYaw)/2))>.06||Math.abs(tilt)>.06;
         if(host.parentElement?.dataset.exploring!==String(exploring)&&host.parentElement)host.parentElement.dataset.exploring=String(exploring);
         const motionState=still?'paused':'playing';if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
@@ -649,8 +708,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           const shadowSun=lighting.azimuth.toFixed(2)+','+lighting.altitude.toFixed(2);
           if(shadows&&(lastShadowSun!==shadowSun||treeDetailChanged)){renderer.shadowMap.needsUpdate=true;lastShadowSun=shadowSun;}
           renderer.info.reset();renderer.render(scene,camera);renderedFrames++;if(!presented){presented=true;setStatus('ready');}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
+        // A fence confirms the GPU finished the first cab image without blocking input.
+        if(mode&&presentedRide!==mode){
+          rideFence=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);
+          if(rideFence){gl.flush();requestFrame();return;}
+          presentedRide=mode;setRenderedRide(mode);
+        }
         if(now-lastFpsReport>=1000){host.dataset.fps=String(Math.round(renderedFrames*1000/(now-lastFpsReport)));renderedFrames=0;lastFpsReport=now;}
-        if(still&&!movingCamera&&!changed&&!conversation&&Math.abs(duskAmount-lighting.night)<.0001){timer=setTimeout(requestFrame,30000);}
+        if(still&&neighborhoodsReady&&!movingCamera&&!changed&&!conversation&&Math.abs(duskAmount-lighting.night)<.0001){timer=setTimeout(requestFrame,30000);}
         else requestFrame();
       }
       requestFrame();
@@ -661,7 +726,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
         world.root.traverse(o=>{if(o instanceof THREE.BatchedMesh){geometries.delete(o.geometry);o.dispose();}});
-        interiors?.dispose();headlamp?.dispose();streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
+        if(rideFence)gl.deleteSync(rideFence);interiors?.dispose();streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
       };
     }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
@@ -670,10 +735,18 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
-  return <section className="world" aria-label={ride?'Driver view':"Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. F identifies a visible ferry and its gate. Enter speaks to a passerby."} data-view={ride?.mode??'waterfront'} tabIndex={0}
+  return <section className="world" aria-label={ride?'Driver view. Drag or use arrow keys to look around. Double-click or press Home to face forward. Escape returns to the waterfront.':"Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. F identifies a visible ferry and its gate. Enter speaks to a passerby."} data-view={ride?.mode??'waterfront'} tabIndex={0}
     onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget)||e.relatedTarget!==mount.current){travelKeys.current.clear();tapKeys.current.clear();}}}
     onKeyDown={e=>{
-      if(ride)return;
+      if(ride){
+        if(e.metaKey||e.ctrlKey||e.altKey||(e.target instanceof HTMLElement&&e.target.closest('select,input,textarea,[contenteditable=true]')))return;
+        const key=e.key.toLowerCase();
+        if(['arrowleft','arrowright','arrowup','arrowdown','q','e'].includes(key)){
+          if(!e.repeat){travelKeys.current.add(key);tapKeys.current.add(key);}
+        }else if(key==='home'){seatLook.current.yaw=0;seatLook.current.pitch=0;}
+        else return;
+        e.preventDefault();wake.current();return;
+      }
       if((e.target!==e.currentTarget&&e.target!==mount.current)||e.metaKey||e.ctrlKey||e.altKey)return;
       const key=e.key.toLowerCase();
       if(['w','a','s','d','q','e','arrowleft','arrowright','arrowup','arrowdown'].includes(key)){
@@ -687,6 +760,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       e.preventDefault();wake.current();
     }}>
     <div className="world-poster" data-state={status} data-still={paused} aria-hidden="true"><div className="world-arrival-fog"/></div><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
+    {ride&&status==='ready'&&<div className="ride-boarding" data-ready={renderedRide===ride.mode} aria-hidden={renderedRide===ride.mode} role="status">
+      <div><strong>{ride.mode==='bridge'?'Bay Bridge drive':'F-line streetcar'}</strong><span>Drag to look around</span></div>
+    </div>}
     {overlay}{(ferryLabel||focus)&&<div className="world-place" role="status">{ferryLabel||(focus&&landmarks[focus].label)}</div>}
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}
     {status==='loading'&&<div className="world-loading" role="status"><span className="sr-only">Loading the waterfront</span></div>}
