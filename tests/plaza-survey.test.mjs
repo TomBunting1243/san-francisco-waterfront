@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {ferryPublicRealm} from '../app/ferry-architecture.ts';
 import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
-import {createRideInteriors} from '../app/ride-interior.ts';
+import {createRideInteriors,placePassenger} from '../app/ride-interior.ts';
 import {createLandscape} from '../app/landscape.ts';
 import {plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
 import {waterfrontGardens} from '../app/waterfront-gardens.ts';
@@ -188,15 +188,16 @@ test('the streetcar sees dry Ferry Building forecourt, stepped entry and open wa
   camera.lookAt(p.look.x,p.look.y,p.look.z);
   const cab=createRideInteriors();cab.show('tram');
   cab.root.position.copy(camera.position);cab.root.quaternion.copy(camera.quaternion);cab.root.updateMatrixWorld(true);
+  placePassenger(camera,'tram');
   const cabMeshes=[];cab.root.traverseVisible(o=>{if(o.isMesh)cabMeshes.push(o);});
   // One ordinary drag at 1280×760, from (960,380) to (360,369), at arrival.
-  // Only the head turns. The closed doors, pillars and seats still occlude rays.
+  // The cab stays aligned with the car as the seated passenger turns toward the entry.
   const radiansPerPixel=Math.PI/760;
   camera.rotateY(-600*radiansPerPixel);camera.rotateX(-11*radiansPerPixel);camera.updateMatrixWorld(true);
   function first(){
     return ray.intersectObjects(candidates.filter(o=>!o.geometry.boundingBox||ray.ray.intersectsBox(o.geometry.boundingBox)||o===water),false)[0];
   }
-  for(const [x,y,color,height] of [[210,404,'c9c5b3',.0372],[671,381,'ccc4b1',.0515714],[651,372,'ccc4b1',.0824286]]){
+  for(const [x,y,color,height] of [[164,408,'c9c5b3',.037975],[660,383,'ccc4b1',.0515714],[647,373,'ccc4b1',.0824286]]){
     ray.setFromCamera(new THREE.Vector2(x/640-1,1-y/380),camera);
     const h=first();assert.ok(h&&h.object!==water);
     const cabHit=ray.intersectObjects(cabMeshes,false)[0];

@@ -372,11 +372,43 @@ function neighborhoods(material: THREE.Material) {
   return [buildings.group(), skyline.group()];
 }
 
+type PathPoint=[x:number,y:number,z:number];
+// Allow a submillimetre at the shared cut for Float32 positions far across the bay.
+const roadCutMargin=.00005;
+type PavedStrip={outline:PathPoint[];minX:number;maxX:number;minZ:number;maxZ:number};
+
+// Subtract a clockwise convex road strip in plan. A split point retains the
+// trail's interpolated elevation even where the relief changes slope.
+function outsidePavement(trail:PathPoint[],outline:PathPoint[]){
+  const remaining:PathPoint[][]=[];
+  let inside=trail;
+  for(let i=0;i<outline.length;i++){
+    const start=outline[i],end=outline[(i+1)%outline.length];
+    const dx=end[0]-start[0],dz=end[2]-start[2],margin=roadCutMargin*Math.hypot(dx,dz);
+    const side=([x,,z]:PathPoint)=>dx*(z-start[2])-dz*(x-start[0])-margin;
+    const inner:PathPoint[]=[],outer:PathPoint[]=[];
+    for(let j=0;j<inside.length;j++){
+      const a=inside[j],b=inside[(j+1)%inside.length],da=side(a),db=side(b);
+      (da>0?outer:inner).push(a);
+      if((da>0)!==(db>0)){
+        const t=da/(da-db),cut:PathPoint=[a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1]),a[2]+t*(b[2]-a[2])];
+        inner.push(cut);outer.push(cut);
+      }
+    }
+    if(outer.length>=3)remaining.push(outer);
+    if(inner.length<3)return [trail];
+    inside=inner;
+  }
+  return remaining;
+}
+
 function streets(material: THREE.Material) {
   const streets = spatialBatches('Mapped hill streets and park paths', material);
   const paved = new THREE.Color('#838c88'), trail = new THREE.Color('#b5ad91');
-  for (const [kind, line] of data.paths) {
+  const cells=new Map<string,PavedStrip[]>();
+  for(const walking of [false,true])for (const [kind, line] of data.paths) {
     const foot = kind === 'footway' || kind === 'path' || kind === 'steps';
+    if(walking!==foot)continue;
     const width = foot ? .055 : kind === 'motorway' || kind === 'primary' ? .36 : kind === 'service' ? .11 : .23;
     const color = foot ? trail : paved;
     for (let i = 1; i < line.length; i++) {
@@ -392,12 +424,22 @@ function streets(material: THREE.Material) {
         if (Math.min(y1, y2) < waterSurface.level + .07) continue;
         const roads = streets.at(sx, sz);
         const lx = dz * width / 2, lz = -dx * width / 2;
-        roads.vertex(sx - lx, y1 + .055, sz - lz, color);
-        roads.vertex(tx + lx, y2 + .055, tz + lz, color);
-        roads.vertex(sx + lx, y1 + .055, sz + lz, color);
-        roads.vertex(sx - lx, y1 + .055, sz - lz, color);
-        roads.vertex(tx - lx, y2 + .055, tz - lz, color);
-        roads.vertex(tx + lx, y2 + .055, tz + lz, color);
+        const outline:PathPoint[]=[[sx-lx,y1+.055,sz-lz],[tx-lx,y2+.055,tz-lz],[tx+lx,y2+.055,tz+lz],[sx+lx,y1+.055,sz+lz]];
+        const pad=foot?roadCutMargin:0;
+        const minX=Math.min(sx,tx)-Math.abs(lx)-pad,maxX=Math.max(sx,tx)+Math.abs(lx)+pad;
+        const minZ=Math.min(sz,tz)-Math.abs(lz)-pad,maxZ=Math.max(sz,tz)+Math.abs(lz)+pad;
+        const strip={outline,minX,maxX,minZ,maxZ},crossings=new Set<PavedStrip>();
+        for(let x=Math.floor(minX/2);x<=Math.floor(maxX/2);x++)for(let z=Math.floor(minZ/2);z<=Math.floor(maxZ/2);z++){
+          const key=x+','+z,neighbors=cells.get(key);
+          if(foot){
+            for(const n of neighbors??[])if(n.minX<maxX&&n.maxX>minX&&n.minZ<maxZ&&n.maxZ>minZ)crossings.add(n);
+          }else if(neighbors)neighbors.push(strip);else cells.set(key,[strip]);
+        }
+        let exposed=[outline];
+        for(const crossing of crossings)exposed=exposed.flatMap(piece=>outsidePavement(piece,crossing.outline));
+        for(const piece of exposed)for(let k=1;k+1<piece.length;k++){
+          roads.vertex(...piece[0],color);roads.vertex(...piece[k],color);roads.vertex(...piece[k+1],color);
+        }
       }
     }
   }

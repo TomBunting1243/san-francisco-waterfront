@@ -1,3 +1,4 @@
+import {addFolsomPortal,folsomPavement} from './folsom-portal.ts';
 import {addRinconCurbEdge} from './rincon-curb-edge.ts';
 import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
@@ -130,6 +131,7 @@ export function addSurveyBlocks(mesh:Surface){
   }
   const at=(plan:Plan)=>tileAt(plan[0][0][0],plan[0][0][1]);
   addRinconCurbEdge(tileAt(-28,-2));
+  addFolsomPortal(mesh);
   for(const plan of bealeSidewalk)at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   // Broad planted beds visible in the registered Beale transit-block aerial.
   // A shallow raised crown darkens their edges without adding leaf cutouts.
@@ -148,7 +150,7 @@ export function addSurveyBlocks(mesh:Surface){
   addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
-    for(const [i,polygon] of polygons.entries())for(const piece of replacementPavement(kind,i,polygon)){
+    for(const [i,polygon] of polygons.entries())for(const piece of folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
       if(kind==='sidewalk'&&piece[0].some(([x,z])=>x>=-56&&x<=30&&z>=-8&&z<=2)){
         const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
         if(!tile)walkTiles.set(id,tile=new Tile());

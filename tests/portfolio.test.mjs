@@ -489,6 +489,23 @@ test('Ferry Plaza roof glazing remains visible after merging into front-sided ba
     assert.equal(roof.attributes.uv.count,roof.attributes.position.count);
     for(let i=0;i<roof.attributes.normal.count;i++)assert.ok(roof.attributes.normal.getY(i)>0,'Roof faces away from an elevated camera');
     assert.ok(mergeGeometries([new THREE.BoxGeometry().toNonIndexed(),roof]),'Roof cannot merge with the static architecture');
+    const [u0,v0]=[-5.472,6.777],c=.99263,t=.12123;
+    detail.root.updateMatrixWorld(true);
+    const cast=(u,v,part)=>new THREE.Raycaster(new THREE.Vector3(u0+u*c-v*t,2,v0+u*t+v*c),new THREE.Vector3(0,-1,0)).intersectObject(part,false)[0]?.point.y;
+    const skin=detail.root.getObjectByName('Ferry Plaza glazed roof');
+    const bounds=new THREE.Box3().setFromObject(skin);
+    assert.ok(bounds.min.y>=buildings.find(b=>b.id===id).h-1e-5);
+    if(id===123559869){
+      const head=detail.root.getObjectByName('Glazed entrance roof upstand');
+      for(const v of [.80,.89]){
+        assert.ok(Math.abs(cast(.865,v,head)-.876)<.001);
+        assert.ok(Math.abs(cast(.865,v,skin)-.75)<.001);
+      }
+      for(const u of [.1,.3,.5])assert.ok(Math.abs(cast(u,.64,skin)-cast(u,.91,skin))<.001,'parallel west roof courses');
+    }else{
+      assert.ok(Math.abs(cast(1.8,.8,skin)-.795)<.001);
+      assert.equal(cast(2.88,.55,skin),undefined,'single-storey service wing');
+    }
   }
 });
 
@@ -606,6 +623,14 @@ test('west portico visitors pass under patterned fanlights, alongside the recess
     ray.set(new THREE.Vector3(ferryEntryX+offset,.17,z),down);
     const h=ray.intersectObject(root,true)[0];
     assert.ok(h&&Math.abs(h.point.y-ferryPorticoGround(z))<.00005,'foot height follows finished entrance floor');
+  }
+  // First-hit depth must also have exactly one owning surface across the
+  // three finish joints, including the first tread and both arcade wings.
+  for(const dx of [-2.05,-.073,.082,2.05])for(const z of [-1.775,-1.749,-1.35,-1.209,-1.17,-.94,-.685,-.65,.065]){
+    if(Math.abs(dx)>1.315&&z<-1.24)continue;
+    ray.set(new THREE.Vector3(ferryEntryX+dx,.13,z),down);
+    const hits=ray.intersectObject(root,true).filter(hit=>Math.abs(hit.point.y-.103)<.000002);
+    assert.equal(new Set(hits.map(h=>h.object)).size,1,'single floor surface at '+[dx,z]);
   }
   assert.ok(ferryTreads.every((t,i)=>i===0||Math.abs(ferryTreads[i-1].top-t.top)/.06<.18));
 });
@@ -866,4 +891,33 @@ test('harbor pane draw IDs follow each clipped quad, preserving room data, tides
   assert.equal(draw.matricesTexture.image.data[moving*16+13],source.instanceMatrix.array[moving*16+13]);
   hook.dispose();assert.equal(source.visible,true);assert.equal(source.parent,parent);assert.equal(draw.parent,null);
   assert.equal(source.geometry.getAttribute('windowGlow').array,glow);
+});
+
+test('the arrival lens widens about the west clock without moving the orbit camera',async()=>{
+  const {clockArrivalFraming,clockArrivalFrame,openingLens,openingYaw}=await import('../app/camera.ts');
+  const clock=new THREE.Vector3(-.1185,2.035,-1.256),bay=new THREE.Vector3(-13,0,50);
+  for(const [w,h] of [[1440,940],[390,844],[820,1180],[3456,1080]]){
+    const lens=openingLens(w,h),f=clockArrivalFraming(w,h);
+    const camera=new THREE.PerspectiveCamera(20,w/h,.35,1800),target=new THREE.Vector3(...openingCamera.target);
+    orbitOffset(lens,openingYaw(w,h),0,camera.position);
+    camera.position.add(target);camera.lookAt(target);camera.updateMatrixWorld();camera.setFocalLength(lens.focalLength);
+    const normal=camera.projectionMatrix.clone(),eye=camera.matrixWorld.clone(),wide=bay.clone().project(camera);
+    let previous=Infinity;
+    for(const t of [0,.15,.33,.5,.75,1]){
+      const {gain,shiftX,shiftY}=clockArrivalFrame(f,t);
+      assert.ok(gain<previous);previous=gain;
+      camera.setFocalLength(lens.focalLength*gain);
+      if(t===1)camera.clearViewOffset();else camera.setViewOffset(w,h,-shiftX,-shiftY,w,h);
+      const dial=clock.clone().project(camera),background=bay.clone().project(camera);
+      if(t===0){
+        assert.ok(Math.abs(dial.x)<1e-8&&Math.abs(dial.y)<1e-8);
+        const rim=clock.clone();rim.x+=11*.3048*.06;
+        assert.ok(Math.abs(Math.abs(rim.project(camera).x-dial.x)*w/Math.min(w,h)-.56)<.005);
+      }
+      assert.ok(Math.abs(background.x-(gain*wide.x+2*shiftX/w))<1e-8);
+      assert.ok(Math.abs(background.y-(gain*wide.y-2*shiftY/h))<1e-8);
+      assert.deepEqual(camera.matrixWorld.elements,eye.elements);
+    }
+    assert.deepEqual(camera.projectionMatrix.elements,normal.elements);
+  }
 });

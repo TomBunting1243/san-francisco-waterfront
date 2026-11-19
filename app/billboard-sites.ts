@@ -7,8 +7,8 @@ import {approachGround} from './approach-road.ts';
 const foot=.3048*.06;
 export type BillboardSite={
   name:string;x:number;z:number;y:number;footY:number;yaw:number;width:number;height:number;
-  mounting:'rack'|'wall'|'poster'|'column'|'existing column'; corridor:'I-80'|'Embarcadero'; source:string;
-  evidence:'documented address'|'operator sheet'|'archival approximation'|'licensed kiosk'|'photographed kiosk';
+  mounting:'rack'|'wall'|'poster'; corridor:'I-80'|'Embarcadero'; source:string;
+  evidence:'documented address'|'operator sheet'|'archival approximation';
   latitude?:number;longitude?:number; bearingSpread?:number;
 };
 function roadside(name:string,latitude:number,longitude:number,facing:number,width:number,height:number,aboveGrade:number,
@@ -19,13 +19,6 @@ function roadside(name:string,latitude:number,longitude:number,facing:number,wid
 }
 function archived(name:string,photo:string,x:number,z:number,y:number,footY:number,yaw:number,width:number,height:number,mounting:BillboardSite['mounting']):BillboardSite{
   return {name,x,z,y,footY,yaw,width,height,mounting,corridor:'Embarcadero',evidence:'archival approximation',source:'https://www.opensfhistory.org/Display/'+photo+'.jpg'};
-}
-const license='https://sfgov.legistar.com/View.ashx?GUID=D455AA9A-2A33-49B9-839A-F04BA627A1C7&ID=7920283&M=F';
-const campaign='https://img1.wsimg.com/blobby/go/2bb54cb5-016d-4189-aa87-d933ddec01c5/CalNonProfitsCampaign2025.pdf';
-function kiosk(name:string,x:number,z:number,footY:number,yaw:number,source:string,existing=false):BillboardSite{
-  return {name,x,z,y:footY+.102,footY,yaw,width:.048,height:.121,
-    mounting:existing?'existing column':'column',corridor:'Embarcadero',
-    evidence:source===license?'licensed kiosk':'photographed kiosk',source};
 }
 export const billboardSites:BillboardSite[]=[
   roadside('451 Sixth Street',37.7767809,-122.4032385,201,65,20,1.71,.23,'https://commons.wikimedia.org/wiki/File:Yahoo!_Vacancy.jpg','documented address'),
@@ -45,11 +38,4 @@ export const billboardSites:BillboardSite[]=[
   {...archived('Market · Ferry Loop long roof face','wnp14.12866',-8.90,-7.04,1.32,.8502,.145,.99,.33,'rack'),bearingSpread:.30},
   archived('Market · Ferry Loop neighboring face','wnp14.12866',-8.65,-5.55,.53,.329,.145,.48,.21,'rack'),
   archived('Clay · Harbor Garage roof rack','wnp27.50187',8.83,-10.60,.64,.137,.91,.70,.31,'rack'),
-  // Contract addresses and photographed intersections identify the fixtures.
-  // Heights and sidewalk offsets follow the modeled Market Street column.
-  kiosk('Pier 22½ · Harrison poster kiosk',-43.85,-1.18,.046,-.18,campaign),
-  kiosk('Pier 7 · Broadway poster kiosk',26.68,-1.95,.046,-.18,campaign),
-  kiosk('SFO0002SF · Ferry Building poster kiosk',1.75,-1.86,.031,-.12,license),
-  kiosk('SFO0003SF · 19 Market at Steuart poster kiosk',-1.425,-12.51,.046,.24,license,true),
-  kiosk('SFO0004SF · Market at Spear poster kiosk',-2.64,-15.67,.046,.24,license),
 ];

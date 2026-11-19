@@ -1,47 +1,60 @@
 import * as THREE from 'three';
 import {westMarketGround} from './curb-survey.ts';
 
-const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
-const publishedClosures=new Set(['2026-11-26','2026-12-24','2026-12-31']);
+const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 const clamp=(value:number)=>Math.max(0,Math.min(1,value));
 function progress(minute:number,open:number,close:number){
   return clamp(Math.min((minute-open+30)/30,(close+30-minute)/30));
 }
 
-// Foodwise publishes trading hours and date-specific closures. The SF Arts
-// Commission describes daily artists typically set up by 9 and packing at 4.
+// Keep the Saturday market layout trading throughout the imagined waterfront's
+// day. The independently operated Market Street artists still set up and pack.
 export function ferryMarketSchedule(at:Date){
   const parts=Object.fromEntries(pacific.formatToParts(at).map(p=>[p.type,p.value]));
   const minute=+parts.hour*60 + +parts.minute + +parts.second/60;
-  const saturday=parts.weekday==='Sat';
-  const closure=publishedClosures.has([parts.year,parts.month,parts.day].join('-'));
-  // The street-front stalls are a permanent feature of this imagined waterfront.
-  return {front:1,rear:saturday&&!closure?progress(minute,480,840):0,artist:progress(minute,540,960)};
+  return {front:1,rear:1,artist:progress(minute,540,960)};
 }
 
-type FrontStall='produce'|'flowers'|'info'|'tasting';
-type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist';approach?:'prints'|'shirts';stall?:FrontStall};
+type Stall='produce'|'flowers'|'info'|'tasting';
+type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist';approach?:'prints'|'shirts';stall?:Stall;turn?:boolean};
 // Tent colors and activities come from the operator. Pitch assignments rotate.
 // https://foodwise.org/programs/seasonal-spotlight/
 // https://foodwise.org/markets/group-visits/
 // https://foodwise.org/articles/in-bluma-growing-organic-flowers-at-sunol-agpark/
-const frontPitches:[number,FrontStall][]=[
+const frontPitches:[number,Stall][]=[
   [-5.35,'produce'],[-4.88,'produce'],[-4.41,'flowers'],[-3.64,'produce'],[-3.17,'produce'],
   [-2.70,'tasting'],[-2.23,'produce'],[1.94,'info'],[2.41,'flowers'],[2.88,'produce'],
   [3.65,'produce'],[4.12,'flowers'],[4.59,'produce'],[5.06,'produce'],
 ];
-// Leave the clock-tower entrance, ferry gates, and the pedestrian spine open.
-// Rear stalls occupy the fixed plaza only on Saturdays. Arts vendors occupy the measured
-// edge of the brick court, along the foot of Market. Actual traders rotate.
+// Port existing-conditions plate 12 (May 2021 aerial and November ground
+// photos): tents turn along the south wall and fan onto the fixed rear plaza.
+// Preserve the drive aisle, the central passage, the Golden Gate waiting room,
+// its two detached kiosks and the loop used by the waterfront walkers.
+// https://www.sfport.com/media/9504/download#page=12
+const rearRows:[number,number[]][]=[
+  [3.10,[-5.06,-3.65]],[3.52,[-5.06,-4.59,-4.12,-3.65]],
+  [3.94,[-5.06,-4.59,-4.12,-3.65]],[4.36,[-5.06,-4.59,-4.12,-3.65]],
+  [4.78,[-5.06,-4.59]],
+];
+const extensionRows:[number,number[]][]=[
+  [2.22,[-5.53,-5.06,-2.94]],[4.78,[-4.12,-3.65]],
+  [5.20,[-5.06,-4.59,-4.12]],[5.62,[-5.06,-4.59,-4.12]],
+];
 const sites:Site[]=[
   ...frontPitches.map(([x,stall])=>({x,z:-1.84,floor:.031,section:'front' as const,stall})),
-  ...[3.39,3.96,4.52,5.08].flatMap(z=>[-4.97,-4.48,-3.41,-2.94].map(x=>({x,z,floor:.096,section:'rear' as const}))),
+  ...rearRows.flatMap(([z,row])=>row.map(x=>({x,z,floor:.096,section:'rear' as const,stall:'produce' as const}))),
   ...[[.713,-8.175],[.787,-8.450],[.900,-8.713],[1.025,-8.988],[1.175,-9.238]].map(([x,z])=>({x,z,floor:.127-.0012*(x-2)+.0008*(z+8),section:'artist' as const})),
   // Two white display footprints beside the striped Market approach. Centers read
   // from SF's p2024_rgb8cm aerial, preserving the walking lane between its rows.
   // SFAC Art Vendor Map 30 shows the lottery pitches and open passages here.
   // https://media.api.sf.gov/documents/Revolution_by_MarcoCochrane_B180_SFAC.pdf#page=18
   ...[[-.71,-6.56],[-.72,-6.98]].map(([x,z],i)=>({x,z,floor:westMarketGround(x,z)+.00035,section:'artist' as const,approach:i===0?'prints' as const:'shirts' as const})),
+  // Keep the established art displays on their original pitch numbers.
+  ...[-.94,-.55,-.16,.62,1.02,1.42].map((z,i)=>({x:-6.89,z,floor:.106,section:'rear' as const,
+    stall:i===2?'flowers' as const:'produce' as const,turn:true})),
+  {x:-5.84,z:-1.84,floor:.031,section:'front',stall:'produce'},
+  {x:-6.64,z:1.66,floor:.106,section:'rear',turn:true},
+  ...extensionRows.flatMap(([z,row])=>row.map(x=>({x,z,floor:.096,section:'rear' as const}))),
 ];
 const canvas=['#f2f1e9','#e8e7e2','#f4f0e2','#e9e5d7','#e2e4dd','#f1eae0'];
 const tablecloth=['#647c73','#a35437','#63738a','#9f824b'];
@@ -80,7 +93,8 @@ export function createFerryMarket(){
       const phase=clamp((schedule[site.section]-(i%5)*.018)/(1-(i%5)*.018));
       if(phase<=0)continue;
       function shape(mesh:THREE.InstancedMesh,x:number,y:number,z:number,w:number,h:number,d:number,color:string,rz=0,rx=0){
-        dummy.position.set(site.x+x,site.floor+y,site.z+z);dummy.scale.set(w,h,d);dummy.rotation.set(rx,0,rz);
+        dummy.position.set(site.x+(site.turn?z:x),site.floor+y,site.z+(site.turn?-x:z));
+        dummy.scale.set(w,h,d);dummy.rotation.set(rx,site.turn?Math.PI/2:0,rz,'YXZ');
         dummy.updateMatrix();mesh.setMatrixAt(mesh.count,dummy.matrix);
         let tint=colors.get(color);if(!tint)colors.set(color,tint=new THREE.Color(color));
         mesh.setColorAt(mesh.count++,tint);
@@ -120,8 +134,11 @@ export function createFerryMarket(){
       // Long farmers' tables fit beneath a rectangular fly. Keep the front-to-back
       // dimension and all four feet within the original strip of sidewalk.
       const depth=printCounter?span*.77:span;
-      const width=site.stall==='produce'||site.stall==='flowers'?span*1.45:span;
-      const cloth=artist?'#f6f4e8':site.stall==='info'?'#408456':site.stall==='tasting'?'#da7731':canvas[i%canvas.length];
+      const width=site.stall==='produce'||site.stall==='flowers'?span*(site.section==='front'?1.45:1.18):span;
+      // Most bayside canopies are pale. The Port's overhead photograph also
+      // shows isolated burgundy, blue and ochre flies in the rear rows.
+      const rearCloth=site.section==='rear'?['#a95760','#66839a','#c0a05f'][i%11]:undefined;
+      const cloth=artist?'#f6f4e8':site.stall==='info'?'#408456':site.stall==='tasting'?'#da7731':rearCloth??canvas[i%canvas.length];
       if(phase>.18){
         for(const dx of [-1,1])for(const dz of [-1,1]){
           const x=dx*width*.47,z=dz*depth*.47,base=groundOffset(x,z);
@@ -134,7 +151,7 @@ export function createFerryMarket(){
       }
       const unfold=range(phase,.36,.65),tableY=.025+.027*unfold;
       if(phase>.22){
-        const tableX=.05*(1-unfold),topWidth=site.section==='front'?width*.87:.128;
+        const tableX=.05*(1-unfold),topWidth=site.stall?width*.87:.128;
         shape(boxes,tableX,tableY,-.031+counterShift,topWidth,.007,.047,wood,(1-unfold)*.29);
         for(const side of [-1,1])for(const dz of [-.016,.016]){
           const x=tableX+side*topWidth*.375,z=-.031+dz+counterShift,base=groundOffset(x,z);
@@ -156,7 +173,7 @@ export function createFerryMarket(){
         // Original city drawings are sold as prints as well as on shirts. A
         // shallow half-back keeps the shaded hanging work visible from the aisle.
         shape(boxes,0,frame-.036,.070,.174,.071,.003,'#e1d4b7');
-        shape(boxes,0,tableY-.018,-.055+counterShift,.128,.038,.003,'#56706e');
+        shape(boxes,0,tableY-.0225,-.055+counterShift,.128,.038,.003,'#56706e');
         for(const [j,x] of [-.054,0,.054].entries()){
           shape(boxes,x,.096,.067,.048,.051,.003,'#755b45');
           shape(boxes,x,.096,.064,.043,.047,.002,'#efe3c7');
@@ -245,12 +262,13 @@ export function createFerryMarket(){
           const binWidth=site.stall ? .064 : .037,binDepth=site.stall ? .044 : .034;
           shape(boxes,x,y,z,binWidth,.013,binDepth,wood);
           if(site.stall){
-            for(const side of [-1,1])shape(boxes,x+side*binWidth*.47,y+.008,z,.003,.010,binDepth,'#b99970');
-            shape(boxes,x,y+.006,z-binDepth/2,binWidth,.006,.003,'#bd9a6a');
+            for(const side of [-1,1])shape(boxes,x+side*binWidth*.47,y+.0115,z,.003,.010,binDepth,'#b99970');
+            shape(boxes,x,y+.0095,z-binDepth/2,binWidth,.006,.003,'#bd9a6a');
           }
-          for(let j=0;j<6;j++)
-            shape(rounds,x+(j%3-1)*binWidth*.27,y+.012,z+(j<3?-.006:.006),
-              binWidth*.29,site.stall ? .016 : .009,.013,produce[(i+k)%4]);
+          const distant=site.section==='rear';
+          for(let j=0;j<(distant?3:6);j++)
+            shape(rounds,x+(j%3-1)*binWidth*.27,y+.012,z+(distant?(j%2-.5)*.007:j<3?-.006:.006),
+              binWidth*(distant?.36:.29),site.stall ? .016 : .009,distant?.021:.013,produce[(i+k)%4]);
         }
       }
       if(phase>.87&&i%3===0)person(-.030,-.115,coats[(i+2)%4]);

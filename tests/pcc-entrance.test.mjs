@@ -114,8 +114,13 @@ test('center exit and front entrance fold independently in the baked car and fro
         const open=isExit?exitOpen:frontOpen;
         for(const along of [-.50,-.15,.15,.50]){
           const hit=fire(probe(isExit,along,1.48,-.15),direction,.105);
-          if(!open)assert.equal(hit?.object,leaves,'closed waist panel');
-          else assert.equal(hit,undefined,'clear open passage '+[inside,isExit,along]);
+          if(!open)assert.ok(hit?.object===leaves,'closed waist panel');
+          else if(hit){
+            // Extending the entrance ray past the aisle can reach the seated operator's knee.
+            assert.ok(inside && !isExit && hit.object===cab.root.children[0] &&
+              hit.faceIndex>=hit.object.geometry.userData.driverFirstFace && hit.point.x<.21*.06,
+              'clear open door, stairs and aisle '+[inside,isExit,along,hit.point.toArray()]);
+          }
         }
       }
     }
@@ -142,7 +147,7 @@ test('center exit and front entrance fold independently in the baked car and fro
 test('driver eye sees a continuous PCC body around the clear panes and working entrances',()=>{
   const cab=createRideInteriors();cab.show('tram');cab.root.updateMatrixWorld(true);
   const saloon=cab.root.children[0],eye=new THREE.Vector3();
-  const sight=(x,y,z)=>new THREE.Raycaster(eye,new THREE.Vector3(x,y,z).normalize()).intersectObject(saloon,true)[0];
+  const sight=(x,y,z)=>new THREE.Raycaster(eye,new THREE.Vector3(x,y,z).normalize()).intersectObject(saloon,true).find(hit=>hit.object!==saloon||hit.faceIndex<saloon.geometry.userData.driverFirstFace);
   const closed=(x,y,z)=>assert.ok(sight(x,y,z),'daylight at '+[x,y,z]);
   for(const x of [-.86,-.71,-.33,.10,.52,1.10,1.46]){
     closed(x,-1.17,-.80);closed(x,-.96,-.82);
@@ -150,7 +155,7 @@ test('driver eye sees a continuous PCC body around the clear panes and working e
     closed(x,.80,13.49);
   }
   for(const x of [-.68,-.18,.56,1.17]){
-    assert.equal(sight(x,.12,-.98),undefined,'windshield');
+    assert.ok(!sight(x,.12,-.98),'windshield');
   }
   assert.equal(sight(.10,.09,13.49),undefined,'rear glass');
   assert.equal(sight(-.90,.07,.68),undefined,'side glass');
@@ -163,7 +168,7 @@ test('driver eye sees a continuous PCC body around the clear panes and working e
       // The rear waist panels sit behind the passenger seats from this angle.
       const hit=sight(1.506,i?.05:-.68,z+.14);
       if(opening===0)assert.equal(hit?.object.name,'PCC four folding entrance leaves');
-      else assert.equal(hit,undefined,'open doorway from the seat');
+      else assert.ok(!hit,'open doorway from the operator position');
     }
     setDoor(0);
   }

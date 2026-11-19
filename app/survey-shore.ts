@@ -1,3 +1,4 @@
+import folsom from '../public/data/folsom-portal.json' with {type:'json'};
 import {rinconTerrace} from './rincon-curb-edge.ts';
 import {harborDatum,waterSurface} from './water-surface.ts';
 import * as THREE from 'three';
@@ -10,6 +11,7 @@ type CoastalCell=[number,Polygon[],Polygon[]];
 const masks=new Map(Object.entries(data.tidalVertices).map(([key,indices])=>[key,new Set(indices)]));
 const cuts=new Map(Object.entries(data.coastalCells).map(([key,cells])=>[key,
   new Map((cells as CoastalCell[]).map(([index,lower,upper])=>[index,[lower,upper] as const]))]));
+for(const [index,a,b] of folsom.cells as CoastalCell[])cuts.get('city')!.set(index,[a,b]);
 const bayCuts=cuts.get('bay')!,bayMask=masks.get('bay')!;
 for(const index of eastBay.water)bayCuts.set(index,[[],[]]);
 for(const [index,lower,upper] of eastBay.coastalCells as CoastalCell[])bayCuts.set(index,[lower,upper]);

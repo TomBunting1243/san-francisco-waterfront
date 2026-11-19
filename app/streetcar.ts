@@ -22,6 +22,10 @@ export function createStreetcar(){
   const radius=.335*.06/group.scale.y;
   for(const x of [-pccTruckHalfSpacing,pccTruckHalfSpacing]){
     box(.69,.14,.49,x,.19,0,materials.dark).userData.truck=x;
+    // Only the center bearing reaches up into the fixed girder; the frame
+    // and both axles remain free to swivel and pitch beneath it.
+    const bearing=part(new THREE.CylinderGeometry(.034,.034,.058,12),materials.dark,x,.284,0);
+    bearing.name='Truck center bearing';bearing.scale.x=group.scale.z/group.scale.x;bearing.userData.truck=x;
     for(const dx of [-pccAxleHalfSpacing,pccAxleHalfSpacing])for(const z of [-wheelCenter,wheelCenter]){
       const wheel=part(new THREE.CylinderGeometry(radius,radius,.058,18),materials.rubber,x+dx,radius,z);wheel.rotation.x=Math.PI/2;wheel.scale.x=group.scale.y/group.scale.x;wheel.name='Wheel tread';wheel.userData.truck=x;
       const hub=part(new THREE.CylinderGeometry(radius*.66,radius*.66,.060,12),materials.dark,x+dx,radius,z);hub.rotation.x=Math.PI/2;hub.scale.x=group.scale.y/group.scale.x;hub.userData.truck=x;

@@ -1,3 +1,4 @@
+import {ferryPatios} from './ferry-patios.ts';
 import {ferryGlazing} from './ferry-portico-glazing.ts';
 import {ferryEntryX,ferryHallFloor,ferryTowerZ,ferryTreads} from './ferry-portico-access.ts';
 import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
@@ -101,7 +102,8 @@ export function ferryHall(font:Font) {
 
   // The ground-floor breezeway remains open between plazas. Its floor and mezzanine
   // bridge the slot between the two ground-floor volumes.
-  box(width-.07,.054,depth+.07,centerX,.076,(bayZ+streetZ)/2,ashlar).name='Breezeway paving';
+  const arcadeBack=streetZ+.547,bayEdge=bayZ+.035;
+  box(width-.07,.054,bayEdge-arcadeBack,centerX,ferryHallFloor-.027,(bayEdge+arcadeBack)/2,ashlar).name='Breezeway paving';
   for(const [a,b] of [[left+.12,towerX-breezeWidth/2],[towerX+breezeWidth/2,right-.12]]){
     // Set the marketplace back to column line B. The original box sat in
     // front of the west shop windows, hiding their glazing and closed doors.
@@ -203,10 +205,13 @@ export function ferryHall(font:Font) {
     box(porticoWidth+.08+tread.extraWidth,tread.top-.030,tread.depth,0,(tread.top+.030)/2,
       porticoZ-tread.z,'#ccc4b1',portico);
   }
-  const landingDepth=streetZ-porticoZ;
-  box(porticoWidth,.054,landingDepth+.025,0,ferryHallFloor-.027,.014-landingDepth/2,ashlar,portico).name='Portico landing';
-  // The recessed walk connects the open arcades to the main market entrance.
-  box(width-.06,.036,.574,0,ferryHallFloor-.018,-.260,pale,street);
+  const landingFront=ferryTreads[0].z+ferryTreads[0].depth/2;
+  box(porticoWidth,.054,streetZ-landingFront,towerX,ferryHallFloor-.027,(landingFront+streetZ)/2,ashlar).name='Portico landing';
+  // Continuous grade from the top tread into the hall; each finish owns its footprint.
+  for(const [a,b,front] of [[left+.030,towerX-porticoWidth/2,streetZ-.035],
+    [towerX-porticoWidth/2,towerX+porticoWidth/2,streetZ],[towerX+porticoWidth/2,right-.030,streetZ-.035]]){
+    box(b-a,.036,arcadeBack-front,(a+b)/2,ferryHallFloor-.018,(front+arcadeBack)/2,pale).name='Recessed arcade paving';
+  }
 
   // Port/SFMTA right-of-way polygons 110 and 128 already pave the west
   // approach, including the curb returns and accessible ramps. Match their
@@ -565,6 +570,7 @@ export function ferryPublicRealm() {
       stem.rotation.z=(k%3-1)*.23;
     }
   }
+  root.add(ferryPatios());
   // Keep the passage and the apron clear for ferry queues; the movable market
   // stands live alongside the building and the fixed deck is built by the terminal.
   for(let x=-6.08;x<6.23;x+=.366){

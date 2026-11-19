@@ -325,18 +325,19 @@ export function centerTowerFacade(tower:Tower,buildings:Tower[]){
       return !peers.some(p=>y>=(p.minH||0)&&y<p.h&&insideBuilding(px,pz,p.p));
     };
     const bays=Math.max(1,Math.round(len/.151)),w=len/bays;
+    const capped=clear(0,tower.h-.026),fasciaTop=tower.h-(capped?.056:0);
     for(let i=0;i<bays;i++){
       const u=-len/2+(i+.5)*w;
       if(!clear(u,lower+story/2))continue;
       box(w*.79,tower.h-lower-.05,.024,u,(lower+tower.h-.05)/2,.014,glass,face);
-      box(w*.26,tower.h-lower,.057,u-w*.455,(lower+tower.h)/2,.032,fascia,face);
+      box(w*.26,fasciaTop-lower,.057,u-w*.455,(lower+fasciaTop)/2,.032,fascia,face);
       for(let f=0;f<floors;f++){
         const y=lower+(f+.5)*story;
         windows.push({x:x+nz*u+nx*.037,z:z-nx*u+nz*.037,y,ry:face.rotation.y,w:w*.66,h:story*.71});
       }
     }
     for(let f=1;f<floors;f++)if(clear(0,lower+f*story))box(len,.025,.027,0,lower+f*story,.031,shade,face);
-    if(clear(0,tower.h-.026))box(len+.012,.056,.057,0,tower.h-.028,.037,precast,face);
+    if(capped)box(len+.012,.056,.057,0,tower.h-.028,.037,precast,face);
   }
   return {root,windows};
 }

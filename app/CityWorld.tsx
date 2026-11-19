@@ -6,6 +6,8 @@ import { harborWash, directSunVisibility, harborSunDirection, pacificLighting } 
 import { cityDate,cityWeather,type CityConditions } from './city-conditions';
 import { harborChristmasSnow,readWaterfrontWeather,type WaterfrontWeather } from './waterfront-weather';
 import WaterfrontLoading from './WaterfrontLoading';
+import WaterfrontPoster from './WaterfrontPoster';
+import {arrivalProgress,beginClockArrival,finishClockArrival} from './clock-arrival';
 import SceneControls from './SceneControls';
 import { ferryPose, birdPose, sailingPose } from './motion';
 import {waterHeight} from './water-surface';
@@ -15,7 +17,7 @@ import {setVehiclePaintLight} from './street-vehicles';
 import type { RideMode } from './driver-rides';
 type Ride = {mode:RideMode; paused:boolean};
 import {updateTreeBatches} from './tree-batches';
-import { openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
+import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { starfieldData } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
 import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
@@ -72,6 +74,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     const localLight=pacificLighting(cityDate(new Date(),conditionsRef.current.minutes));
     if(!streetView&&host.parentElement){
       host.parentElement.dataset.solar=localLight.night>.55?'night':'day';
+      const darkPrint=conditionsRef.current.minutes===undefined&&document.documentElement.dataset.palette==='ink';
+      document.documentElement.dataset.clockLight=darkPrint||localLight.night>.55?'night':'day';
       if(localLight.night>.55)host.closest('main')?.setAttribute('data-harbor-light','dark');
     }
     let disposed = false;
@@ -170,6 +174,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let quality=compact?0:maxQuality,qualityMonitor=createQualityMonitor(maxQuality,quality);
       let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastTransitMinute=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       let lens=openingLens(host.clientWidth,host.clientHeight);
+      let clockFraming=clockArrivalFraming(host.clientWidth,host.clientHeight);
+      let arrivalComplete=streetView;
+      const clockCapture=/^city-clock/.test((window as Window & {cityPosterCapture?:string}).cityPosterCapture??'');
       const startYaw=openingYaw(host.clientWidth,host.clientHeight);settings.current.yaw=startYaw;
       const target = new THREE.Vector3(...openingCamera.target);
       const clearKeys=()=>{travelKeys.current.clear();tapKeys.current.clear();};
@@ -369,7 +376,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       function resize() {
         width=host.clientWidth; height=host.clientHeight;
         if(!width||!height)return;
-        lens=openingLens(width,height);
+        lens=openingLens(width,height);clockFraming=clockArrivalFraming(width,height);
         const viewportQuality=economy?0:compact||streetView||width<650?1:2;
         if(viewportQuality!==maxQuality){maxQuality=viewportQuality;qualityMonitor=createQualityMonitor(maxQuality);quality=maxQuality;}
         renderer.setPixelRatio(drawingPixelRatio(width,height,Math.min(window.devicePixelRatio||1,compact?1.5:Infinity),economy,streetView,maxQuality-quality)); renderer.setSize(width,height);print?.resize(quality,compact);
@@ -569,7 +576,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         // A ride owns the projection for its duration. Keep the waterfront's
         // position, lens and in-flight damping state for the return trip.
         let magnification=cameraAxes.zoom.value,tilt=cameraAxes.tilt.value,focalLength:number;
-        if(driver){
+        if(driver&&rides){
           const viewAngle=THREE.MathUtils.lerp(71,52,THREE.MathUtils.smoothstep(camera.aspect,.65,1.45));
           focalLength=camera.getFilmHeight()/(2*Math.tan(THREE.MathUtils.degToRad(viewAngle*.5)));
           camera.position.set(driver.eye.x,driver.eye.y,driver.eye.z);
@@ -580,6 +587,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           lampPosition.set(tram ? .018:.023,tram?-.072:-.038,tram?-.075:-.13);
           lampAim.set(0,-.23,-2.7).sub(lampPosition).normalize().applyQuaternion(camera.quaternion);
           lampPosition.applyQuaternion(camera.quaternion).add(camera.position);
+          rides[1].placePassenger(camera,tram?'tram':'sedan');
           camera.rotateY(seatLook.current.yaw);camera.rotateX(seatLook.current.pitch);
         }else{
           yaw=dampCameraAxis(cameraAxes.yaw,config.yaw,dt,pointer.down?9:4.5,reducedMotion.current);
@@ -594,9 +602,21 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             camera.lookAt(target);
           }
         }
+        let progress=1;
+        if(!arrivalComplete){
+          if(rideRef.current||still||reducedMotion.current)finishClockArrival();
+          beginClockArrival(now);
+          progress=clockCapture?0:arrivalProgress(now);
+          arrivalComplete=progress===1;
+        }
+        const arrival=progress<1?clockArrivalFrame(clockFraming,progress):null;
+        if(arrival)focalLength*=arrival.gain;
         const near=driver ? .013 : .35;
         if(focalLength!==appliedFocalLength||camera.near!==near){
-          camera.near=near;camera.setFocalLength(focalLength);appliedFocalLength=focalLength;
+          camera.near=near;camera.setFocalLength(focalLength);
+          if(arrival)camera.setViewOffset(width,height,-arrival.shiftX,-arrival.shiftY,width,height);
+          else if(camera.view?.enabled)camera.clearViewOffset();
+          appliedFocalLength=focalLength;
         }
         let neighborhoodsReady=true;
         if(neighborhoods){
@@ -625,7 +645,10 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           const local=pacificLighting(localNow);
           host.dataset.clock=String(local.hours).padStart(2,'0')+':'+String(local.minutes).padStart(2,'0');
           host.dataset.precipitation=snowfall?'snow':weatherTarget.y>.004?'rain':'dry';
-          if(!streetView&&host.parentElement)host.parentElement.dataset.solar=local.night>.55?'night':'day';
+          if(!streetView&&host.parentElement){
+            host.parentElement.dataset.solar=local.night>.55?'night':'day';
+            document.documentElement.dataset.clockLight=nightPrint||local.night>.55?'night':'day';
+          }
           lighting=nightPrint?{...local,...harborWash(-15,0),night:1}:local;
           host.dataset.light=nightPrint?'night-print':lighting.phase;
           lastLightingCheck=now;
@@ -867,7 +890,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
-  return <section className="world" aria-label={ride?'Driver view. Drag or use arrow keys to look around. Double-click or press Home to face forward. Escape returns to the waterfront.':"Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. F identifies a visible ferry and its gate. Enter speaks to a passerby."} data-view={ride?.mode??'waterfront'} tabIndex={0}
+  return <section className="world" aria-label={ride?'Passenger view. Drag or use arrow keys to look around. Double-click or press Home to face forward. Escape returns to the waterfront.':"Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. F identifies a visible ferry and its gate. Enter speaks to a passerby."} data-view={ride?.mode??'waterfront'} tabIndex={0}
     onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget)||e.relatedTarget!==mount.current){travelKeys.current.clear();tapKeys.current.clear();}}}
     onKeyDown={e=>{
       if(ride){
@@ -891,7 +914,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       else return;
       e.preventDefault();wake.current();
     }}>
-    <div className="world-poster" data-state={status} data-still={paused} aria-hidden="true"><div className="world-arrival-fog"/></div><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
+    <WaterfrontPoster state={status} still={paused}/><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
     {ride&&status==='ready'&&<div className="ride-boarding" data-ready={renderedRide===ride.mode} aria-hidden={renderedRide===ride.mode} role="status">
       <div><strong>{ride.mode==='bridge'?'Bay Bridge drive':'F-line streetcar'}</strong><span>Drag to look around</span></div>
     </div>}

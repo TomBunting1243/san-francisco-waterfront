@@ -1,3 +1,4 @@
+import {hillsPalomino} from './hills-plaza.ts';
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
@@ -298,7 +299,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   const blue='#87aeb5', harborBlue='#719ca8', blueTrim='#b9d0ca', rustyRed='#bc623e';
   function sinbadWordmark(size:number,x:number,y:number,z:number,width:number,parent:THREE.Group){
     const backing=sign("Sinbad's",size,y,z,width,'#3c5556',parent);
-    backing.position.x=x;backing.scale.z=2.75;backing.name='Dark sign returns';
+    backing.position.x=x;backing.scale.z=2.4;backing.name='Dark sign returns';
     const face=sign("Sinbad's",size,y,z+.012,width,'#f2db9c',parent);
     face.position.x=x;face.name="SINBAD'S";
   }
@@ -414,8 +415,8 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   }
 
   // Palomino's red horse and capitals looked out over its Hills Plaza terrace.
-  const palomino=group('Palomino',[-38.74,.10,-6.36]);
-  palomino.rotation.y=.148;
+  const palomino=group('Palomino',[hillsPalomino.x,hillsPalomino.y,hillsPalomino.z]);
+  palomino.rotation.y=hillsPalomino.yaw;
   const terra='#ae7459', red='#ae4338';
   box(1.56,.44,.097,0,.257,-.016,terra,palomino);
   box(1.60,.051,.105,0,.513,-.019,'#c19473',palomino);

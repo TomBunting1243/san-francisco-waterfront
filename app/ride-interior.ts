@@ -1,12 +1,18 @@
 import * as THREE from 'three';
 import {mountCabEntrance,setPccFrontDoor,setPccExitDoor} from './pcc-entrance.ts';
+import {addSeatedDriver} from './ride-driver.ts';
 import {pccCarCards} from './pcc-car-cards.ts';
 import {addPccSaloon,pccCabFront,pccCabLeft,pccCabRight} from './pcc-saloon.ts';
 
 export type RideInteriorMode='sedan'|'tram';
 export type CabPoint=[x:number,y:number,z:number];
 
-// Camera-local, metres from a seated driver's eye. Forward is negative Z.
+// Model coordinates in metres from the operator's eye. Forward is negative Z.
+export function placePassenger(camera:THREE.PerspectiveCamera,mode:RideInteriorMode){
+  // Right front bucket, or the first transverse bench behind the PCC boarding well.
+  camera.translateX((mode==='sedan'?.77:1.00)*.06);
+  camera.translateZ((mode==='sedan'?.035:2.49)*.06);
+}
 export type CabGeometry=ReturnType<typeof cabGeometry>;
 function cabGeometry(){
   const positions:number[]=[],colors:number[]=[],illumination:number[]=[],print:number[]=[],indices:number[]=[];
@@ -56,7 +62,15 @@ function cabGeometry(){
     g.setIndex(indices);g.computeVertexNormals();g.computeBoundingSphere();
     return g;
   }
-  return {panel,strip,side,cross,level,seat,finish};
+  return {panel,strip,side,cross,level,seat,finish,triangleCount:()=>indices.length/3};
+}
+
+function finishWithDriver(g:CabGeometry,mode:RideInteriorMode){
+  const driverFirstFace=g.triangleCount();
+  addSeatedDriver(g,mode);
+  const geometry=g.finish();
+  geometry.userData.driverFirstFace=driverFirstFace;
+  return geometry;
 }
 
 function sedan(){
@@ -128,7 +142,7 @@ function sedan(){
   for(const x of [-.065,.77])g.cross(.38,x-.135,x+.135,-.20,-.065,'#6c736a');
   g.seat(-.45,1.12,1.34,-.66,-.25,'#737a6d');
   for(const x of [-.20,.86])g.cross(1.44,x-.14,x+.14,-.26,-.115,'#696f63');
-  return g.finish();
+  return finishWithDriver(g,'sedan');
 }
 
 function pcc(){
@@ -155,7 +169,7 @@ function pcc(){
     g.panel([edge,-.43,pccCabFront],[inner,-.43,pccCabFront-.020],[inner,.556,pccCabFront-.008],[edge,.53,pccCabFront],'#bdb69e');
   }
   addPccSaloon(g);
-  return g.finish();
+  return finishWithDriver(g,'tram');
 }
 
 // The spindle passes through the sill; the arm and rubber meet at the same pin.
@@ -183,7 +197,7 @@ function mountedWiper(cab:THREE.Mesh,origin:CabPoint,slopeX:number,slopeY:number
 }
 
 export function createRideInteriors(){
-  const root=new THREE.Group();root.name='Driver interiors';root.visible=false;
+  const root=new THREE.Group();root.name='Passenger cabins';root.visible=false;
   const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.90,metalness:.035,side:THREE.DoubleSide,fog:false});
   const interiorNight={value:0},cards={value:null as THREE.Texture|null},printed={value:false};
   material.onBeforeCompile=shader=>{

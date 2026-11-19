@@ -3,11 +3,11 @@ import test from 'node:test';
 import * as T from 'three';
 import junction from '../public/data/steuart-junction.json' with {type:'json'};
 import {makeSteuartJunction,addMarketRunningRails,donCheeBedHeight} from '../app/steuart-junction.ts';
-import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
+import {driverPose,museumLegDuration,rideDuration} from '../app/driver-rides.ts';
 import {streetcarTrack,trackCenterlines} from '../app/streets.ts';
 import market from '../public/data/market-street.json' with {type:'json'};
 import {buildStreetcarTrack} from '../app/streets.ts';
-import {createStreetcar,bakeStreetcarTrucks,setStreetcarTrucks,pccDimensions} from '../app/streetcar.ts';
+import {createStreetcar,bakePccBody,bakeStreetcarTrucks,setStreetcarTrucks,pccDimensions} from '../app/streetcar.ts';
 const down=new T.Vector3(0,-1,0),cast=new T.Raycaster();
 function hits(objects,x,y,z,far){
   cast.set(new T.Vector3(x,y,z),down);cast.far=far;
@@ -105,4 +105,51 @@ test('the museum ride crosses the physical wye on eight tread contacts and clear
   }
   assert.ok(checks>1200);
   setStreetcarTrucks(tram);assert.equal(trucks.userData.atRest,true);
+});
+
+
+test('both PCC trucks swivel below the fixed underframe for the entire ride with their center bearings engaged',()=>{
+  const {group,glazing,lamp}=createStreetcar();
+  const running=new T.Box3(),bearing=new T.Box3(),point=new T.Vector3();
+  for(const part of group.children.filter(p=>p.userData.truck>0)){
+    part.updateMatrix();
+    const physical=new T.Matrix4().makeScale(group.scale.x,group.scale.y,group.scale.z)
+      .multiply(new T.Matrix4().makeTranslation(-part.userData.truck,0,0)).multiply(part.matrix);
+    const bounds=part.name==='Truck center bearing'?bearing:running;
+    const pos=part.geometry.attributes.position;
+    for(let i=0;i<pos.count;i++)bounds.expandByPoint(point.fromBufferAttribute(pos,i).applyMatrix4(physical));
+  }
+  assert.ok(!running.isEmpty()&&!bearing.isEmpty());
+  bakePccBody(group,glazing,lamp);
+  const trucks=group.getObjectByName('PCC swivel trucks'),body=group.getObjectByName('PCC formed and painted body').geometry;
+  const {position,color}=body.attributes,index=body.index.array,fixed=[];
+  const ink=new T.Color('#3c433e');
+  for(let i=0;i<index.length;i+=3){
+    const v=index[i];
+    if(![ink.r,ink.g,ink.b].every((c,k)=>Math.abs(c-color.getComponent(v,k))<=.5/255))continue;
+    fixed.push(new T.Triangle(...[v,index[i+1],index[i+2]].map(j=>new T.Vector3().fromBufferAttribute(position,j))));
+  }
+  assert.ok(fixed.length>=12);
+  const local=new T.Matrix4(),swept=new T.Box3(),pivot=new T.Box3(),up=new T.Vector3(0,1,0),ray=new T.Ray();
+  function clearance(){
+    for(let i=0;i<2;i++){
+      trucks.getMatrixAt(i,local);
+      swept.copy(running).applyMatrix4(local).expandByScalar(.004);
+      assert.ok(fixed.every(face=>!swept.intersectsTriangle(face)),'wheel or truck frame reaches fixed body steel');
+      pivot.copy(bearing).applyMatrix4(local);pivot.getCenter(ray.origin);ray.origin.y=0;ray.direction.copy(up);
+      const heights=[];
+      for(const face of fixed){
+        const hit=ray.intersectTriangle(face.a,face.b,face.c,false,point);
+        if(hit)heights.push(hit.y);
+      }
+      assert.ok(heights.length>=2&&Math.min(...heights)<pivot.max.y&&Math.max(...heights)>pivot.max.y,
+        'center bearing ends inside its fixed bolster');
+    }
+  }
+  clearance();
+  const end=rideDuration('streetcar');
+  for(let i=0;i<=Math.ceil(end*10);i++){
+    setStreetcarTrucks(group,driverPose('streetcar',Math.min(i/10,end)).body);clearance();
+  }
+  setStreetcarTrucks(group);clearance();
 });

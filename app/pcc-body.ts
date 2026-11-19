@@ -239,7 +239,12 @@ export function addPccBody(group:THREE.Group,glazing:THREE.MeshStandardMaterial,
   fittings.box(-.38,1.041,0,.94,.053,.278,green);
   for(let i=0;i<10;i++)for(const side of [-1,1])fittings.box(-.81+i*.094,1.041,side*.140,.056,.023,.007,'#394d3e');
   for(const side of [-1,1])fittings.box(0,.917,side*.400,2.97,.010,.008,'#476b50');
-  for(const [a,b] of [[-1.375,rearL],[rearR,1.30]])fittings.box((a+b)/2,.18,0,b-a,.16,.49,'#3c433e');
+  // The sprung underframe bridges the two bogies. The low equipment cabinet
+  // stops before the forward truck's swept corner on the museum turnout.
+  const girderBottom=.295,girderTop=.322,cabinetEnd=pccTruckHalfSpacing-.405;
+  for(const [a,b] of [[-1.375,rearL],[rearR,1.30]])
+    fittings.box((a+b)/2,(girderBottom+girderTop)/2,0,b-a,girderTop-girderBottom,.49,'#3c433e');
+  fittings.box((rearR+cabinetEnd)/2,(.10+girderBottom)/2,0,cabinetEnd-rearR,girderBottom-.10,.49,'#3c433e');
   // Each folding doorway opens above a recessed well and a floor continuous
   // across the car. The thin skirt and rub rails end at the actual jambs.
   const sy=.06/group.scale.y,sz=.06/group.scale.z,z=.42,far=-.371;

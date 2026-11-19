@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import portal from '../public/data/folsom-portal.json' with {type:'json'};
 import {frostCurbRuns,frostPavement} from './california-sidewalk.ts';
 import data from '../public/data/curb-survey.json' with {type:'json'};
 
@@ -16,7 +17,11 @@ function inside(x:number,z:number,ring:number[][]){
 }
 type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Run=[number,number,number[][]];
-export const curbRuns=frostCurbRuns(data.lines as Run[]);
+const portalCurbs:Record<string,number[][][]>=portal.curbs;
+export const curbRuns=frostCurbRuns(data.lines as Run[]).flatMap((run):Run[]=>{
+  const [source,median,path]=run,cut=portalCurbs[source+':'+path[0][0]+','+path[0][1]];
+  return cut?cut.map(points=>[source,median,points]):[run];
+});
 export const medianPaving=data.medianPaving;
 export const medianSlab=data.medianSlab;
 export const ferryRefugePaving=data.ferryRefugePaving;

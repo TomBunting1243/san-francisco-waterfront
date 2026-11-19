@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {waterfrontCar,waterfrontCarCount,waterfrontWalker,waterfrontWalkerCount} from '../app/waterfront-routes.ts';
 import {createWaterfrontTraffic} from '../app/waterfront-traffic.ts';
+import {plazaCrossingCount,plazaCrossingPose} from '../app/plaza-walkers.ts';
 import {plazaSkaterCount,plazaSkaterPose} from '../app/plaza-skaters.ts';
 import {createLandscape,createCityVignette} from '../app/landscape.ts';
 import {harryBridgesBoundary} from '../app/curb-survey.ts';
@@ -210,7 +211,7 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
   const down=new THREE.Vector3(0,-1,0),ray=new THREE.Raycaster(),point=new THREE.Vector3();
   for(const world of [city,vignette]){
     world.root.updateMatrixWorld(true);
-    const local=[],region=new THREE.Box3(new THREE.Vector3(1.70,.025,-5.02),new THREE.Vector3(3.86,.171,-4.19));
+    const local=[],region=new THREE.Box3(new THREE.Vector3(-1.08,.025,-5.30),new THREE.Vector3(.31,.171,-4.20));
     const box=new THREE.Box3(),corners=[new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()];
     for(const mesh of [...world.architectureChunks,world.root.getObjectByName('Market granite and herringbone promenade')]){
       if(!box.setFromObject(mesh).intersectsBox(region))continue;
@@ -245,6 +246,7 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
     assert.ok(root.children.every(m=>m.isInstancedMesh));
     assert.ok(root.children.reduce((n,m)=>n+m.geometry.index.count*m.count/3,0)<=3900);
     const boardMatrix=new THREE.Matrix4(),legMatrix=new THREE.Matrix4();
+    const landward=new Set(),bayward=new Set();
     let plants=0,coasts=0;
     for(let tick=0;tick<=440;tick++){
       if(tick===220)world.ferryMarket.update(Date.parse('2026-11-21T23:00:00-08:00'));
@@ -257,7 +259,14 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
         }
         board.getMatrixAt(i,boardMatrix);back.getMatrixAt(i,legMatrix);
         assert.ok(Math.hypot(p.x-1.266,p.z+4.647)>.53,'clear of north light steps');
-        assert.ok(p.x>1.80,'north of the Market pedestrian crossing');
+        assert.ok(Math.hypot(p.x+2.218,p.z+4.670)>.53,'clear of south light steps');
+        assert.ok(p.x> -2.218&&p.x<1.266,'through the space between the two columns');
+        if(p.z< -4.83)landward.add(i);
+        if(p.z> -4.48)bayward.add(i);
+        for(let k=0;k<plazaCrossingCount;k++){
+          const walker=plazaCrossingPose(t,k);
+          assert.ok(Math.hypot(p.x-walker.x,p.z-walker.z)>.080,'pedestrian shoulder clearance');
+        }
         for(const b of marketBoxes){
           point.set(p.x,p.y+.055,p.z);assert.ok(b.distanceToPoint(point)>.06,'clear of open market furnishings');
         }
@@ -285,6 +294,7 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
         }
       }
     }
+    assert.equal(landward.size,6);assert.equal(bayward.size,6,'every skater crosses the column alignment');
     assert.ok(plants>10&&coasts>100);
     update(631);const fixed=board.instanceMatrix.array.slice(),version=board.instanceMatrix.version;update(631);
     assert.deepEqual(board.instanceMatrix.array,fixed);assert.equal(board.instanceMatrix.version,version);
@@ -301,10 +311,41 @@ test('the two skating lines pass one another with clearance through many laps',(
       const a=poses[i],b=poses[j],separation=Math.hypot(a.x-b.x,a.z-b.z);
       smallest=Math.min(smallest,separation);
       if(i<3&&j>=3&&previous&&separation<.27&&Math.cos(a.heading-b.heading)>.9&&
-        (previous[i].x-previous[j].x)*(a.x-b.x)<0)passes++;
+        (previous[i].z-previous[j].z)*(a.z-b.z)<0)passes++;
     }
     previous=poses;
   }
   assert.ok(smallest>.087,'minimum center spacing '+smallest);
   assert.ok(passes>4,'parallel overtakes on distinct lines: '+passes);
+});
+
+test('every skateboard crosses a pedestrian travel segment during a different part of the signal cycle',async()=>{
+  const {signalPeriod}=await import('../app/waterfront-signals.ts');
+  const duration=2*signalPeriod,step=.10;
+  const walkers=Array.from({length:plazaCrossingCount},(_,i)=>plazaCrossingPose(0,i)),segments=[];
+  const riders=Array.from({length:plazaSkaterCount},(_,i)=>plazaSkaterPose(0,i)),crossed=new Set();
+  const cross=(x,z,X,Z)=>x*Z-z*X;
+  for(let tick=1;tick<=duration/step;tick++){
+    const t=tick*step,ps=walkers.map((_,i)=>plazaCrossingPose(t,i));
+    for(let i=0;i<ps.length;i++){
+      if(ps[i].z> -5.26&&!ps[i].standing)segments.push([walkers[i],ps[i],t]);
+      walkers[i]=ps[i];
+    }
+    for(let i=0;i<riders.length;i++){
+      const p=plazaSkaterPose(t,i);
+      for(const q of ps)assert.ok(Math.hypot(p.x-q.x,p.z-q.z)>.079,'simultaneous pedestrian clearance');
+    }
+  }
+  for(let tick=1;tick<=duration/step;tick++)for(let i=0;i<riders.length;i++){
+    const t=tick*step,a=riders[i],b=plazaSkaterPose(t,i);riders[i]=b;
+    if(crossed.has(i))continue;
+    for(const [c,d,walkTime] of segments){
+      const dx=b.x-a.x,dz=b.z-a.z,ex=d.x-c.x,ez=d.z-c.z,det=cross(dx,dz,ex,ez);
+      if(!det)continue;
+      const u=cross(c.x-a.x,c.z-a.z,ex,ez)/det,v=cross(c.x-a.x,c.z-a.z,dx,dz)/det;
+      const dt=Math.abs(walkTime-t);
+      if(u>0&&u<1&&v>0&&v<1&&Math.min(dt,duration-dt)>2){crossed.add(i);break;}
+    }
+  }
+  assert.equal(crossed.size,plazaSkaterCount);
 });

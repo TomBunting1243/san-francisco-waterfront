@@ -168,3 +168,32 @@ test('print focus follows the actual projecting clock, cornices, lantern and fla
     assert.ok(tower.bounds.every(r=>r.z<0),'a tower behind the viewer creates no focus rectangle on screen');
   }
 });
+
+test('pitched views through both west arcades see one finish from the shop floor through the eaves',()=>{
+  const {root}=ferryHall(font),street=root.getObjectByName('Embarcadero arcade and portico');
+  root.updateMatrixWorld(true);
+  const parts=[];
+  root.traverse(m=>{if(m.isMesh)parts.push([m,new THREE.Box3().setFromObject(m)]);});
+  const frontage=street.position.z;
+  const bays=street.children.filter(o=>o.name==='Pierced arcade panel');
+  assert.equal(bays.length,30);
+  for(const slope of [.38,.90]){
+    let floorViews=0;
+    const dir=new THREE.Vector3(.13,-slope,1).normalize(),ray=new THREE.Raycaster();
+    for(const bay of bays)for(const y of [.147,.24,.44,.61,.919]){
+      const opening=bay.getWorldPosition(new THREE.Vector3());
+      opening.set(opening.x+.0067,y,frontage);
+      ray.set(opening.clone().addScaledVector(dir,-.73),dir);
+      const candidates=parts.filter(([,box])=>ray.ray.intersectsBox(box)).map(([m])=>m);
+      const hits=ray.intersectObjects(candidates),first=hits[0];
+      assert.ok(first,'missing surface behind '+opening.toArray());
+      const owners=new Set(hits.filter(h=>h.distance<first.distance+.000012).map(h=>h.object));
+      assert.equal(owners.size,1,'competing surfaces at '+first.point.toArray());
+      if(Math.abs(first.point.y-.103)<.00001){
+        floorViews++;
+        assert.equal(first.object.name,'Recessed arcade paving');
+      }
+    }
+    assert.ok(floorViews>=24,'rays must reach the floor beyond the arches at each pitch');
+  }
+});

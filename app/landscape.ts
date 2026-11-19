@@ -1,6 +1,8 @@
+import {hillsBuildings,hillsSign} from './hills-plaza.ts';
 export {setPccFrontDoor,setPccExitDoor} from './streetcar.ts';
 import {rinconGardenBorder} from './rincon-curb-edge.ts';
 import {createPromenadeTransit} from './promenade-transit.ts';
+import {kioskCampaignMaterial} from './kiosk-campaigns.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
 import {applyWalkPanelJoints} from './promenade-pavement.ts';
 import {ferryFleet,ferryPose} from './motion.ts';
@@ -37,6 +39,7 @@ import {bicycleScale,bicycleWheelBottom,rinconGround,rinconApproach,rinconExit,r
 import {harborBuilding,smallHarborBuildings,harborPublicPiers,ferryPortal} from './harbor-architecture.ts';
 import {buildFerryTerminal,prepareFerryTerminalTide,createBoardingBrows,ferryConnections,fixedFerryApron} from './ferry-terminal.ts';
 import {ferryHall,ferryPublicRealm} from './ferry-architecture.ts';
+import {laChiffonniere} from './la-chiffonniere.ts';
 import {embarcaderoPlaza,plazaStandingHeight} from './embarcadero-plaza.ts';
 import {addRinconRestaurant} from './rincon-restaurants.ts';
 import {createRememberedWaterfront} from './remembered-waterfront.ts';
@@ -203,7 +206,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
         if(insidePier(px,pz,pier.p))pile(px,pz,timber);
       }
       // Deep perimeter fascia hides the paper-thin slab edge.
-      const beam=box(.055,.080,len,(ax+bx)/2,harborDatum.pierDeck-.04,(az+bz)/2,timber?'#b39a70':'#b5b8aa');beam.rotation.y=Math.atan2(bx-ax,bz-az);
+      const beam=box(.055,.076,len,(ax+bx)/2,harborDatum.pierDeck-.042,(az+bz)/2,timber?'#b39a70':'#b5b8aa');beam.rotation.y=Math.atan2(bx-ax,bz-az);
     }
     const minX=Math.min(...pier.p.map(p=>p[0])),maxX=Math.max(...pier.p.map(p=>p[0])),minZ=Math.min(...pier.p.map(p=>p[1])),maxZ=Math.max(...pier.p.map(p=>p[1]));
     for(let x=minX+.5;x<maxX;x+=1.35)for(let z=minZ+.5;z<maxZ;z+=1.35)if(insidePier(x,z,pier.p))pile(x,z,timber);
@@ -217,8 +220,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     }
   }
   yield 2;
-  const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
-  const detailedBuildings=refineMaritimeLandings(refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing])));
+  // The orphaned lower outlines at 303 Second and the four-corner MIRA duplicate
+  // lie inside their named buildings. Render the continuous named envelopes.
+  const redundantOutlines=new Set([1486849221,1486849222,693630796]);
+  const detailedBuildings=refineMaritimeLandings(refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.map(b=>b.id===1487160484?{...b,minH:1.52,h:3.63}:b).filter(b=>!redundantOutlines.has(b.id)&&![1487160485,1487160486,1487160487].includes(b.id)),...hillsBuildings])));
   const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
   if(shouldYield())yield 2;
   const gardens=waterfrontGardens(detailedBuildings,font);root.add(gardens.root);
@@ -367,7 +372,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       box(.29,.28,.44,x,9.69,z,'#b9c4bd',bridge);
     }
     for(const y of [4.6,6.2,7.8,9.3]){
-      box(1.8,.16,.4,0,y,z,'#99b0b2',bridge);
+      box(1.8,.16,.382,0,y,z,'#99b0b2',bridge);
       if(y<9)for(const zz of [-.15,.15])for(const sign of [-1,1])pole(new THREE.Vector3(sign*.72,y,z+zz),new THREE.Vector3(-sign*.72,y+1.5,z+zz),.05,'#809ca3',bridge);
     }
   }
@@ -434,9 +439,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const bridgeTraffic=createBridgeTraffic(vehiclePaint),cars=bridgeTraffic.cars;
   bridge.add(bridgeTraffic.batch);
   const coffeeSign=new THREE.Group();coffeeSign.name='Hills Bros Coffee rooftop neon';root.add(coffeeSign);
-  coffeeSign.position.set(-41.10,1.46,-6.35);coffeeSign.rotation.y=.148;
+  coffeeSign.position.set(hillsSign.point[0],1.505,hillsSign.point[1]);coffeeSign.rotation.y=.148;
   const coffeeMaterial=new THREE.MeshStandardMaterial({color:'#d93825',emissive:'#ff361a',emissiveIntensity:0,roughness:.44});
   const tubes=hillsCoffeeTubes(),signWidth=tubes.boundingBox!.max.x-tubes.boundingBox!.min.x;
+  coffeeSign.scale.x=hillsSign.width/signWidth;
   const coffeeLetters=mesh(tubes,'#d93825',0,.32,.035,coffeeSign);coffeeLetters.name='HILLS BROS COFFEE';coffeeLetters.material=coffeeMaterial;
   // Low roof monitor and angled steel backstays below the exposed neon.
   const monitor=new THREE.Shape();monitor.moveTo(-.29,0);monitor.lineTo(.29,0);monitor.lineTo(.29,.092);monitor.lineTo(0,.245);monitor.lineTo(-.29,.092);monitor.closePath();
@@ -458,7 +464,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     const shrub=mesh(new THREE.IcosahedronGeometry(.06,1),'#828968',x,.13,z);shrub.scale.set(1.55,.59,1);
   }
   root.add(cupidsSpan());
-  mesh(rinconKnoll(),'#829b61',0,0,0).name='Rincon lawn knoll';
+  mesh(rinconKnoll(),'#ffffff',0,0,0).name='Rincon lawn knoll';
   mesh(walkSurface(routes.rincon,routeWidth.rincon,.05),'#d4cbb7',0,0,0).name='Rincon shared promenade';
   for(const approach of [rinconApproach,rinconExit])mesh(walkSurface(approach,.24,.06),'#d4cbb7',0,0,0);
   // The wave-shaped seat walls sit in the scallops along the water side of the actual lawn.
@@ -508,11 +514,8 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const rememberedWaterfront=createRememberedWaterfront(font,waterTime,nightInk);
   root.add(rememberedWaterfront);
   const fountainWater=rememberedWaterfront.getObjectByName(fountainWaterName)!;
-  const art=new THREE.Group();art.position.set(1.068,.14,-10.438);root.add(art);
-  for(const [x,y,a] of [[0,.23,.2],[.10,.55,-.3],[-.04,.86,.28]]){
-    const form=box(.32,.44,.10,x,y,0,'#efe6cd',art);form.rotation.z=a;
-    for(const dx of [-.1,.02]){const stripe=box(.018,.38,.018,x+dx,y,.065,'#42565a',art);stripe.rotation.z=a;}
-  }
+  const art=laChiffonniere();
+  art.position.set(1.068,plazaStandingHeight(plaza,1.068,-10.438),-10.438);root.add(art);
   for(const [x,z] of [[2.22,-8.74],[-5.26,-7.12],[-3.02,-7.09],[-1.02,-7.46]]){
     residentPositions.push({x,z,y:plazaStandingHeight(plaza,x,z)});
   }
@@ -696,11 +699,13 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     return block.value;
   }
   const ordinary=staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.userData.roadPaint&&
-    !m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint'));
+    !m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint')&&!m.geometry.hasAttribute('kioskPrint'));
   const architectureChunks=yield* bakeSection(ordinary,architectureMaterial);
   architectureChunks.push(...paintChunks);
-  // All billboard faces share one atlas; the entire set is only 26 triangles.
+  // Each print atlas uses one material for every street and rooftop mount.
   architectureChunks.push(bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()));
+  const kioskPrints=staticMeshes.filter(m=>m.geometry.hasAttribute('kioskPrint'));
+  if(kioskPrints.length)architectureChunks.push(bakeRigidChunk('Kiosk campaign prints',kioskPrints,kioskCampaignMaterial()));
   for(const [attribute,mat] of [['walkPanel',walkMaterial],['facadeGrid',facadeMaterial]] as const){
     const chunks=yield* bakeSection(staticMeshes.filter(m=>m.geometry.hasAttribute(attribute)),mat);
     architectureChunks.push(...chunks);

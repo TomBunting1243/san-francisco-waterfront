@@ -35,24 +35,6 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
   function mast(x:number,z:number,r:number,h:number,base:number,paint:string){
     const k=part(shaft,paint,x,base+h/2,z);k.scale.set(r,h,r);return k;
   }
-  // City public-service kiosk SFO0003SF, 19 Market at Steuart. The 2013
-  // street-level photograph puts it curbside on the Hyatt frontage; its
-  // position along that surveyed sidewalk is approximate.
-  const kioskX=-1.425,kioskZ=-12.51,kioskY=.046;
-  const kioskGreen='#354c46',kioskTrim='#52645a';
-  const silhouette=[
-    [.036,0],[.036,.008],[.033,.011],[.033,.020],[.030,.023],
-    [.030,.176],[.034,.179],[.037,.185],[.037,.192],[.033,.195],
-    [.033,.204],[.031,.207],[.028,.211],[.022,.216],[.010,.221],[.005,.226],[0,.228],
-  ];
-  const kiosk=part(new THREE.LatheGeometry(silhouette.map(([r,y])=>new THREE.Vector2(r,y)),24),kioskGreen,kioskX,kioskY,kioskZ);
-  kiosk.name='Market and Steuart cast-iron poster column';
-  for(let j=0;j<3;j++){
-    const angle=j*2*Math.PI/3+.24;
-    for(const [radius,h,y,arc,paint] of [[.0307,.147,.102,1.80,kioskTrim],[.0311,.137,.102,1.67,'#c4bb9f']] as const){
-      part(new THREE.CylinderGeometry(radius,radius,h,12,1,true,angle-arc/2,arc),paint,kioskX,kioskY+y,kioskZ).name='Curved poster frame and paper';
-    }
-  }
   addMarketRunningRails(records.tracks,line);
   root.add(makeSteuartJunction());
   part(californiaRailGeometry(),'#ffffff',0,0,0).name='Lower California cable rails and crossover';

@@ -92,7 +92,9 @@ export function downtownBuilding(mesh:MeshFactory,b:Building,nominal:number,hasP
     mesh(surveyedPitchGeometry(b.p,pitch,faceColor,roofColor),'#ffffff',0,0,0).name='Surveyed pitched roof '+b.id;
     return;
   }
-  if(!compatible||hasParts)return;
+  // At 555 California the surveyed upper terrace is already the independently
+  // mapped tower part 1243267628, including its serrated granite perimeter.
+  if(!compatible||hasParts||b.id===1244283836)return;
   for(const [rise,rings] of scan[1]){
     mesh(roofPrism(rings,rise),early?'#aeab9a':'#a5ada9',0,top,0).name='LiDAR roof terrace '+b.id;
   }

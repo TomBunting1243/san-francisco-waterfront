@@ -1,34 +1,34 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {createRideInteriors} from '../app/ride-interior.ts';
+import {createRideInteriors,placePassenger} from '../app/ride-interior.ts';
 import {pccCabFront} from '../app/pcc-saloon.ts';
 
 test('cab foregrounds clear the eye near plane and leave the center view through both lenses open',t=>{
   const {root,show,dispose}=createRideInteriors();
   for(const [fov,aspect] of [[52,16/9],[71,390/844]]){
     const camera=new T.PerspectiveCamera(fov,aspect,.013,1800);
-    camera.add(root);camera.updateMatrixWorld(true);
+    root.updateMatrixWorld(true);
     const ray=new T.Raycaster(),ndc=new T.Vector2();
     for(const mode of ['sedan','tram']){
-      show(mode);
+      show(mode);camera.position.set(0,0,0);placePassenger(camera,mode);camera.updateMatrixWorld(true);
       const mesh=root.children.find(m=>m.visible),position=mesh.geometry.getAttribute('position');
-      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?305:6000));
-      for(let i=0;i<position.count;i++)assert.ok(Math.hypot(position.getX(i),position.getY(i),position.getZ(i))>camera.near);
+      assert.ok(mesh.geometry.index.count/3-mesh.geometry.userData.driverFirstFace<800);
+      for(let i=0;i<position.count;i++)assert.ok(new T.Vector3().fromBufferAttribute(position,i).distanceTo(camera.position)>camera.near);
       let covered=0,left=0,right=0,bottom=0;
       for(let row=0;row<48;row++)for(let col=0;col<48;col++){
         ndc.set((col+.5)/24-1,(row+.5)/24-1);
         ray.setFromCamera(ndc,camera);
         if(!ray.intersectObject(mesh,true).length)continue;
         covered++;
-        assert.ok(Math.abs(ndc.x)>.24||ndc.y<-.45,'central street sightline');
+        if(Math.abs(ndc.x)<.06 && Math.abs(ndc.y)<.06)assert.fail(mode+' central passenger sightline');
         if(ndc.y<-.84)bottom++;
         if(ndc.x<-.1&&ndc.y<-.55)left++;
         if(ndc.x>.1&&ndc.y<-.55)right++;
       }
       const percent=100*covered/(48*48);
       t.diagnostic(mode+' '+fov+'°: foreground covers '+percent.toFixed(1)+'%');
-      assert.ok(percent>4&&percent<30);
+      assert.ok(percent>4&&percent<(mode==='sedan'?44:85));
       assert.ok(bottom>10&&left>6&&right>6);
     }
   }
@@ -82,7 +82,7 @@ test('both cabs surround the seat and preserve exterior sightlines through both 
   for(const mode of ['sedan','tram']){
     show(mode);
     const cab=root.children.find(child=>child.visible);
-    const hit=(x,y,z)=>new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(cab,false)[0];
+    const hit=(x,y,z)=>new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(cab,false).find(h=>h.faceIndex<cab.geometry.userData.driverFirstFace);
     for(const side of [-1,1]){
       assert.ok(!hit(side,.07,0),'eye-level side window');
       if(side>0&&mode==='tram'){
@@ -168,7 +168,7 @@ test('sedan wheel and instruments read through the open spokes with no separate 
   const {root,show,dispose}=createRideInteriors();show('sedan');
   const mesh=root.children[0];
   function sight(x,y,z){
-    return new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(mesh,false)[0];
+    return new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(mesh,false).find(h=>h.faceIndex<mesh.geometry.userData.driverFirstFace);
   }
   // Top and right rim sit ahead of the dial binnacle, with a visible opening.
   const rim=sight(-.027,-.244,-.6445),right=sight(.149,-.419,-.578);
@@ -180,6 +180,25 @@ test('sedan wheel and instruments read through the open spokes with no separate 
   assert.ok(!sight(0,.05,-1));
   const draws=[];mesh.traverse(o=>{if(o.isMesh)draws.push(o);});
   assert.equal(draws.length,2,'combined body and original wiper');
-  assert.ok(mesh.geometry.index.count/3<=260);
+  assert.ok(mesh.geometry.userData.driverFirstFace<=260);
   dispose();
+});
+
+test('both passenger eyes sit above their cushions with the seated operator at the controls',()=>{
+  const interiors=createRideInteriors();
+  for(const [mode,expected] of [['sedan',[.77,0,.035]],['tram',[1,0,2.49]]]){
+    interiors.show(mode);interiors.root.updateMatrixWorld(true);
+    const cab=interiors.root.children.find(c=>c.visible),eye=new T.PerspectiveCamera();
+    placePassenger(eye,mode);
+    assert.ok(eye.position.distanceTo(new T.Vector3(...expected).multiplyScalar(.06))<1e-8);
+    const cushion=new T.Raycaster(eye.position,new T.Vector3(0,-1,0)).intersectObject(cab)[0];
+    assert.ok(cushion && cushion.distance>.035 && cushion.distance<.047,'seated above the first row cushion');
+    const toward=(x,y,z)=>new T.Raycaster(eye.position,new T.Vector3(x,y,z).multiplyScalar(.06).sub(eye.position).normalize()).intersectObject(cab)[0];
+    for(const y of [-.049,-.28]){
+      const operator=toward(-.032,y,0);
+      assert.ok(operator && operator.faceIndex>=cab.geometry.userData.driverFirstFace,'operator visible from the occupied passenger seat');
+    }
+    assert.equal(new T.Raycaster(eye.position,new T.Vector3(0,0,-1)).intersectObject(cab,true).length,0,'forward view through glass');
+  }
+  interiors.dispose();
 });

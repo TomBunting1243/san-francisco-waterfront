@@ -138,6 +138,33 @@ export function createGatewayClub(areas:Area[],paths:Route[],font?:Font){
     }
   }
 
+  // City p2024_rgb8cm, rectified at 132 px/unit. The triangular apron is
+  // surface parking with two curb rows, a shorter back row and a through aisle.
+  const lot=group('Golden Gateway waterfront parking');
+  const plate=(u:number,v:number):Point=>[(9000+u*1550/900)/132-56,2-(750+v*1550/900)/132];
+  const outline=[[109,143],[119,116],[141,110],[714,88],[748,78],[754,83],[464,224],
+    [342,211],[196,278],[163,237],[140,196],[121,169],[109,163]];
+  surface(outline.map(([u,v])=>plate(u,v)),.064,.029,'#858580',lot).name='Triangular parking apron';
+  const colors=['#c2c7c1','#5a6469','#b3bbb8','#4b5360','#a35952','#cad0c6'];
+  function parkingRow(start:Point,end:Point,offset:Point,spaces:number,occupied:number[]){
+    const a=plate(start[0],start[1]),b=plate(end[0],end[1]);
+    const along=(n:number)=>interpolate(a,b,n/spaces);
+    const across=(p:Point,f:number):Point=>[p[0]+offset[0]*f,p[1]+offset[1]*f];
+    for(let i=0;i<=spaces;i++)bar(along(i),across(along(i),1),.065,.004,.0015,'#c9c6b3',lot).name='Parking stripe';
+    for(const i of occupied){
+      const p=across(along(i+.5),.51),car=new THREE.Group();car.name='Parked vehicle';
+      car.position.set(p[0],.064,p[1]);car.rotation.y=Math.atan2(offset[0],offset[1]);lot.add(car);
+      const c=colors[(i+spaces)%colors.length];
+      box(.102,.051,.252,0,.041,0,c,car);
+      box(.091,.036,.132,0,.080,.006,'#667579',car);
+      box(.089,.009,.081,0,.102,.005,c,car);
+    }
+  }
+  parkingRow([148,111],[272,107],[-.024,-.260],10,[1,3,5,7,8]);
+  parkingRow([374,101],[618,91],[.017,-.274],22,[1,2,3,5,6,7,8,9,10,11,12,13,14,16,20,21]);
+  parkingRow([145,176],[443,217],[.040,.246],25,[0,1,2,4,5,6,7,9,11,12,13,14,16,17,19,21,22,24]);
+  parkingRow([471,213],[578,161],[-.120,.232],10,[0,2,3,5,7,8,9]);
+  parkingRow([194,272],[277,232],[-.109,.217],8,[0,2,3,6]);
   const swim=group('Aquatic deck and lawns');
   const poolRings=swimming.map(([id,lanes])=>({id,lanes,p:areas.find(area=>area.id===id)?.p.slice(0,-1)})).filter(pool=>pool.p!==undefined);
   // Paving is cut around the water for visible coping and pool depth.

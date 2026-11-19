@@ -3,19 +3,23 @@ import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import cocaCola from '../public/data/approach-coke.json' with {type:'json'};
 import portrait from '../public/data/approach-karp.json' with {type:'json'};
+import {kioskCampaignIds} from './kiosk-campaigns.ts';
+import {waterfrontKioskSites} from './waterfront-kiosk-sites.ts';
+import {addWaterfrontKiosk} from './waterfront-kiosks.ts';
 import {billboardSites} from './billboard-sites.ts';
 import {extraBillboardAds,renderBillboardEdition} from './billboard-editions.ts';
 import type {ApproachMesh} from './approach-road.ts';
 
 const classicAds=['yahoo','coke','anthropic','spacex','palantir'] as const;
-type BillboardAd=typeof classicAds[number]|typeof extraBillboardAds[number];
+type BillboardAd=typeof classicAds[number]|typeof extraBillboardAds[number]|typeof kioskCampaignIds[number];
 const ordinaryAds:BillboardAd[]=[...classicAds,...extraBillboardAds.filter(ad=>ad!=='apple'&&ad!=='all-in')];
 
-export function shuffleBillboardAds(count:number,random=Math.random,previous:readonly string[]=[]):BillboardAd[]{
+export function shuffleBillboardAds(count:number,random=Math.random,previous:readonly string[]=[],roadFaces=count):BillboardAd[]{
   const layout:BillboardAd[]=[];
   const rare=(['apple','all-in'] as const).filter(()=>random()<.01);
   while(layout.length<count){
-    const start=layout.length, bag=[...ordinaryAds];
+    const start=layout.length,onRoad=start<roadFaces;
+    const bag=onRoad?[...ordinaryAds]:[...ordinaryAds,...kioskCampaignIds];
     for(let i=bag.length-1;i>0;i--){
       const j=Math.floor(random()*(i+1));
       [bag[i],bag[j]]=[bag[j],bag[i]];
@@ -27,7 +31,7 @@ export function shuffleBillboardAds(count:number,random=Math.random,previous:rea
       const j=bag.findIndex((ad,j)=>j!==i&&ad!==previous[start+i]&&bag[i]!==previous[start+j]);
       if(j>=0)[bag[i],bag[j]]=[bag[j],bag[i]];
     }
-    layout.push(...bag.slice(0,count-start));
+    layout.push(...bag.slice(0,(onRoad?Math.min(count,roadFaces):count)-start));
   }
   for(const ad of rare){
     const slots=layout.map((_,i)=>i).filter(i=>layout[i]!=='apple'&&previous[i]!==ad);
@@ -41,7 +45,7 @@ function adsForPage(){
   const key='portfolio-billboard-layout-v1';
   let previous:string[]=[];
   try{const value=JSON.parse(window.sessionStorage.getItem(key)??'[]');if(Array.isArray(value))previous=value;}catch{}
-  pageAds=shuffleBillboardAds(billboardSites.length,Math.random,previous);
+  pageAds=shuffleBillboardAds(billboardSites.length+2*waterfrontKioskSites.length,Math.random,previous,billboardSites.length);
   try{window.sessionStorage.setItem(key,JSON.stringify(pageAds));}catch{}
   return pageAds;
 }
@@ -113,19 +117,7 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
       return mesh(new THREE.ExtrudeGeometry(shape,{bevelEnabled:false,depth,curveSegments:7}),color,0,0,z,group);
     }
     let bottom=-h/2;
-    const column=site.mounting==='column'||site.mounting==='existing column';
-    if(column){
-      if(site.mounting==='column'){
-        const outline=[[0,-.102],[.036,-.102],[.036,-.094],[.030,-.081],
-          [.030,.074],[.037,.082],[.037,.090],[.029,.106],[.013,.118],[0,.126]];
-        mesh(new THREE.LatheGeometry(outline.map(([r,y])=>new THREE.Vector2(r,y)),16),'#354c46',0,0,0,group).name='Cast-iron kiosk body';
-      }
-      // The original Market/Steuart body is built by market-street.ts.
-      // Paper behind glass is portrait format; fit the horizontal creative
-      // between a header and footer without stretching its typography.
-      box(w+.004,h+.006,.003,0,0,.031,'#52645a').name='Kiosk poster frame';
-      box(w,h,.002,0,0,.033,'#e4d7b9');
-    }else if(site.mounting==='wall'){
+    if(site.mounting==='wall'){
       box(w*.91,h*.84,.04,0,0,-.037,darkSteel).name='Wall mounting plate';
     }else{
       const heavy=slot===1,back=heavy?.35:Math.min(.22,w*.17),baseY=site.footY-site.y;
@@ -155,14 +147,7 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
     // smaller archival boards while fitting each physical cabinet.
     const artwork=new THREE.Group();
     artwork.name='Printed artwork';group.add(artwork);group=artwork;
-    if(column){
-      group.position.z=.035;
-      if(index<0){
-        renderBillboardEdition(ad,w,h,group,mesh,true);
-        continue;
-      }
-      group.scale.setScalar(w/1.2);
-    }else group.scale.set(w/1.2,h/.42,Math.min(w/1.2,h/.42));
+    group.scale.set(w/1.2,h/.42,Math.min(w/1.2,h/.42));
     w=1.2;h=.42;bottom=-h/2;
     if(index<0){
       renderBillboardEdition(ad as typeof extraBillboardAds[number],w,h,group,mesh);
@@ -268,6 +253,10 @@ export function buildApproachBillboards(mesh:ApproachMesh,root:THREE.Group,font:
         nightLight(text(spaceXCopy,w*.78,h*.35,0,-h*.141,.040,ink),.27,.25,.20);
       }
     }
+  }
+  for(const [i,site] of waterfrontKioskSites.entries()){
+    const offset=billboardSites.length+2*i;
+    addWaterfrontKiosk(mesh,billboards,site,[ads[offset]??ads[offset%ads.length],ads[offset+1]??ads[(offset+1)%ads.length]]);
   }
   return billboards;
 }

@@ -87,12 +87,15 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
   }
   function roof(cx:number,span:number,from:number,to:number,eave:number,rise:number,parent:THREE.Group){
     const sections=8;
+    const rim=(i:number,offset:number)=>{
+      const angle=Math.PI*i/sections,c=Math.cos(angle),s=Math.sin(angle);
+      const normal=new THREE.Vector2(-rise*c,span*s/2).normalize();
+      return new THREE.Vector2(cx-span*c/2,eave+rise*s).addScaledVector(normal,offset);
+    };
     for(let i=0;i<sections;i++){
-      const q=Math.PI*(i/sections),r=Math.PI*((i+1)/sections);
-      const ax=cx-Math.cos(q)*span/2,bx=cx-Math.cos(r)*span/2;
-      const ay=eave+Math.sin(q)*rise,by=eave+Math.sin(r)*rise;
-      const roofPanel=box(Math.hypot(bx-ax,by-ay)+.002,.014,to-from,(ax+bx)/2,(ay+by)/2,(from+to)/2,i%3===1?'#e7e3cd':cream,parent);
-      roofPanel.rotation.z=Math.atan2(by-ay,bx-ax);
+      const section=new THREE.Shape([rim(i,-.007),rim(i,.007),rim(i+1,.007),rim(i+1,-.007)]);
+      const sheet=new THREE.ExtrudeGeometry(section,{depth:to-from,bevelEnabled:false});
+      mesh(sheet,i%3===1?'#e7e3cd':cream,0,0,from,parent).name='Rolled canopy sheet';
     }
     for(let j=0;j<=Math.round((to-from)/.34);j++){
       const z=THREE.MathUtils.lerp(from,to,j/Math.round((to-from)/.34));
@@ -132,7 +135,7 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       const x=side*(width/2-.007);
       const upright=covered?.223:.063;
       const steps=Math.max(1,Math.round(length/(covered?.164:.071)));
-      box(.019,.046,length,x,-.023,length/2,covered?steel:blueSteel,gangway);
+      box(.019,.046,length,x,-.026,length/2,covered?steel:blueSteel,gangway).name='Gangway side stringer';
       box(.011,.010,length,x,.064,length/2,covered?steel:blueSteel,gangway);
       if(covered)box(.012,.012,length,x,upright,length/2,steel,gangway);
       for(let j=0;j<=steps;j++){

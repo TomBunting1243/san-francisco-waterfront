@@ -1,3 +1,5 @@
+import {ferryEntryX,ferryTowerZ} from './ferry-portico-access.ts';
+
 /** From the plaza, the clock lines up with the bay and the eastern suspension towers. */
 export const openingCamera = {
   yaw: 3.145,
@@ -64,4 +66,26 @@ export function moveWaterfrontFocus(x:number,z:number,yaw:number,forward:number,
   const distance=5.2*dt/Math.max(1,Math.hypot(forward,strafe));
   return boundWaterfrontFocus(x+distance*(strafe*Math.cos(yaw)-forward*Math.sin(yaw)),
     z-distance*(forward*Math.cos(yaw)+strafe*Math.sin(yaw)));
+}
+
+// The point is the centre of the street dial, at the outside of its bronze bezel.
+const westDial=[ferryEntryX,2.035,ferryTowerZ-.324-.022] as const;
+export const clockArrivalDuration=2800;
+export function clockArrivalFraming(width:number,height:number){
+  const lens=openingLens(width,height),yaw=openingYaw(width,height);
+  const sin=Math.sin(yaw),cos=Math.cos(yaw);
+  const pitch=Math.atan2(lens.elevation,lens.distance),up=Math.sin(pitch),forward=Math.cos(pitch);
+  const dx=westDial[0]-lens.distance*sin,dy=westDial[1]-openingCamera.target[1]-lens.elevation,dz=westDial[2]-lens.distance*cos;
+  const along=dx*sin+dz*cos,depth=-along*forward-dy*up;
+  const pixels=lens.focalLength*Math.max(width,height)/35;
+  return {x:pixels*(dx*cos-dz*sin)/depth,y:-pixels*(dy*forward-along*up)/depth,
+    gain:.56*Math.min(width,height)*depth/(22*.3048*.06*pixels)};
+}
+// Interpolate focal length in log space. A film offset recentres the clock
+// without rotating or translating the camera. At t=1 the original frustum is exact.
+export function clockArrivalFrame(framing:ReturnType<typeof clockArrivalFraming>,t:number){
+  const p=Math.max(0,Math.min(1,t)),smooth=p*p*(3-2*p);
+  const gain=framing.gain**(1-smooth);
+  const fraction=(gain-1)/(framing.gain-1);
+  return {gain,shiftX:-framing.x*framing.gain*fraction,shiftY:-framing.y*framing.gain*fraction};
 }

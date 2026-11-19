@@ -25,7 +25,7 @@ const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     url: { type: 'string' }, help: { type: 'boolean', short: 'h' },
-    'check-interactions': { type: 'boolean' }, 'check-rides': { type: 'boolean' }, 'check-fog': { type: 'boolean' }, 'evidence-dir': { type: 'string' },
+    'clock-detail': { type: 'boolean' }, 'check-interactions': { type: 'boolean' }, 'check-rides': { type: 'boolean' }, 'check-fog': { type: 'boolean' }, 'evidence-dir': { type: 'string' },
   },
 });
 
@@ -200,7 +200,7 @@ async function capture(send, url, theme, view, signal) {
       { name: 'prefers-reduced-data', value: 'no-preference' },
     ],
   });
-  const name = theme.base + view.suffix + '.webp';
+  const name = (values['clock-detail'] ? 'city-clock'+(theme.light==='day'?'':'-night') : theme.base) + view.suffix + '.webp';
   const source = `(${preparePage})(${JSON.stringify({ palette: theme.palette, date: theme.date, stamp: name })})`;
   const script = await send('Page.addScriptToEvaluateOnNewDocument', { source });
   try {
@@ -221,6 +221,10 @@ async function capture(send, url, theme, view, signal) {
     if (width !== widthPx || Math.abs(height - heightPx) > 1) throw new Error(`Unexpected screenshot size: ${width}×${height}`);
     const { channels } = await image.stats();
     if (channels.slice(0, 3).every(channel => channel.stdev < 4)) throw new Error('Chrome captured an empty city frame.');
+    if(values['clock-detail']){
+      const detail=await image.resize({width:view.portrait?822:3456,withoutEnlargement:true}).webp({quality:82}).toBuffer({resolveWithObject:true});
+      return {name,bytes:detail.data,width:detail.info.width,height:detail.info.height};
+    }
     return { name, bytes: await image.webp({ quality: 85 }).toBuffer(), width, height };
   } finally {
     if (!signal.aborted) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script.identifier });
@@ -268,7 +272,11 @@ async function render(url) {
     }
     const images = [];
     for (const theme of palettes) {
-      for (const view of views) {
+      const captureViews=values['clock-detail']?[
+        {width:3456,height:1080,scale:1,portrait:false,suffix:''},
+        {width:390,height:1050,scale:2.5,portrait:true,suffix:'-portrait'},
+      ]:views;
+      for (const view of captureViews) {
         const image = await capture(send, url, theme, view, signal);
         images.push(image);
         console.log(`Captured ${image.name} at ${image.width}×${image.height}.`);
@@ -302,7 +310,7 @@ async function render(url) {
 }
 
 if (values.help) {
-  console.log('Usage: node scripts/render-city-poster.mjs [--url URL]\n' +
+  console.log('Usage: node scripts/render-city-poster.mjs [--url URL] [--clock-detail]\n' +
     'Browser regression: add --check-interactions [--check-fog] [--evidence-dir PATH]\n' +
     'Standalone driver camera regression: add --check-rides [--evidence-dir PATH]\n' +
     'Default: ' + localhost + '\nSet CHROME_PATH to override Chrome discovery.');

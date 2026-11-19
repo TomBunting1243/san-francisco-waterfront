@@ -53,6 +53,18 @@ test('Mapzen height samples and OpenStreetMap coast produce the mapped landforms
   assert.ok(skyline.max.y > 7 && skyline.max.y < 9, 'Oakland high rises retain their tagged scale');
 });
 
+test('hill footpaths meet the paved carriageways without sharing their colored road surface',()=>{
+  const streets=relief.root.getObjectByName('Mapped hill streets and park paths');
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  for(const [x,z] of [[94.3226157,189.6145768],[-.2810026,165.3579957],[57.5135372,180.1857826]]){
+    ray.ray.origin.set(x,10,z);
+    const hits=ray.intersectObject(streets,true);
+    assert.ok(hits.length);
+    const colors=hits.map(h=>new THREE.Color().fromBufferAttribute(h.object.geometry.attributes.color,h.face.a).getHexString());
+    assert.deepEqual([...new Set(colors)],['838c88']);
+  }
+});
+
 test('Airplane descends southeast on the Oakland runway 12 approach', () => {
   const plane = relief.root.getObjectByName('Distant passenger airplane');
   const paint = plane.children[0].material;

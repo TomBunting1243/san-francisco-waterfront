@@ -673,10 +673,10 @@ export function ferryPortal(entry:FerryConnection,font:Font){
     m.box(.083,.023,.103,x,eave-.023,-.030,edge,frame);
     for(const y of [.085,.146,.222,.295])m.box(.07,.003,.006,x,y,-.074,'#a5a396',frame);
   }
-  m.box(span,.049,depth,0,eave-.020,-.03,facing,frame);
+  m.box(span,.0415,depth,0,eave-.02375,-.03,facing,frame).name='Portal lintel';
   const pediment=new THREE.Shape();
   pediment.moveTo(-span/2,0);pediment.lineTo(0,rise);pediment.lineTo(span/2,0);pediment.closePath();
-  m.mesh(new THREE.ExtrudeGeometry(pediment,{bevelEnabled:false,depth}),edge,0,eave-.003,-.03-depth/2,frame);
+  m.mesh(new THREE.ExtrudeGeometry(pediment,{bevelEnabled:false,depth}),edge,0,eave-.003,-.03-depth/2,frame).name='Portal pediment';
   for(const side of [-1,1]){
     const roof=m.box(Math.hypot(span/2+.025,rise),.014,depth+.042,side*span/4,eave+rise*.53,-.030,'#718487',frame);
     roof.rotation.z=-side*Math.atan2(rise,span/2);

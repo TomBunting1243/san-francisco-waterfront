@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type {ApproachMesh} from './approach-road.ts';
 
-export const extraBillboardAds=['meta','salesforce','microsoft','levis','a16z','apple','google','uber','all-in','datawalk','agentbridge','pencilnoodle','dashview','tbpn','y-combinator'] as const;
+export const extraBillboardAds=['meta','salesforce','microsoft','levis','a16z','apple','google','uber','all-in','datawalk','agentbridge','pencilnoodle','dashview','tbpn','y-combinator','waymo'] as const;
 export type ExtraBillboardAd=typeof extraBillboardAds[number];
 export const billboardCaptions:Record<ExtraBillboardAd,string>={
+  waymo:'Waymo — Uber drivers in the unemployment line',
   meta:'Alluring. Attractive. Always Recording.',
   salesforce:"We don't know what we do either!",
   microsoft:'Home of Copilot!',
@@ -42,9 +43,9 @@ export function renderBillboardEdition(id:string,w:number,h:number,group:THREE.G
   const uv=art.getAttribute('uv');
   // Eight edge-replicated pixels around each panel keep the neighboring ad
   // out of its mip levels. The atlas is shared by all mounts and vignettes.
-  const left=(portrait?2736:0)+(index%3)*(portrait?148:912)+8;
+  const left=(portrait?1824:0)+(index%2)*(portrait?148:912)+8;
   for(let i=0;i<uv.count;i++){
-    uv.setXY(i,(left+uv.getX(i)*(portrait?132:896))/3180,1-(Math.floor(index/3)*356+8+(1-uv.getY(i))*340)/1780);
+    uv.setXY(i,(left+uv.getX(i)*(portrait?132:896))/2120,1-(Math.floor(index/2)*356+8+(1-uv.getY(i))*340)/2848);
   }
   art.setAttribute('billboardPrint',uv);
   const front=mesh(art,'#ffffff',0,0,portrait?.0004:.022,group);

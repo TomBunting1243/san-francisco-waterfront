@@ -63,16 +63,35 @@ export function waterfrontLandmark(b:Building,font:Font){
       }
       for(let y=.36;y<.61;y+=.065)for(const side of [-1,1])box(.08,.035,.09,side*(len/2-.025),y,.063,'#dbb58d',face);
       for(let x=-len/2+.04;x<len/2;x+=.082)box(.034,.045,.12,x,.645,.08,'#d5b291',face);
-      // Inward-sloping mansard surface and a modest diamond slate pattern.
-      const roofShape=new THREE.Shape();roofShape.moveTo(-len/2,0);roofShape.lineTo(len/2,0);roofShape.lineTo(len/2,.29);roofShape.lineTo(-len/2,.29);roofShape.closePath();
-      const roof=mesh(new THREE.ShapeGeometry(roofShape),'#587d77',0,.69,.025,face);roof.rotation.x=-.42;
+      // Diamond slates sit on the inclined roof between the dormers.
       for(let x=-len/2+.065;x<len/2-.035;x+=.11)for(let row=0;row<3;row++){
         const tile=mesh(new THREE.PlaneGeometry(.032,.032),'#a4b2a0',x+(row%2)*.04,.735+row*.076,.012-row*.034,face);tile.rotation.set(-.42,0,Math.PI/4);
       }
-      box(len,.035,.08,0,.971,-.094,metal,face);
       if(len<1.2){text('AUDIFFRED',.067,0,.324,.14,face);box(.022,.23,.022,len*.28,.335,.21,metal,face);mesh(new THREE.CircleGeometry(.085,20),'#344f4b',len*.28,.39,.24,face);text('B',.095,len*.28,.351,.25,face,ivory);}
     }
-    box(.6,.035,2.25,cx,.98,cz,'#69897b').rotation.y=-.15;
+    // SF Landmark 7 records a slate mansard with third-story dormers. Offset
+    // adjacent surveyed facade lines to join the four hips and the flat crown.
+    // https://sfplanninggis.org/docs/landmarks_and_districts/LM7.pdf
+    function offsetRing(distance:number){
+      return points.map(([x,z],i)=>{
+        const a=faces[(i+faces.length-1)%faces.length],b=faces[i];
+        const scale=distance/(1+a.nx*b.nx+a.nz*b.nz);
+        return [x+(a.nx+b.nx)*scale,z+(a.nz+b.nz)*scale];
+      });
+    }
+    const eave=offsetRing(.025),crown=offsetRing(.025-.29*Math.sin(.42));
+    const baseY=.69,topY=baseY+.29*Math.cos(.42),slates:number[]=[];
+    for(let i=0;i<eave.length;i++){
+      const j=(i+1)%eave.length;
+      const a=[eave[i][0],baseY,eave[i][1]],b=[eave[j][0],baseY,eave[j][1]];
+      const c=[crown[j][0],topY,crown[j][1]],d=[crown[i][0],topY,crown[i][1]];
+      const outward=(a[2]-b[2])*faces[i].nx+(b[0]-a[0])*faces[i].nz>0;
+      for(const point of outward?[a,b,c,a,c,d]:[c,b,a,d,c,a])slates.push(...point);
+    }
+    const shell=new THREE.BufferGeometry();
+    shell.setAttribute('position',new THREE.Float32BufferAttribute(slates,3));shell.computeVertexNormals();
+    mesh(shell,'#587d77',0,0,0).name='Audiffred slate mansard';
+    mesh(footprintGeometry(crown,.016),'#69897b',0,topY,0).name='Audiffred inset roof crown';
   }
   if(b.name==='Pier 1'){
     // The monumental bulkhead is taller than the long, utilitarian transit shed.

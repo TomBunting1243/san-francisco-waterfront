@@ -35,8 +35,15 @@ test('only surface transit islands are built on Market, above the road and below
 
 test('19 Market poster column stands on the surveyed public sidewalk clear of rail and accessible approaches',async()=>{
   const {default:survey}=await import('../public/data/survey-blocks.json',{with:{type:'json'}});
-  const root=ferryPublicRealm(),post=root.getObjectByName('Market and Steuart cast-iron poster column');
-  assert.ok(post);
+  const {buildApproachBillboards}=await import('../app/approach-billboards.ts');
+  const root=ferryPublicRealm();
+  buildApproachBillboards((g,c,x,y,z,parent)=>{
+    const part=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c}));
+    part.position.set(x,y,z);parent.add(part);return part;
+  },root,new FontLoader().parse(font));
+  const post=root.getObjectByName('Market at Steuart');
+  assert.ok(post.getObjectByName('Enamel column with domed cornice'));
+  assert.equal(root.getObjectByName('Market and Steuart cast-iron poster column'),undefined);
   const {x,z}=post.position;
   function inside(p,ring){
     let hit=false;
@@ -57,7 +64,8 @@ test('19 Market poster column stands on the surveyed public sidewalk clear of ra
   assert.ok(street.tracks.every(([, ,p])=>clearance(p)>.21));
   assert.ok(street.crossings.every(([,p])=>clearance(p)>.25));
   assert.ok(street.entrances.every(([,a,b])=>clearance([a,b])>.25));
-  assert.equal(root.getObjectsByProperty('name','Curved poster frame and paper').length,6);
+  assert.equal(post.userData.commercialFaces.length,2);
+  assert.ok(post.getObjectByName('Closed vending doors'));
 });
 
 test('the two pedestrian paving panels end at the Embarcadero curbs',()=>{

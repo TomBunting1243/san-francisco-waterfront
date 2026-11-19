@@ -8,6 +8,7 @@ import {shuffleBillboardAds,anthropicCopy,buildApproachBillboards,spaceXCopy,pal
 import {approachDistance,approachGround,approachLengths,approachPose,buildApproachRoad} from '../app/approach-road.ts';
 import sharp from 'sharp';
 import {extraBillboardAds,renderBillboardEdition,billboardCaptions} from '../app/billboard-editions.ts';
+import {waterfrontKioskSites} from '../app/waterfront-kiosk-sites.ts';
 import {billboardSites} from '../app/billboard-sites.ts';
 import {bayReliefPosition} from '../app/bay-relief.ts';
 import {bakeBlocks} from '../app/city-blocks.ts';
@@ -58,9 +59,9 @@ test('each display is installed at the recorded land site with its own bearing a
   const ads=shuffleBillboardAds(billboardSites.length,()=>.5);
   ads.splice(0,5,'yahoo','coke','anthropic','spacex','palantir');
   const group=buildApproachBillboards(addMesh,root,font,ads);
-  assert.equal(group.children.length,billboardSites.length);
+  assert.equal(group.children.length,billboardSites.length+waterfrontKioskSites.length);
   assert.equal(group.children.filter(s=>s.userData.location.corridor==='I-80').length,4);
-  for(const [i,billboard] of group.children.entries()){
+  for(const [i,billboard] of group.children.slice(0,billboardSites.length).entries()){
     const site=billboardSites[i];
     assert.equal(billboard.name,site.name);
     assert.deepEqual(billboard.position.toArray(),[site.x,site.y,site.z]);
@@ -74,10 +75,7 @@ test('each display is installed at the recorded land site with its own bearing a
     }else{
       assert.ok(site.x>-54&&site.x<28&&site.z<0);
     }
-    if(site.mounting.includes('column')){
-      assert.ok(billboard.getObjectByName('Kiosk poster frame'));
-      assert.equal(!!billboard.getObjectByName('Cast-iron kiosk body'),site.mounting==='column');
-    }else if(site.mounting==='wall')assert.ok(billboard.getObjectByName('Wall mounting plate'));
+    if(site.mounting==='wall')assert.ok(billboard.getObjectByName('Wall mounting plate'));
     else assert.ok(billboard.getObjectByName('Maintenance catwalk'));
     assert.equal(billboard.getObjectByName('Chord mounting shoe'),undefined);
   }
@@ -110,6 +108,7 @@ test('a page shares one set of posters and reshuffles each ordinary deck without
   const first=shuffleBillboardAds(2*deckSize,()=>.5);
   assert.equal(new Set(first.slice(0,deckSize)).size,deckSize);
   assert.equal(new Set(first.slice(deckSize)).size,deckSize);
+  assert.equal(first.slice(0,deckSize).filter(ad=>ad==='waymo').length,1);
   const next=shuffleBillboardAds(2*deckSize,()=>.5,first);
   assert.ok(next.every((ad,i)=>ad!==first[i]));
   const font=new FontLoader().parse(fontData);
@@ -147,7 +146,7 @@ test('reloading the module in the same tab keeps mounts fixed and changes every 
 
 test('road and kiosk layouts select different complete prints for every illustrated edition',async()=>{
   const texture=sharp(new URL('../public/billboard-editions.webp',import.meta.url).pathname.replaceAll('%20',' '));
-  const meta=await texture.metadata();assert.deepEqual([meta.width,meta.height],[3180,1780]);
+  const meta=await texture.metadata();assert.deepEqual([meta.width,meta.height],[2120,2848]);
   const regions=new Set();
   for(const ad of extraBillboardAds)for(const portrait of [false,true]){
     const front=renderBillboardEdition(ad,portrait?.048:1.2,portrait?.121:.42,new THREE.Group(),addMesh,portrait);
@@ -158,6 +157,20 @@ test('road and kiosk layouts select different complete prints for every illustra
     const width=Math.round((box.max.x-box.min.x)*meta.width),height=Math.round((box.max.y-box.min.y)*meta.height);
     assert.deepEqual([width,height],[portrait?132:896,340]);
     const region=[left,top,width,height].join(',');assert.ok(!regions.has(region));regions.add(region);
+    if(ad==='waymo'){
+      // Each physical paper has its own queue composition. Sample the dark
+      // outlines in all six road heads or the four staggered kiosk heads.
+      const heads=portrait?[[37.6,126.8],[65.6,157.5],[36.0,190.5],[82.2,224.8]]:
+        [[85.7,199],[167.1,212.8],[271.8,201],[364.4,208.5],[457.8,199.5],[567.8,205]];
+      const radius=portrait?7:12;
+      for(const [x,y] of heads){
+        const pixels=await texture.clone().extract({left:left+Math.round(x)-radius,top:top+Math.round(y)-radius,
+          width:radius*2,height:radius*2}).removeAlpha().raw().toBuffer();
+        let ink=0;
+        for(let px=0;px<pixels.length;px+=3)if(pixels[px]<100&&pixels[px+1]<115)ink++;
+        assert.ok(ink>(portrait?12:55),'driver silhouette at '+[x,y]);
+      }
+    }
     const swatch=await texture.clone().extract({left,top,width,height}).resize(40,32).raw().toBuffer();
     assert.ok(new Set(swatch).size>32,ad+' print must contain readable light/dark separation');
   }

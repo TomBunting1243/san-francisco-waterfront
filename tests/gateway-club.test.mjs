@@ -43,3 +43,37 @@ test('the aquatic deck leaves both real pools and the spa open at their mapped e
   assert.ok(ray(x,z).intersectObject(door.getObjectByName('Club access path')).length);
   assert.ok(club.root.getObjectByName('Tennis front desk pavilion'));
 });
+
+test('waterfront lot follows the court fences and keeps two marked rows outside the drive aisle',()=>{
+  const lot=club.root.getObjectByName('Golden Gateway waterfront parking'),apron=lot.getObjectByName('Triangular parking apron');
+  const parked=lot.children.filter(m=>m.name==='Parked vehicle');
+  assert.ok(parked.length>30);
+  assert.ok(lot.children.filter(m=>m.name==='Parking stripe').length>65);
+  for(const car of parked){
+    const v=car.getWorldPosition(new THREE.Vector3());
+    assert.ok(ray(v.x,v.z).intersectObject(apron).length,'car sits within traced parking aisle perimeter');
+    assert.ok(!gatewayClubGround(v.x,v.z),'parking stays outside the courts and aquatic enclosures');
+  }
+  // The rectified aerial shows a clear east-west drive aisle through these samples.
+  for(const [u,v] of [[213,148],[310,152],[392,154]]){
+    const x=(9000+u*1550/900)/132-56,z=2-(750+v*1550/900)/132;
+    assert.equal(ray(x,z).intersectObject(lot,true)[0]?.object,apron);
+  }
+});
+
+test('the two Sue Bierman parcels use surveyed ground beneath the lawns, walks and playground',async()=>{
+  const {sueBiermanPark,biermanGround}=await import('../app/sue-bierman.ts');
+  const park=sueBiermanPark();park.updateMatrixWorld(true);
+  const surfaces=park.children.filter(m=>m.isMesh);
+  for(const [x,z] of [[9,-8.9],[10.1,-9.7],[11,-10],[12,-11.4],[13.5,-15],[14.8,-16.3],[16,-17.1],[11.54,-6.5]]){
+    const hits=ray(x+.001,z+.003).intersectObjects(surfaces);
+    assert.equal(hits.length,1,'one finished land cover at '+[x,z]);
+    assert.ok(Math.abs(hits[0].point.y-biermanGround(x+.001,z+.003))<.0001);
+  }
+  assert.ok(biermanGround(14.8,-16.3)-biermanGround(13.5,-15)>.07);
+  const play=park.getObjectByName('Waterfront Playground safety surface');
+  for(const name of ['Waterfront Playground rope climber','Waterfront Playground swings']){
+    const p=park.getObjectByName(name).position,hit=ray(p.x,p.z).intersectObject(play)[0];
+    assert.ok(hit&&Math.abs(hit.point.y-p.y)<.0001);
+  }
+});

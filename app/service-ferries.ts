@@ -188,7 +188,19 @@ export function createServiceFerry(mesh:Parameters<typeof createDoradoFerry>[0],
     box(.080,.085,-.010,.010,deckH+6.37,deckH+7.96,rail);
   }
   const deckPlan=[[-.984,-.83],[-.88,-.972],[.56,-.972],[.82,-.80],[.90,-.48],[.90,.48],[.82,.80],[.56,.972],[-.88,.972],[-.984,.83]];
-  prism(deckPlan,deckH-.18,deckH,small?'#7a8583':cream,'#aaa99f');
+  const width=small?.13:.068,ledgeStart=door-width,ledgeEnd=door+width;
+  const ledgeInner=.905,ledgeOuter=1-.006/(v.beam*.03),deckEdge=.972;
+  for(let i=0;i<deckPlan.length;i++){
+    const a=deckPlan[i],b=deckPlan[(i+1)%deckPlan.length];
+    f.quad(at(...p(a,deckH-.18)),at(...p(a,deckH)),at(...p(b,deckH)),at(...p(b,deckH-.18)),small?'#7a8583':cream);
+  }
+  // Recess both landing plates into the deck, flush with the passenger aisle.
+  const decking='#aaa99f';
+  deck([deckPlan[0],deckPlan[1],[ledgeStart,-deckEdge],[ledgeStart,deckEdge],deckPlan[8],deckPlan[9]],deckH,decking);
+  deck([[ledgeEnd,-deckEdge],...deckPlan.slice(2,8),[ledgeEnd,deckEdge]],deckH,decking);
+  const deckStrip=(lo:number,hi:number)=>deck([[ledgeStart,lo],[ledgeEnd,lo],[ledgeEnd,hi],[ledgeStart,hi]],deckH,decking);
+  deckStrip(-ledgeInner,ledgeInner);
+  if(ledgeOuter<deckEdge){deckStrip(-deckEdge,-ledgeOuter);deckStrip(ledgeOuter,deckEdge);}
   if(v.family==='pyxis')pyxisHouse();
   else if(small){
     cabin(-.60,.55,.82,deckH,deckH+1.93,7,gray);
@@ -211,10 +223,9 @@ export function createServiceFerry(mesh:Parameters<typeof createDoradoFerry>[0],
     }
   }
   // At a perpendicular heading the local +X ledge center is exactly over stopZ.
-  const width=small?.13:.068;
   for(const s of [-1,1]){
-    const z0=s*.905,z1=s*(1-.006/(v.beam*.03));
-    box(door-width,door+width,Math.min(z0,z1),Math.max(z0,z1),deckH-.11,deckH,'#b9baaa');
+    const z0=s*ledgeInner,z1=s*ledgeOuter;
+    box(ledgeStart,ledgeEnd,Math.min(z0,z1),Math.max(z0,z1),deckH-.11,deckH,'#b9baaa');
     if(pyxis){
       // The foredeck narrows around the two stems. Rails follow that edge.
       const edge=[[.66,.905],[.80,.793],[.895,.479]];

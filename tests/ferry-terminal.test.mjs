@@ -184,3 +184,37 @@ test('both passenger lanes have continuous foot support and body clearance from 
     assert.ok(count>400);
   }
 });
+
+test('gate portals, gangway stringers and curved canopy sheet ends have a single exposed face',()=>{
+  const terminal=buildFerryTerminal(addMesh,new THREE.Group()),font=new FontLoader().parse(fontData);
+  terminal.updateMatrixWorld(true);
+  for(const entry of ferryConnections){
+    const gangway=terminal.getObjectByName(entry.covered?`Gate ${entry.gate} articulated gangway`:`Gate ${entry.gate} short boarding link`);
+    const deck=gangway.getObjectByName('Gangway walking surface'),stringers=gangway.getObjectsByProperty('name','Gangway side stringer');
+    assert.equal(stringers.length,2);
+    for(const s of stringers){
+      const origin=gangway.localToWorld(new THREE.Vector3(s.position.x,.014,s.position.z*.81));
+      const hits=new THREE.Raycaster(origin,new THREE.Vector3(0,-1,0).applyQuaternion(gangway.quaternion)).intersectObjects([s,deck],false);
+      assert.equal(hits[0].object,deck);assert.ok(hits[1].distance-hits[0].distance>.0029);
+    }
+    if(!entry.covered)continue;
+    const portal=ferryPortal(entry,font),lintel=portal.getObjectByName('Portal lintel'),pediment=portal.getObjectByName('Portal pediment');
+    portal.updateMatrixWorld(true);
+    const frame=lintel.parent,eave=entry.gate==='B'?.342:.36;
+    for(const side of [-1,1])for(const dy of [-.005,-.001]){
+      const eye=frame.localToWorld(new THREE.Vector3(.033,eave+dy,side*.24));
+      const hits=new THREE.Raycaster(eye,new THREE.Vector3(0,0,-side).applyQuaternion(frame.quaternion)).intersectObjects([lintel,pediment],false);
+      assert.equal(hits.length,1);
+      assert.equal(hits[0].object,dy<-.003?lintel:pediment);
+    }
+    const sheets=gangway.getObjectsByProperty('name','Rolled canopy sheet');
+    assert.equal(sheets.length,8);
+    // Cast just either side of each radial joint at the front cap's mid-thickness.
+    for(let i=1;i<8;i++)for(const offset of [-.00045,.00045]){
+      const q=Math.PI*i/8,x=-Math.cos(q)*entry.width*1.07/2+offset,y=.226+Math.sin(q)*.036;
+      const eye=gangway.localToWorld(new THREE.Vector3(x,y,-.05));
+      const hits=new THREE.Raycaster(eye,new THREE.Vector3(0,0,1).applyQuaternion(gangway.quaternion),0,.08).intersectObjects(sheets,false);
+      assert.equal(hits.length,1,'Gate '+entry.gate+' roof joint '+i);
+    }
+  }
+});

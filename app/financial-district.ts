@@ -194,7 +194,11 @@ function tower101(root:THREE.Group,p:Plan,windows:Pane[]){
   slope.finish('Inclined atrium glazing and transoms');
   shaft.finish('Serrated granite and glass drum');lobby.finish('Recessed seven-story atrium and piers');
   slab(root,p,atriumTop-.033,atriumTop,'#a99e8d','Cantilever soffit');
-  slab(root,p,height101-.025,height101,'#a3a29a','Faceted flat roof');
+  // The drum's granite panels already enclose the perimeter up to the roof.
+  const roofPlan=new THREE.Shape(p.map(([x,z])=>new THREE.Vector2(x,-z)));
+  const roof=new THREE.Mesh(new THREE.ShapeGeometry(roofPlan).rotateX(-Math.PI/2),
+    new THREE.MeshStandardMaterial({color:'#a3a29a',roughness:.82}));
+  roof.position.y=height101;roof.name='Faceted flat roof';root.add(roof);
 }
 
 function tower50(root:THREE.Group,plan:Plan,windows:Pane[]){

@@ -1,3 +1,4 @@
+import {hillsArcade,hillsCourt,hillsAtrium} from './hills-plaza.ts';
 import * as THREE from 'three';
 import {staticBoxes} from './static-boxes.ts';
 import {center,footprintGeometry} from './sf-map.ts';
@@ -7,13 +8,16 @@ type Building={id:number;name:string;p:number[][];h:number;minH?:number;part?:bo
 type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
 type Opening={x:number;bottom:number;w:number;h:number;rise?:number;door?:boolean};
 
-export const hillsParts=new Set([-157,1487160484,944986473]);
+export const hillsParts=new Set([-157,944986473]);
 const streetProfiles=new Map([
+  ...([-158,-345,-346,-347,-348,-349,1487160484] as const).map(id=>[id,{
+    name:id===-158?'2 Harrison rooftop penthouse':'345 Spear Street',
+    floors:id===1487160484?9:id===-345?8:id===-349?3:id===-347?3:id===-348?2:1,wall:'#a88470',glazing:'#536c71'}] as const),
   [191861045,{name:'318 Spear Street',floors:8,wall:'#a3a79d',glazing:'#5e8081'}],
   [421816058,{name:'333 Main Street',floors:9,wall:'#b0b4a9',glazing:'#627d7b'}],
 ]);
 export function hasShorelineFacade(b:Building){
-  return hillsParts.has(b.id)||(!b.name&&!b.part&&!b.parent&&streetProfiles.has(b.id));
+  return hillsParts.has(b.id)||(b.id===1487160484||b.id<0)&&streetProfiles.has(b.id)||(!b.name&&!b.part&&!b.parent&&streetProfiles.has(b.id));
 }
 
 function contour(path:THREE.Path,opening:Opening){
@@ -44,7 +48,14 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
   const area=ring.reduce((sum,[x,z],i)=>{const [a,q]=ring[(i+1)%ring.length];return sum+x*q-z*a;},0);
   const [cx,cz]=center(ring);
   const near=neighbors.filter(peer=>peer.id!==b.id&&peer.p.some(([x,z])=>Math.abs(x-cx)<11&&Math.abs(z-cz)<11));
-  const slab=mesh(footprintGeometry(b.p,.064),hills?'#8d8376':'#a5a28f',0,h-.052,0,root);
+  // SF Planning 2011.0417A, deck section: 42 inches below the brick parapet.
+  // The horizontal gravel surface terminates inside the masonry; a full-depth
+  // extrusion here used to put a second vertical face on the exterior brick.
+  const flat=hills||b.id<0;
+  const plan=new THREE.Shape(ring.map(([x,z])=>new THREE.Vector2(x,-z)));
+  if(b.id===-345)plan.holes.push(new THREE.Path(hillsAtrium.map(([x,z])=>new THREE.Vector2(x,-z))));
+  const roof=flat?new THREE.ShapeGeometry(plan).rotateX(-Math.PI/2):footprintGeometry(b.p,.064);
+  const slab=mesh(roof,hills?'#8d8376':'#a5a28f',0,h-(flat?.064:.052),0,root);
   slab.name=hills?'Gravel roof behind the brick parapet':'Roof deck';
 
   function openings(g:THREE.Group,w:number,a:number,y:number,entries:Opening[],through=false){
@@ -58,10 +69,10 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
         const pane=new THREE.Shape();contour(pane,op);
         mesh(extrusion(pane,.006),door?'#526361':glass,0,0,-depth-.017,g).name='Recessed sash glazing';
         const transom=bottom+spring*(door?.74:.45);
-        box(w,.012,.018,x,transom,-depth-.007,frame,g);
+        box(w-.003,.012,.014,x,transom,-depth+.001,frame,g);
         for(const split of door?[-.33,0,.33]:[-.25,0,.25]){
           const cap=rise*Math.sqrt(1-(2*split)**2);
-          box(.01,spring+cap,.018,x+w*split,bottom+(spring+cap)/2,-depth-.009,frame,g);
+          box(.01,spring+cap-.003,.012,x+w*split,bottom+(spring+cap)/2,-depth+.002,frame,g);
         }
         if(door){
           for(const side of [-1,1])box(.026,.008,.014,x+side*.016,bottom+.086,-depth+.004,'#b19c80',g);
@@ -99,13 +110,13 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
     }
     const entries:Opening[]=[];
     if(hills&&plant&&length>.8){
-      const bays=length>5?6:Math.max(1,Math.round(length/1.04)),spacing=length/bays;
+      const bays=Math.max(1,Math.round(length/.49)),spacing=length/bays;
       for(let bay=0;bay<bays;bay++){
         const pos=-length/2+(bay+.5)*spacing;
         if(exposed(pos,spacing*.65,.31))entries.push({x:pos,w:spacing*.68,bottom:.098,h:.38,rise:.114,door:bay===2||bay===4});
-        for(const split of [-.23,.23])for(let floor=0;floor<4;floor++){
-          const fx=pos+split*spacing,bottom=.537+floor*.202,w=spacing*.295;
-          if(exposed(fx,w,bottom+.08))entries.push({x:fx,w,bottom,h:.143,rise:floor===3?.046:undefined});
+        for(const split of [-.23,.23])for(let floor=0;floor<5;floor++){
+          const fx=pos+split*spacing,bottom=.528+floor*.166,w=spacing*.295;
+          if(exposed(fx,w,bottom+.08))entries.push({x:fx,w,bottom,h:.127,rise:floor===4?.039:undefined});
         }
         box(.04,.845,.033,pos-spacing/2+.028,1.0,.018,'#a4816e',g);
       }
@@ -116,7 +127,8 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
       for(let slot=0;slot<bays;slot++){
         const x=-length/2+(slot+.5)*spacing,w=spacing*.54,y=h-.35;
         if(exposed(x,w,y))entries.push({x,w,bottom:y,h:.241,rise:.056});
-        box(.034,h-1.43,.043,x+spacing*.4,(h+1.25)/2,.016,courses,g);
+        const spring=Math.max(base,1.43);
+        box(.034,h-spring,.043,x+spacing*.4,(h+spring)/2,.016,courses,g);
       }
       box(length+.028,.047,.062,0,h-.026,.021,coping,g);
       box(length+.03,.028,.055,0,h-.081,.018,courses,g);
@@ -150,12 +162,14 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
   }
   if(plant){
     // The public arcade carries through the retaining wall to the terrace.
-    const a=new THREE.Vector2(-37.85,-6.55),q=new THREE.Vector2(-35.19,-6.95);
+    const [a,q]=hillsArcade.map(([x,z])=>new THREE.Vector2(x,z));
     const length=a.distanceTo(q),g=new THREE.Group();g.name='Open Hills Plaza promenade arcade';
     g.position.set((a.x+q.x)/2,0,(a.y+q.y)/2);g.rotation.y=Math.atan2(a.y-q.y,q.x-a.x);root.add(g);
     const start=.115,top=.692,spacing=length/4;
     openings(g,length,.093,top,Array.from({length:4},(_,i)=>({x:-length/2+(i+.5)*spacing,w:spacing*.76,bottom:start,h:.496,rise:.16})),true);
-    box(length+.046,.042,.19,0,top,.006,coping,g);
+    box(length+.046,.042,.30,0,top,-.10,coping,g);
+    const court=mesh(footprintGeometry(hillsCourt,.052),'#bba58e',0,.062,0,root);
+    court.name='Hills Plaza public passage';
     box(length+.022,.026,.15,0,top-.062,.013,courses,g);
     box(length,.043,.30,0,.111,-.15,'#b2a58f',g);
     for(let i=0;i<4;i++){
@@ -164,7 +178,16 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
       if(i<3)box(.15,.07,.25,x+spacing/2,.121,.134,'#a3a18d',g);
     }
   }
-  if(profile){
+  if(b.id===-345){
+    const atriumBase=.44;
+    mesh(footprintGeometry(hillsAtrium,.023),'#83989a',0,atriumBase,0,root).name='Sheltered 345 Spear atrium';
+    for(let i=1;i<hillsAtrium.length;i++){
+      const [x,z]=hillsAtrium[i-1],[a,b]=hillsAtrium[i];
+      const m=box(Math.hypot(a-x,b-z),h-.064-atriumBase,.016,(x+a)/2,(h-.064+atriumBase)/2,(z+b)/2,'#a18d7f',root);
+      m.rotation.y=-Math.atan2(b-z,a-x);
+    }
+  }
+  if(profile&&b.id>0&&b.id!==1487160484){
     const inset=ring.map(([x,z])=>[cx+(x-cx)*.33,cz+(z-cz)*.34]);
     mesh(footprintGeometry(inset,.103),'#9da492',0,h+.008,0,root);
   }

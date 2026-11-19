@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createFerryMarket,ferryMarketSchedule} from '../app/ferry-market.ts';
-import {fixedFerryApron} from '../app/ferry-terminal.ts';
+import {buildFerryTerminal,ferryConnections,fixedFerryApron} from '../app/ferry-terminal.ts';
 import {routes,routeWidth} from '../app/waterfront-routes.ts';
 
 const at=iso=>new Date(iso);
@@ -18,43 +18,39 @@ function scene(market,iso,still=false){
 const section=(array,where)=>array.filter(m=>where==='rear'?m[14]>1:where==='artist'?m[14]<-6:m[14]>-3&&m[14]<-1);
 const position=(matrix)=>matrix.slice(12,15);
 const width=(matrix)=>Math.hypot(...matrix.slice(0,3));
-test('Foodwise dates follow Pacific trading time through DST and the three published closures',()=>{
-  for(const iso of ['2026-03-03T18:00Z','2026-03-10T17:00Z','2026-10-29T17:00Z','2026-11-03T18:00Z']){
-    assert.deepEqual(ferryMarketSchedule(at(iso)),{front:1,rear:0,artist:1});
+test('the permanent waterfront market stays stocked through midnight, weekdays, holidays and changes to Pacific time',()=>{
+  const market=createFerryMarket(),open=scene(market,'2026-11-21T20:00Z');
+  for(const iso of ['2026-03-03T18:00Z','2026-03-10T17:00Z','2026-11-26T20:00Z','2026-12-24T20:00Z','2026-12-31T20:00Z','2026-11-21T08:00Z']){
+    const schedule=ferryMarketSchedule(at(iso));
+    assert.equal(schedule.front,1);assert.equal(schedule.rear,1);
+    const sample=scene(market,iso);
+    for(const key of ['roofs','boxes','people']){
+      assert.deepEqual(sample[key].filter(m=>m[14]>-3),open[key].filter(m=>m[14]>-3));
+    }
   }
-  for(const day of ['2026-11-26','2026-12-24','2026-12-31','2026-11-18']){
-    assert.deepEqual(ferryMarketSchedule(at(day+'T20:00Z')),{front:1,rear:0,artist:1});
-  }
-  assert.deepEqual(ferryMarketSchedule(at('2026-11-21T16:00Z')),{front:1,rear:1,artist:0});
-  assert.deepEqual(ferryMarketSchedule(at('2026-11-21T05:00Z')),{front:1,rear:0,artist:0});
+  assert.equal(ferryMarketSchedule(at('2026-11-21T08:00Z')).artist,0);
+  assert.equal(ferryMarketSchedule(at('2026-11-21T20:00Z')).artist,1);
 });
-test('front stalls stay fully stocked at midnight while Saturday crews pack the rear plaza',()=>{
-  const market=createFerryMarket(),sample=time=>scene(market,'2026-11-21T'+time+'Z');
-  const midnight=sample('08:00'),before=sample('15:30'),early=sample('15:32'),half=sample('15:45'),open=sample('16:00');
-  assert.equal(section(midnight.roofs,'front').length,14);
-  for(const meshes of ['boxes','roofs','people']){
-    assert.ok(section(midnight[meshes],'front').length);
-    assert.deepEqual(section(midnight[meshes],'front'),section(open[meshes],'front'));
-  }
-  assert.equal(section(before.boxes,'rear').length,0);
-  assert.ok(section(early.boxes,'rear').length>0&&section(early.people,'rear').length>0);
-  assert.equal(section(early.roofs,'rear').length,0);
-  const halfRoof=section(half.roofs,'rear')[0],openRoof=section(open.roofs,'rear')[0];
-  assert.ok(width(halfRoof)<width(openRoof)&&halfRoof[13]<openRoof[13]);
-  assert.deepEqual(section(half.roofs,'rear'),section(sample('22:15').roofs,'rear'));
-  assert.deepEqual(section(early.people,'rear'),section(sample('22:28').people,'rear'));
-  assert.equal(section(sample('22:30').boxes,'rear').length,0);
-});
-test('Saturday rear pitches remain on the fixed deck clear of the loop, with three active batches',()=>{
+test('fixed-plaza pitches wrap around the south end without obstructing the ferry loop, kiosks or gate approaches',()=>{
   const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');
-  const rear=section(s.roofs,'rear'),artists=section(s.roofs,'artist');
-  assert.equal(rear.length,16);assert.equal(artists.length,7);
+  const rear=s.roofs.filter(m=>m[14]>2),south=s.roofs.filter(m=>m[12]<-6.2&&m[14]>-1.2&&m[14]<1.8);
+  assert.equal(rear.length,27);assert.equal(south.length,7);
+  assert.equal(section(s.roofs,'front').length,15);assert.equal(section(s.roofs,'artist').length,7);
+  const root=new THREE.Group(),terminal=buildFerryTerminal((g,c,x,y,z,parent)=>{
+    const mesh=new THREE.Mesh(g);mesh.position.set(x,y,z);parent.add(mesh);return mesh;
+  },root);
+  root.updateMatrixWorld(true);
+  const shelter=terminal.getObjectByName('Golden Gate Ferry Terminal waiting shelter');
+  const shelterBounds=new THREE.Box3().setFromObject(shelter);
   const boundary=fixedFerryApron.p.map(p=>new THREE.Vector2(...p));
   const shape=new THREE.Shape(boundary),geometry=new THREE.ShapeGeometry(shape);
   const deck=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
   const ray=new THREE.Raycaster(),foot=routes.ferry.getSpacedPoints(250);
   for(const m of rear){
     const [x,,z]=position(m);
+    const roofBox=new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(...position(m)),new THREE.Vector3(width(m),.054,.19));
+    assert.ok(!roofBox.intersectsBox(shelterBounds),'shelter/kiosk overlap at '+[x,z]);
+    assert.ok(ferryConnections.every(c=>Math.hypot(x-c.from[0],z-c.from[1])>c.width/2+.19));
     for(const dx of [-.1,.1])for(const dz of [-.1,.1]){
       ray.set(new THREE.Vector3(x+dx,z+dz,1),new THREE.Vector3(0,0,-1));assert.ok(ray.intersectObject(deck).length);
     }
@@ -63,14 +59,47 @@ test('Saturday rear pitches remain on the fixed deck clear of the loop, with thr
   assert.ok(market.root.children.every(m=>m.isInstancedMesh&&m.visible&&m.count<=m.instanceMatrix.count&&Number.isFinite(m.boundingSphere.radius)));
   assert.ok(section(s.boxes,'artist').length>section(s.boxes,'front').length/14);
 });
+test('outdoor tables follow documented storefronts and leave the passenger routes and market aisles open',async()=>{
+  const {ferryPatios}=await import('../app/ferry-patios.ts');
+  const {ferryPassengerPose,ferryPassengerCount}=await import('../app/ferry-passengers.ts');
+  const {ferryCycle}=await import('../app/ferry-service.ts');
+  const {ferryPose}=await import('../app/motion.ts');
+  const layout=ferryPatios();layout.updateMatrixWorld(true);
+  const tables=layout.children.map(o=>new THREE.Box3().setFromObject(o)),counts=new Map();
+  const mappedFrontages=new Map([['Arquet',[4.17,5.88]],['Hog Island Oyster Co.',[1.63,3.27]],
+    ['Red Bay Coffee',[-4.26,-3.61]],["Gott's Roadside",[4.27,5.88]]]);
+  for(const [i,table] of layout.children.entries()){
+    const name=table.name.replace(' outdoor table',''),[lo,hi]=mappedFrontages.get(name);
+    counts.set(name,(counts.get(name)??0)+1);
+    assert.ok(tables[i].min.x>lo&&tables[i].max.x<hi);
+    assert.ok(name==="Gott's Roadside"?tables[i].max.z< -1.70:tables[i].min.z>1.64&&tables[i].max.z<2.17);
+    assert.ok(tables.slice(0,i).every(t=>!t.intersectsBox(tables[i])));
+    assert.ok(ferryConnections.every(c=>Math.hypot(table.position.x-c.from[0],table.position.z-c.from[1])>.42));
+  }
+  assert.deepEqual(Object.fromEntries(counts),{'Arquet':12,'Hog Island Oyster Co.':5,'Red Bay Coffee':3,"Gott's Roadside":6});
+  const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');
+  const stallBounds=s.roofs.filter(m=>m[14]>-3).map(m=>{
+    const [x,,z]=position(m);
+    return new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(x,.12,z),
+      new THREE.Vector3(Math.abs(m[0])+Math.abs(m[8]),.25,Math.abs(m[2])+Math.abs(m[10])+.06));
+  });
+  for(const pitch of stallBounds)assert.ok(tables.every(t=>!t.intersectsBox(pitch)),'vendor canopy over dining table');
+  const obstacles=[...tables,...stallBounds];
+  for(let t=0;t<2*ferryCycle;t+=.5)for(let i=0;i<ferryPassengerCount;i++){
+    const p=ferryPassengerPose(t,i,ferryPose(t,0));
+    assert.ok(obstacles.every(b=>Math.hypot(Math.max(0,b.min.x-p.x,p.x-b.max.x),Math.max(0,b.min.z-p.z,p.z-b.max.z))>.026),
+      'passenger meets an outdoor table or market at '+[p.x,p.z]);
+  }
+});
+
 test('seeking, reload and quiet-mode tableaux reconstruct deterministic geometry',()=>{
-  const market=createFerryMarket(),target='2026-11-21T15:44:53Z',fresh=scene(createFerryMarket(),target);
+  const market=createFerryMarket(),target='2026-11-21T16:44:53Z',fresh=scene(createFerryMarket(),target);
   scene(market,'2026-11-21T19:45Z');scene(market,'2026-11-17T08:01Z');
   const seek=scene(market,target);
   for(const key of ['boxes','roofs','people'])assert.deepEqual(seek[key],fresh[key]);
-  const quiet=scene(market,target,true),hold=scene(market,'2026-11-21T15:44:59Z',true);
+  const quiet=scene(market,target,true),hold=scene(market,'2026-11-21T16:44:59Z',true);
   assert.deepEqual(quiet,hold);
-  assert.notDeepEqual(scene(market,'2026-11-21T15:50:00Z',true).roofs,hold.roofs);
+  assert.notDeepEqual(scene(market,'2026-11-21T16:50:00Z',true).roofs,hold.roofs);
   const open=scene(market,'2026-11-17T18:00Z',true);
   assert.equal(scene(market,'2026-11-17T19:00Z',true).rev,open.rev);
 });
@@ -85,7 +114,7 @@ test('front plaza tables carry bouquets, produce bins and Foodwise program mater
       mesh.getMatrixAt(i,matrix);mesh.getColorAt(i,color);
       const {elements:m}=matrix;
       if(Math.abs(m[12]-centerX)<.18&&Math.abs(m[14]-z)<.16)
-        parts.push({x:m[12],y:m[13],w:width(m),color:color.getHexString()});
+        parts.push({x:m[12],y:m[13],w:width(m),h:Math.hypot(...m.slice(4,7)),color:color.getHexString()});
     }
     return parts;
   }
@@ -95,6 +124,11 @@ test('front plaza tables carry bouquets, produce bins and Foodwise program mater
     assert.equal(items(boxes,x).filter(p=>p.color==='8d9a78').length,3,'maps or recipe cards');
   assert.equal(items(rounds,2.41).filter(p=>['c46678','dbb350','b15c48','a684ac'].includes(p.color)).length,12);
   assert.equal(items(boxes,2.88).filter(p=>p.color==='bd9a6a').length,3,'three slatted produce bins');
+  const bins=items(boxes,2.88);
+  const base=bins.find(p=>p.color==='a18260'&&Math.abs(p.w-.064)<.00001);
+  for(const rim of bins.filter(p=>['b99970','bd9a6a'].includes(p.color))){
+    assert.ok(Math.abs((rim.y-rim.h/2)-(base.y+base.h/2))<.00001,'crate slats meet the top of the box');
+  }
   assert.equal(items(boxes,.713,-8.175).filter(p=>p.color==='465d63').length,3,'screen-printed shirts on the back rail');
   for(const mesh of [boxes,roofs,rounds]){
     const m=new THREE.Matrix4();mesh.geometry.computeBoundingBox();
@@ -123,6 +157,30 @@ test('the baked waterfront keeps populated farmers market batches in the opening
       const chunks=world.architectureChunks.filter(m=>floorRay.ray.intersectsBox(m.geometry.boundingBox));
       const top=floorRay.intersectObjects(chunks,false)[0];
       assert.ok(top&&Math.abs(top.point.y-pose.y)<.001,'shoes meet the finished bayfront apron');
+    }
+  }
+  const {ferryPatios}=await import('../app/ferry-patios.ts');
+  for(const table of ferryPatios().children){
+    const {x,y,z}=table.position;
+    floorRay.set(new THREE.Vector3(x+.018,y+.001,z+.018),down);
+    const chunks=world.architectureChunks.filter(m=>floorRay.ray.intersectsBox(m.geometry.boundingBox));
+    const ground=floorRay.intersectObjects(chunks,false)[0];
+    assert.ok(ground&&Math.abs(ground.point.y-y)<.001,'table on finished paving at '+[x,y,z,ground?.point.y]);
+    floorRay.set(new THREE.Vector3(x,y+.15,z),down);
+    const top=floorRay.intersectObjects(chunks,false)[0];
+    assert.ok(top&&Math.abs(top.point.y-y-.046)<.001,'exposed dining top at '+[x,y,z,top?.point.y]);
+  }
+  const frame=new THREE.Matrix4(),roofs=market.root.children[1];
+  for(let i=0;i<roofs.count;i++){
+    roofs.getMatrixAt(i,frame);
+    const [x,,z]=position(frame.elements);
+    if(z<=2&&!(x<-6.2&&z>-1.2))continue;
+    const floor=z>2?.096:.106;
+    for(const dx of [-.088,.088])for(const dz of [-.088,.088]){
+      floorRay.set(new THREE.Vector3(x+dx,floor+.22,z+dz),down);
+      const chunks=world.architectureChunks.filter(m=>floorRay.ray.intersectsBox(m.geometry.boundingBox));
+      const ground=floorRay.intersectObjects(chunks,false)[0];
+      assert.ok(ground&&Math.abs(ground.point.y-floor)<.006,'new pitch meets open paving at '+[x+dx,z+dz,ground?.point.y]);
     }
   }
   const target=new THREE.Vector3(...openingCamera.target),matrix=new THREE.Matrix4(),frustum=new THREE.Frustum();

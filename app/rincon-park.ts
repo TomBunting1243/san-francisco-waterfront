@@ -19,14 +19,17 @@ const metres=[
 type Vertex=[number,number,number];
 const grade=(m:number)=>knollBase+(m-2.9)*.06;
 const summit:Vertex=[knollCenter[0],grade(5.1),knollCenter[1]];
-const contours=[.33,.66,1].map((r,k)=>knollOutline.map(([x,z],i):Vertex=>[
+const contours=[.33,.66,.955].map((r,k)=>knollOutline.map(([x,z],i):Vertex=>[
   knollCenter[0]+(x-knollCenter[0])*r,grade(metres[k][i]),knollCenter[1]+(z-knollCenter[1])*r,
 ]));
+// The survey's outer samples lie inside the grass shoulder. OLIN's mounded
+// landform eases back down into the surrounding promenade at the traced edge.
+contours.push(knollOutline.map(([x,z]):Vertex=>[x,.108,z]));
 const turf:Vertex[][]=[];
 for(let i=0;i<knollOutline.length;i++){
   const j=(i+1)%knollOutline.length;
   turf.push([summit,contours[0][j],contours[0][i]]);
-  for(let k=1;k<3;k++){
+  for(let k=1;k<contours.length;k++){
     const a=contours[k-1][i],b=contours[k-1][j],c=contours[k][i],d=contours[k][j];
     turf.push([a,b,c],[b,d,c]);
   }
@@ -40,12 +43,21 @@ export function knollHeight(x:number,z:number){
   return knollBase;
 }
 export function rinconKnoll(){
-  const p=turf.flat(2);
-  for(let i=0;i<knollOutline.length;i++){
-    const a=contours[2][i],b=contours[2][(i+1)%knollOutline.length];
-    p.push(...a,...b,a[0],.108,a[2],a[0],.108,a[2],...b,b[0],.108,b[2]);
+  const positions:number[]=[],colors:number[]=[];
+  const turfTone=new THREE.Color('#829b61'),crestTone=new THREE.Color('#b9a877'),color=new THREE.Color();
+  for(const tri of turf){
+    for(const [x,y,z] of tri){
+      // Pale worn grass along the crest in the 2024 8 cm ortho, concentrated
+      // around the three sculpture penetrations. The bayside toe stays green.
+      const u=(x+42)*48-456,v=(z+5)*48-187-u*.22;
+      const wear=1-THREE.MathUtils.smoothstep(Math.hypot(u/115,v/25),.48,1.1);
+      positions.push(x,y,z);color.copy(turfTone).lerp(crestTone,wear);colors.push(color.r,color.g,color.b);
+    }
   }
-  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(p,3));geo.computeVertexNormals();return geo;
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.userData.paintVertices=true;
+  geo.computeVertexNormals();return geo;
 }
 
 // Kreysler's installed views show the lower arc doubling back on itself, a
@@ -86,15 +98,19 @@ export function cupidsSpan(){
     solid(name,g,'#d6a04d');
     return curve;
   }
-  const low=limb('Low returning bow limb',[v(-.28,-.10,-.03),v(-.51,.12,-.037),v(-.79,.255,-.044),
+  const low=limb('Low returning bow limb',[v(-.085,-.10,-.060),v(-.32,.12,-.063),v(-.72,.255,-.055),
     v(-1.01,.273,-.05),v(-1.19,.23,-.053),v(-1.295,.183,-.055)],.068,.078);
   const high=limb('High swept bow limb',[v(.27,-.095,-.06),v(.48,.055,-.066),v(.71,.35,-.075),
     v(.89,.655,-.076),v(1.05,.807,-.071),v(1.22,.867,-.065),v(1.322,.868,-.061)],.086,.078);
-  const base=v(.34,-.105,-.090),tip=v(-.14,1.132,.060);
+  // The center of the drawn bow turns below ground. Join its two roots
+  // under the surveyed lawn, leaving the separate entry points visible.
+  const grip=new THREE.CatmullRomCurve3([low.getPoint(0),v(.01,-.163,-.079),v(.14,-.170,-.076),high.getPoint(0)]);
+  solid('Buried bow grip',new THREE.TubeGeometry(grip,12,.046,8,false),'#d6a04d');
+  const base=v(.34,-.105,-.116),tip=v(-.14,1.132,.060);
   const axis=tip.clone().sub(base).normalize(),nock=base.clone().lerp(tip,.908);
   rod('Continuous stainless steel shaft',base,tip,.027,'#a7b2b2');
-  rod('Low tension cable',low.getPoint(.86),nock,.0066,'#494e4b');
-  rod('High tension cable',high.getPoint(.88),nock,.0066,'#494e4b');
+  rod('Low tension cable',low.getPoint(.985),nock,.0066,'#494e4b');
+  rod('High tension cable',high.getPoint(.985),nock,.0066,'#494e4b');
   // Fan the three molded vanes around the *same* inclined shaft as the nock.
   // Their serrated lobes and alternating ridges follow the fabricator's photograph.
   const start=base.clone().lerp(tip,.49),run=start.distanceTo(tip),normal=v(0,0,1).addScaledVector(axis,-axis.z).normalize();
@@ -124,7 +140,7 @@ export function cupidsSpan(){
     geometry.setIndex(twoSides);geometry.computeVertexNormals();geometry.userData.paintVertices=true;
     const feather=solid('Ribbed red fletching',geometry,'#ffffff');feather.material.vertexColors=true;
   }
-  const [x,z]=rinconPoint(458,192);
+  const [x,z]=rinconPoint(458,190);
   sculpture.position.set(x,knollHeight(x,z),z);sculpture.rotation.y=-.295;
   return sculpture;
 }

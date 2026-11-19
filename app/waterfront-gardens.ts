@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {biermanGround,biermanParcel,sueBiermanPark} from './sue-bierman.ts';
 import {staticBoxes} from './static-boxes.ts';
 import {treeWell} from './tree-wells.ts';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
@@ -64,21 +65,17 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     treeAnchors.push({id,x,y,z});
   }
   function shrub(x:number,z:number,y:number,s=.12){const crown=mesh(new THREE.IcosahedronGeometry(s,1),'#617f55',x,y+s*.55,z);crown.scale.set(1,.65,1);}
+  root.add(sueBiermanPark());
   for(const area of plantedAreas){
+    if(biermanParcel(area.id))continue;
     const y=height(area);
     if(area.id!==-1){
-      // Sue Bierman's west lawn has a mapped service-building hole.
-      const holes=waterfrontLandscape.areas.filter(a=>a.kind==='park-hole'&&contains(center(a.p),area));
-      if(holes.length){
-        const shape=new THREE.Shape(area.p.map(([x,z])=>new THREE.Vector2(x,-z)));
-        for(const hole of holes)shape.holes.push(new THREE.Path(hole.p.map(([x,z])=>new THREE.Vector2(x,-z))));
-        const geo=new THREE.ExtrudeGeometry(shape,{depth:.06,bevelEnabled:false});geo.rotateX(-Math.PI/2);mesh(geo,'#8d9f70',0,y-.06,0);
-      }else mesh(footprintGeometry(area.p,.06),area.kind==='commercial'?'#b8b5a0':'#8d9f70',0,y-.06,0);
+      mesh(footprintGeometry(area.p,.06),area.kind==='commercial'?'#b8b5a0':'#8d9f70',0,y-.06,0);
     }
   }
-  // The individually mapped lawn patches preserve Sue Bierman's curving paths.
+  // Other gardens retain their individually mapped lawn patches.
   for(const area of waterfrontLandscape.areas.filter(a=>a.kind==='grass'||a.kind==='scrub')){
-    const p=center(area.p),garden=areaAt(p);if(!garden||solidAt(p[0],p[1],height(garden)))continue;
+    const p=center(area.p),garden=areaAt(p);if(!garden||biermanParcel(garden.id)||solidAt(p[0],p[1],height(garden)))continue;
     mesh(footprintGeometry(area.p,.018),area.kind==='scrub'?'#658563':'#99aa78',0,height(garden)+.006,0);
   }
   for(const path of waterfrontLandscape.paths){
@@ -90,20 +87,20 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
       for(let j=0;j<steps;j++){
         const t=(j+.5)/steps,p=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],area=areaAt(p);if(!area||solidAt(p[0],p[1],height(area)))continue;
         const at=(u:number)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];
-        strip(at(j/steps),at((j+1)/steps),THREE.MathUtils.clamp(parseFloat(path.width||'2.4')*.06,.08,.25),height(area)+.029,'#d2c8ae');pathSegments.push({x:p[0],z:p[1],area:area.id});
+        if(!biermanParcel(area.id))strip(at(j/steps),at((j+1)/steps),THREE.MathUtils.clamp(parseFloat(path.width||'2.4')*.06,.08,.25),height(area)+.029,'#d2c8ae');pathSegments.push({x:p[0],z:p[1],area:area.id});
       }
     }
   }
   root.add(createGatewayClub(waterfrontLandscape.areas,waterfrontLandscape.paths,font).root);
   for(const node of waterfrontLandscape.trees){
-    const [x,z]=node.p,area=areaAt(node.p),inPark=insideBuilding(x,z,rinconPaving.p),y=area?height(area):inPark?.11:-.01;
+    const [x,z]=node.p,area=areaAt(node.p),inPark=insideBuilding(x,z,rinconPaving.p),y=area?(biermanParcel(area.id)?biermanGround(x,z):height(area)):inPark?.11:-.01;
     // Preserve street trees too, but never plant through a roof or traffic carriageway.
     if(solidAt(x,z,y)||gatewayClubGround(x,z)||ecAreas.some(a=>contains(node.p,a))||!area&&(z< -31||x< -45||x>56))continue;
     const record=surveyedTrees[node.id],canopy=plazaTreeRecords.get(node.id);
     const palms=canopy?.palm||record?.species==='Phoenix canariensis'||
       (node.id>=10828325148&&node.id<=10828325152)||(node.id>=10828325274&&node.id<=10828325286);
     const trunkRadius=record?.dbhInches ? record.dbhInches*.0254*.06/2 : undefined;
-    const support=harryBridgesGround(x,z)??(area?y+.024:inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
+    const support=harryBridgesGround(x,z)??(area?(biermanParcel(area.id)?y:y+.024):inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
     if(record)treeWell(mesh,record.sfId,x,support,z,-Math.atan(.15));
     if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,z,palms,record?.species??node.species,trunkRadius)){
       treeAnchors.push({id:node.id,x,y:support,z});
@@ -141,7 +138,7 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
       if(![-.20,.20].every(dx=>[-.20,.20].every(dz=>contains([x+dx,z+dz],area)&&!solidAt(x+dx,z+dz,y))))continue;
       if(area.id===-1&&Math.hypot((x-cx)/2.6,(z-cz)/2.3)<.63)continue;
       if(pathSegments.some(p=>p.area===area.id&&Math.hypot(p.x-x,p.z-z)<.24)||treeAnchors.some(p=>Math.hypot(p.x-x,p.z-z)<.54))continue;
-      const id=-Math.abs(area.id*1000+index);tree(x,z,y,id,area.id===585983823?'Populus':'');
+      const id=-Math.abs(area.id*1000+index);tree(x,z,biermanParcel(area.id)?biermanGround(x,z):y,id,area.id===585983823?'Populus':'');
       if(area.kind==='commercial'){box(.52,.025,.50,x,y+.018,z,'#8e9e70');}
     }
   }

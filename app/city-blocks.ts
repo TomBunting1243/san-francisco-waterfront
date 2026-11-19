@@ -110,12 +110,13 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   const signLights = parts.some(mesh=>mesh.userData.signLight||mesh.userData.uplight||mesh.geometry.hasAttribute('signLight')) ? new Uint8Array(vertices * 3) : null;
   const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
   const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
-  const printUv=parts[0].geometry.hasAttribute('billboardPrint')?new Float32Array(vertices*2):null;
+  const printAttribute=parts[0].geometry.hasAttribute('kioskPrint')?'kioskPrint':'billboardPrint';
+  const printUv=parts[0].geometry.hasAttribute(printAttribute)?new Float32Array(vertices*2):null;
   const walkPanel=parts[0].geometry.hasAttribute('walkPanel')?new Float32Array(vertices*2):null;
   let vertex = 0, face = 0;
   for (const mesh of parts) {
     const geometry = mesh.geometry, pos = geometry.attributes.position, n = geometry.attributes.normal;
-    if(printUv)printUv.set(geometry.getAttribute('billboardPrint').array,vertex*2);
+    if(printUv)printUv.set(geometry.getAttribute(printAttribute).array,vertex*2);
     if(walkPanel)walkPanel.set(geometry.getAttribute('walkPanel').array,vertex*2);
     if(facadeGrid)facadeGrid.set(geometry.getAttribute('facadeGrid').array,vertex*4);
     const {r,g,b} = mesh.material.color;

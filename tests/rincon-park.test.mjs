@@ -39,3 +39,23 @@ test('the wings have unequal visible arcs below the tall notched fletching and r
     assert.ok(new THREE.Vector3().fromBufferAttribute(n,22).dot(new THREE.Vector3().fromBufferAttribute(n,22+half))<-.98);
   }
 });
+
+test('the bow grip is buried, the tension cables reach the tips, and all three members enter the recorded crest',()=>{
+  const grip=byName('Buried bow grip'),g=grip.geometry.attributes.position;
+  for(let i=0;i<g.count;i++){
+    const p=new THREE.Vector3().fromBufferAttribute(g,i).applyMatrix4(grip.matrixWorld);
+    assert.ok(p.y<knollHeight(p.x,p.z)-.025,'buried extrapolation stays below turf');
+  }
+  for(const [limb,cable] of [['Low returning bow limb','Low tension cable'],['High swept bow limb','High tension cable']]){
+    const member=byName(limb),p=member.geometry.attributes.position,end=foot(byName(cable),0);
+    const tipCenter=new THREE.Vector3();
+    for(let j=p.count-8;j<p.count;j++)tipCenter.add(new THREE.Vector3().fromBufferAttribute(p,j));
+    tipCenter.multiplyScalar(1/8).applyMatrix4(member.matrixWorld);
+    assert.ok(tipCenter.distanceTo(end)<.04);
+  }
+  const pos=hill.geometry.attributes.position,col=hill.geometry.attributes.color;
+  const low=new THREE.Color(),high=new THREE.Color();
+  low.setRGB(1,1,1);high.setRGB(0,0,0);
+  for(let i=0;i<pos.count;i++){low.r=Math.min(low.r,col.getX(i));high.r=Math.max(high.r,col.getX(i));}
+  assert.ok(high.r-low.r>.15,'contrast between worn crest and outer grass');
+});

@@ -93,7 +93,7 @@ function assertPassengerHit(transit,actor,hit){
 }
 
 test('the same batched passenger clears the stairs and holds the actual stanchion through departure, bends and the final stop',async()=>{
-  const {createRideInteriors}=await import('../app/ride-interior.ts');
+  const {createRideInteriors,placePassenger}=await import('../app/ride-interior.ts');
   const {createPromenadeTransit}=await import('../app/promenade-transit.ts');
   const {rideDuration}=await import('../app/driver-rides.ts');
   const transit=createPromenadeTransit(),actor=transit.poses.getObjectByName('Washington front-door passenger');
@@ -108,6 +108,7 @@ test('the same batched passenger clears the stairs and holds the actual stanchio
     camera.position.set(car.eye.x,car.eye.y,car.eye.z);
     camera.lookAt(car.look.x,car.look.y,car.look.z);
     cab.root.position.copy(camera.position);cab.root.quaternion.copy(camera.quaternion);cab.root.updateMatrixWorld(true);
+    placePassenger(camera,'tram');
     const feet=cab.root.worldToLocal(actor.position.clone()).divideScalar(.06);
     assert.ok(Math.abs(feet.y+1.19)<.001,'feet stay at saloon floor');
     const floorRay=new T.Raycaster(actor.position.clone().addScaledVector(down,-.001),down,0,.003);

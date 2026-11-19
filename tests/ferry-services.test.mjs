@@ -19,6 +19,14 @@ test('operator-specific vessel proportions, numbered berths and working gangways
     assert.equal(p.berth,['E1','E2','G1','F2','F1','C','B','B'][i]);
     const size=new THREE.Box3().setFromObject(mesh,true).getSize(new V());
     assert.ok(Math.abs(size.x-v.length*.06)<.003&&Math.abs(size.z-v.beam*.06)<.003);
+    if(v.family!=='dorado'){
+      for(const side of [-1,1])for(const fraction of [.911,.935,.956]){
+        const eye=new V(v.door+.0021,v.sill+.004,side*fraction*v.beam*.03);
+        const hits=new THREE.Raycaster(eye,new V(0,-1,0),0,.006).intersectObject(mesh,true);
+        const colors=hits.map(h=>new THREE.Color().fromBufferAttribute(h.object.geometry.attributes.color,h.face.a).getHexString());
+        assert.deepEqual(colors,['b9baaa'],v.name+' has one flush landing plate');
+      }
+    }
     mesh.position.set(p.x,p.y,p.z);mesh.rotation.y=p.heading;mesh.updateMatrixWorld(true);
     const side=Math.sign(p.x-p.stopX),ledge=p.x-side*(p.hullHalfBeam-.0065);
     const down=(x,z,o,y=1.5)=>new THREE.Raycaster(new V(x,y,z),new V(0,-1,0)).intersectObject(o,true)[0]?.point.y;

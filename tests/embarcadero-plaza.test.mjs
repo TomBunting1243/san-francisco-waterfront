@@ -46,3 +46,21 @@ test('the original drawing registers at the three observed concrete screen ends;
   for(const step of steps)assert.equal(step.geometry.attributes.position.count,5*12);
   assert.equal(fountain.getObjectByName('Fountain spillways').userData.outlets.length,14);
 });
+
+test('La Chiffonnière has the 22-foot cut silhouette and two feet on its plinth',async()=>{
+  const {laChiffonniere}=await import('../app/la-chiffonniere.ts');
+  const figure=laChiffonniere(),sheet=figure.getObjectByName('Cut steel figure');
+  const plinth=new THREE.Box3().setFromObject(figure.getObjectByName('Circular stone plinth'));
+  const bounds=new THREE.Box3().setFromObject(sheet),size=bounds.getSize(new THREE.Vector3());
+  assert.ok(Math.abs(size.y/.06-22*.3048)<.001);
+  assert.ok(size.x>.20&&size.x<.22&&size.z>.065&&size.z<.085);
+  assert.ok(Math.abs(bounds.min.y-plinth.max.y)<1e-6);
+  const scale=size.y/(934-175);
+  for(const side of [-1,1]){
+    // Rays through both boots, the two shoulder extremes, head and top tab.
+    const seen=(u,v)=>new THREE.Raycaster(new THREE.Vector3((415-u)*scale,(934-v)*scale+plinth.max.y,side),
+      new THREE.Vector3(0,0,-side)).intersectObject(sheet,false).length>0;
+    for(const [u,v] of [[379,913],[465,906],[246,476],[608,508],[421,370],[452,193]])assert.ok(seen(u,v));
+    for(const [u,v] of [[422,910],[318,193],[486,197],[245,316],[610,558]])assert.ok(!seen(u,v));
+  }
+});

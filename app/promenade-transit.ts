@@ -86,7 +86,7 @@ function stop(name:string,x:number,z:number,yaw:number,covered:boolean,route2:bo
   const root=new THREE.Group();root.name=name;root.position.set(x,.045,z);root.rotation.y=yaw;root.scale.setScalar(scale);
   const a=new StreetAssembly();
   a.add(new THREE.CylinderGeometry(.044,.049,3.19,8),'#86928e',0,1.595,0);
-  a.box(0,2.71,0,.34,.71,.058,'#e6d9bd');a.box(0,2.97,.033,.34,.19,.012,red);
+  a.box(0,2.71,0,.34,.71,.058,'#e6d9bd');a.box(0,2.97,.035,.34,.19,.012,red);
   a.label('Muni',0,2.93,.044,.089,'#f1ddc2');
   if(route2)a.label('2',0,2.57,.037,.17,'#4a5660');
   a.box(0,1.38,0,.23,.36,.066,'#bcbbaa');root.add(a.bake('Muni stop flag'));
@@ -192,7 +192,7 @@ function coach(){
     const sections=side<0?[[-6,6]]:[[-6,-2.55],[-1.31,4.00],[5.18,6.00]];
     for(const [lo,hi] of sections){
       const mid=(lo+hi)/2,w=hi-lo,z=side*1.245;
-      a.box(mid,.81,z,w,.87,.071,silver);a.box(mid,.49,z+side*.015,w,.24,.076,redBand);
+      a.box(mid,.81,z,w,.87,.071,silver);a.box(mid,.49,z+side*.015,w-.032,.24,.076,redBand);
       a.box(mid,2.82,z+side*.025,w,.16,.071,redBand);
       a.box(mid,2.00,z,w,1.52,.083,ink);
       const n=Math.max(1,Math.round(w/1.23));
@@ -206,7 +206,7 @@ function coach(){
   for(const x of [-6.01,6.01]){
     a.box(x,.95,0,.099,.97,2.50,silver);a.box(x,1.99,0,.095,1.23,2.49,ink);
     for(const s of [-1,1])a.box(x+Math.sign(x)*.057,2.00,s*.59,.019,1.08,1.08,glass);
-    a.box(x,.54,0,.145,.16,2.5,'#717772');
+    a.box(x,.54,0,.145,.16,2.54,'#717772');
     for(const s of [-1,1])a.box(x+Math.sign(x)*.068,.96,s*.95,.021,.15,.27,x>0?'#e8d7ab':'#af5a4a');
   }
   a.box(6.07,2.70,0,.055,.40,2.19,ink);

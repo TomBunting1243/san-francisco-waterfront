@@ -42,3 +42,26 @@ html[data-palette=ink] .world-poster,.world[data-solar=night] .world-poster{--fo
 @media(max-width:600px){.world-tools{right:14px;bottom:max(17px,env(safe-area-inset-bottom))}.world-controls{padding:0}.world-controls button{width:40px;height:44px}}
 html[data-palette=ink] .world-poster,.world[data-solar=night] .world-poster{background-image:url('/city-night.webp')}
 @media(orientation:portrait){html[data-palette=ink] .world-poster,.world[data-solar=night] .world-poster{background-image:url('/city-night-portrait.webp')}}
+.world-clock-wide,.world-clock-detail{display:none}
+html[data-clock-arrival=on]:not([data-defer-harbor-poster]) .world-poster:not([data-state=fallback]) :is(.world-clock-wide,.world-clock-detail){
+  display:block;position:absolute;inset:0;pointer-events:none;background-position:center;background-repeat:no-repeat;background-size:cover;
+}
+.world-clock-wide{background-image:inherit}
+.world-clock-detail{background-color:#b7cbd0;background-image:var(--clock-print,url('/city-clock.webp'))}
+.world-clock-detail[data-blend]{mask-image:radial-gradient(ellipse 54% 66% at center,#000 38%,transparent 100%)}
+html[data-palette=ink] .world-poster,.world[data-solar=night] .world-poster{--clock-print:url('/city-clock-night.webp')}
+@media(orientation:portrait){
+  .world-poster{--clock-print:url('/city-clock-portrait.webp')}
+  html[data-palette=ink] .world-poster,.world[data-solar=night] .world-poster{--clock-print:url('/city-clock-night-portrait.webp')}
+}
+html[data-clock-arrival=on] .world-arrival-fog{display:none}
+@media(prefers-reduced-motion:reduce){
+  html[data-clock-arrival=on] .world-poster :is(.world-clock-wide,.world-clock-detail){display:none!important}
+}
+
+html[data-clock-light=day] .world .world-poster{--clock-print:url('/city-clock.webp');background-image:url('/city-poster.webp')}
+html[data-clock-light=night] .world .world-poster{--clock-print:url('/city-clock-night.webp');background-image:url('/city-night.webp')}
+@media(orientation:portrait){
+  html[data-clock-light=day] .world .world-poster{--clock-print:url('/city-clock-portrait.webp');background-image:url('/city-poster-portrait.webp')}
+  html[data-clock-light=night] .world .world-poster{--clock-print:url('/city-clock-night-portrait.webp');background-image:url('/city-night-portrait.webp')}
+}

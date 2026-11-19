@@ -27,6 +27,7 @@ export function architectureProfile(b:Building){
   if(id===32862467)return 'bayside';
   if(id===738027034)return 'observatory';
   if(id===288481832)return 'davis';
+  if(b.id===-123559872)return 'ferry-east-base';
   if(id===123559872)return 'ferry-east';
   if(id===123559869)return 'ferry-entry';
   if(id===256969674)return 'commonwealth';
@@ -59,7 +60,13 @@ export function refineReferenceMassing<T extends Building>(buildings:T[]):T[]{
     }
     if(b.id===25489458)return [{...b,h:.58}];
     if(b.id===25478444)return [{...b,h:.65}];
-    if(b.id===123559872)return [{...b,h:.66}];
+    if(b.id===123559872){
+      // The upper floor steps back from the lower service wing along the south and bay sides.
+      const axisX=.99263,axisZ=.12123;
+      const upper=clip(clip(b.p,axisX,axisZ,2.74-5.472*axisX+6.777*axisZ,true),
+        -axisZ,axisX,.185+5.472*axisZ+6.777*axisX,false);
+      return [{...b,p:upper,h:.66,minH:.415},{...b,id:-b.id,parent:b.id,h:.415}];
+    }
     if(b.id===123559869)return [{...b,h:.27}];
     if(b.id===256969674)return [{...b,name:'Commonwealth Club',h:.93}];
     if(b.id===32862467){
@@ -118,13 +125,17 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
       }
       continue;
     }
+    if(profile==='ferry-east-base'){
+      band(.393,.044,.15,cream);
+      for(let x=-len/2+.028;x<len/2;x+=.057)if(exposed(x,.21))box(.025,.37,.044,x,.21,.05,'#555b4b',face);
+      continue;
+    }
     if(profile==='ferry-east'||profile==='ferry-entry'){
       const east=profile==='ferry-east';
       if(east){
         const bays=Math.max(1,Math.round(len/.15));
         for(let i=0;i<bays;i++)pane(-len/2+(i+.5)*len/bays,.55,len/bays*.91,.18);
-        band(.415,.045,.15,cream);band(.64,.035,.14,'#9b8771');
-        for(let x=-len/2+.028;x<len/2;x+=.057)if(exposed(x,.21))box(.025,.37,.044,x,.21,.05,'#555b4b',face);
+        band(.64,.035,.14,'#9b8771');
       }else{
         const bays=Math.max(1,Math.round(len/.23));
         for(let i=0;i<bays;i++)pane(-len/2+(i+.5)*len/bays,.135,len/bays*.80,.20);
@@ -201,28 +212,79 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
     }
   }
   if(profile==='ferry-east'||profile==='ferry-entry'){
-    const p=b.p.slice(0,-1),east=profile==='ferry-east',peak=east?.96:.84;
-    const upper=east?p.map(([x,z])=>[cx+(x-cx)*.65,cz+(z-cz)*.66]):p.map(()=>[-4.47,7.57]);
-    const vertices:number[]=[];
-    const triangle=(a:THREE.Vector3,q:THREE.Vector3,u:THREE.Vector3)=>{
-      const normal=q.clone().sub(a).cross(u.clone().sub(a));
-      if(normal.lengthSq()<1e-12)return;
-      vertices.push(...a.toArray(),...(normal.y<0?u:q).toArray(),...(normal.y<0?q:u).toArray());
+    // The Port leasing photograph shows a truncated glazed hip around a rectangular
+    // upstand. The eaves and slope breaks are registered to the 2023 USGS returns.
+    const east=profile==='ferry-east',axisX=.99263,axisZ=.12123;
+    const plan=b.p.slice(0,-1).map(([x,z])=>[(x+5.472)*axisX+(z-6.777)*axisZ,-(x+5.472)*axisZ+(z-6.777)*axisX]);
+    const xyz=(u:number,v:number,y:number)=>new THREE.Vector3(-5.472+u*axisX-v*axisZ,y,6.777+u*axisZ+v*axisX);
+    const cap=east?.795:.75;
+    // Each plane is y = a*u + b*v + c. Parallel battens follow its slope.
+    const [left,right,near,far]=east?[1.16,2.749,.18,2.663]:[-.015,1.48,-.015,1.525];
+    const [du,dv]=east?[.20,.19]:[.76,.75];
+    const su=(cap-b.h)/du,sv=(cap-b.h)/dv;
+    const planes=[[su,0,b.h-su*left],[-(east?su:1.06),0,b.h+(east?su:1.06)*right],[0,sv,b.h-sv*near],[0,-(east?sv:.92),b.h+(east?sv:.92)*far],[0,0,cap]];
+    const height=(u:number,v:number)=>Math.min(...planes.map(([a,d,c])=>a*u+d*v+c));
+    const vertices:number[]=[],fascia:number[]=[];
+    const tri=(out:number[],a:THREE.Vector3,q:THREE.Vector3,r:THREE.Vector3,up=false)=>{
+      const normal=q.clone().sub(a).cross(r.clone().sub(a));
+      if(normal.lengthSq()<1e-15)return;
+      out.push(...a.toArray(),...(up&&normal.y<0?r:q).toArray(),...(up&&normal.y<0?q:r).toArray());
     };
-    for(let i=0;i<p.length;i++){
-      const j=(i+1)%p.length,a=new THREE.Vector3(p[i][0],b.h,p[i][1]),q=new THREE.Vector3(p[j][0],b.h,p[j][1]),u=new THREE.Vector3(upper[i][0],peak,upper[i][1]),v=new THREE.Vector3(upper[j][0],peak,upper[j][1]);
-      triangle(a,u,q);triangle(q,u,v);
-      const count=Math.max(1,Math.round(a.distanceTo(q)/.13));
-      for(let k=0;k<=count;k++){
-        const low=a.clone().lerp(q,k/count),high=u.clone().lerp(v,k/count),direction=high.clone().sub(low);
-        const bar=mesh(new THREE.CylinderGeometry(.008,.008,direction.length(),4),'#9b9a87',(low.x+high.x)/2,(low.y+high.y)/2+.006,(low.z+high.z)/2);bar.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());
+    for(const plane of planes){
+      const [a,d,c]=plane;
+      let polygon=plan;
+      for(const other of planes){
+        if(plane===other)continue;
+        polygon=clip(polygon,a-other[0],d-other[1],other[2]-c,true);
+        if(polygon.length<4)break;
+      }
+      if(polygon.length<4)continue;
+      const ring=polygon.slice(0,-1),corners=ring.map(([u,v])=>xyz(u,v,a*u+d*v+c));
+      for(const [i,j,k] of THREE.ShapeUtils.triangulateShape(ring.map(([u,v])=>new THREE.Vector2(u,v)),[]))tri(vertices,corners[i],corners[j],corners[k],true);
+      if(!a&&!d)continue;
+      const axis=a?1:0,steps=ring.map(p=>p[axis]);
+      for(let at=Math.ceil(Math.min(...steps)/.095)*.095;at<Math.max(...steps)-.001;at+=.095){
+        const hits:THREE.Vector3[]=[];
+        for(let i=0;i<ring.length;i++){
+          const p=ring[i],q=ring[(i+1)%ring.length];
+          if((p[axis]<=at)===(q[axis]<=at))continue;
+          const t=(at-p[axis])/(q[axis]-p[axis]),u=p[0]+t*(q[0]-p[0]),v=p[1]+t*(q[1]-p[1]);
+          hits.push(xyz(u,v,a*u+d*v+c+.002));
+        }
+        hits.sort((p,q)=>p.y-q.y);
+        for(let i=1;i<hits.length;i+=2){
+          const lo=hits[i-1],hi=hits[i],dir=hi.clone().sub(lo);
+          if(dir.length()<.018)continue;
+          const mid=lo.clone().lerp(hi,.5),bar=mesh(new THREE.CylinderGeometry(.0025,.0025,dir.length(),4),'#68787b',mid.x,mid.y,mid.z);
+          bar.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+        }
       }
     }
-    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(vertices.length/3*2),2));geometry.computeVertexNormals();
-    const roof=mesh(geometry,'#45535a',0,0,0);roof.name='Ferry Plaza glazed roof';
-    if(east){
-      const shape=new THREE.Shape(upper.map(([x,z])=>new THREE.Vector2(x,-z))),geo=new THREE.ShapeGeometry(shape);geo.rotateX(-Math.PI/2);mesh(geo,'#887f70',0,peak+.006,0);
-      for(let i=0;i<4;i++)box(.05,.06,.06,cx-.16+i*.10,peak+.04,cz,'#d7d5c1');
+    // Close the stepped, mapped wall edges under each slope. Split at pitch breaks.
+    const clockwise=THREE.ShapeUtils.isClockWise(plan.map(([u,v])=>new THREE.Vector2(u,v)));
+    for(let i=0;i<plan.length;i++){
+      const p=plan[i],q=plan[(i+1)%plan.length],ts=[0,1];
+      for(let j=0;j<planes.length;j++)for(const other of planes.slice(j+1)){
+        const [a,d,c]=planes[j],value=([u,v]:number[])=>(a-other[0])*u+(d-other[1])*v+c-other[2];
+        const f=value(p),g=value(q);if(f*g<0)ts.push(f/(f-g));
+      }
+      ts.sort((a,b)=>a-b);
+      const section=(t:number)=>{const u=p[0]+(q[0]-p[0])*t,v=p[1]+(q[1]-p[1])*t;return [xyz(u,v,b.h),xyz(u,v,height(u,v))];};
+      for(let k=1;k<ts.length;k++){
+        const [a,h]=section(ts[k-1]),[b,r]=section(ts[k]);tri(fascia,a,clockwise?r:h,clockwise?h:r);tri(fascia,a,clockwise?b:r,clockwise?r:b);
+      }
+    }
+    const surface=(coords:number[],color:string)=>{
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(coords,3));
+      g.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(coords.length/3*2),2));g.computeVertexNormals();
+      return mesh(g,color,0,0,0);
+    };
+    surface(vertices,'#485c66').name='Ferry Plaza glazed roof';
+    surface(fascia,'#665e52').name='Ferry Plaza roof returns';
+    if(east)for(let i=0;i<4;i++)box(.05,.06,.06,cx-.16+i*.10,cap+.03,cz,'#d7d5c1');
+    else{
+      const head=xyz(.86,.844,cap+.063),upstand=box(.20,.126,.17,head.x,head.y,head.z,'#c1b5a1');
+      upstand.rotation.y=-Math.atan2(axisZ,axisX);upstand.name='Glazed entrance roof upstand';
     }
   }
   if(profile==='broadcast'){
