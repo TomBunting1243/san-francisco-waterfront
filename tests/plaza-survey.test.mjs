@@ -215,3 +215,39 @@ test('the streetcar sees dry Ferry Building forecourt, stepped entry and open wa
   }
   ray.set(new THREE.Vector3(3.6,.15,5),down);assert.equal(first().object,water);
 });
+
+test('plaza date palm crowns hold a layered feather silhouette and warm lower fronds within the mobile mesh budget',async()=>{
+  const {waterfrontPalm}=await import('../app/waterfront-trees.ts');
+  const ray=new THREE.Raycaster(),direction=new THREE.Vector3(0,0,-1);
+  let samples=0,filled=0;
+  for(const id of [2069721989,2069721979,2069721841]){
+    const row=plazaTreeRecords.get(id),group=new THREE.Group();
+    waterfrontPalm((g,c,x,y,z)=>{
+      const m=new THREE.Mesh(g);m.position.set(x,y,z);group.add(m);return m;
+    },0,0,0,id,row.heightM*.06,row.crownM*.03,.02);
+    const crown=group.getObjectByName('Date palm foliage');
+    assert.equal(group.children.length,10);
+    assert.ok(group.children.reduce((count,m)=>count+m.geometry.index.count/3,0)<=2016);
+    const {position,color}=crown.geometry.attributes,bounds=new THREE.Box3().setFromObject(crown,true);
+    let ochreBelow=0,sageAbove=0;
+    for(let i=0;i<position.count;i++){
+      const height=(position.getY(i)-bounds.min.y)/(bounds.max.y-bounds.min.y);
+      if(height<.30&&color.getX(i)>color.getY(i)*1.05)ochreBelow++;
+      if(height>.70&&color.getY(i)>color.getX(i)*1.15)sageAbove++;
+    }
+    assert.ok(ochreBelow>20&&sageAbove>20,'warm hanging fronds and green upper feathers');
+    for(const angle of [0,.8,1.6]){
+      crown.rotation.y=angle;crown.updateMatrixWorld(true);
+      bounds.setFromObject(crown,true);
+      for(let ix=0;ix<22;ix++)for(let iy=0;iy<22;iy++){
+        const x=THREE.MathUtils.lerp(bounds.min.x,bounds.max.x,(ix+.5)/22);
+        const y=THREE.MathUtils.lerp(bounds.min.y,bounds.max.y,(iy+.5)/22);
+        ray.set(new THREE.Vector3(x,y,1),direction);
+        if(ray.intersectObject(crown,false).length)filled++;
+        samples++;
+      }
+    }
+  }
+  const coverage=filled/samples;
+  assert.ok(coverage>1/3&&coverage<.60,'projected fronds carry continuous color with open sky between them: '+coverage);
+});

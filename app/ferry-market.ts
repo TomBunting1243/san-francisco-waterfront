@@ -18,16 +18,28 @@ export function ferryMarketSchedule(at:Date){
   return {front:1,rear:saturday&&!closure?progress(minute,480,840):0,artist:progress(minute,540,960)};
 }
 
-type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist'};
+type FrontStall='produce'|'flowers'|'info'|'tasting';
+type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist';stall?:FrontStall};
+// Tent colors and activities come from the operator. Pitch assignments rotate.
+// https://foodwise.org/programs/seasonal-spotlight/
+// https://foodwise.org/markets/group-visits/
+// https://foodwise.org/articles/in-bluma-growing-organic-flowers-at-sunol-agpark/
+const frontPitches:[number,FrontStall][]=[
+  [-5.35,'produce'],[-4.88,'produce'],[-4.41,'flowers'],[-3.64,'produce'],[-3.17,'produce'],
+  [-2.70,'tasting'],[-2.23,'produce'],[1.94,'info'],[2.41,'flowers'],[2.88,'produce'],
+  [3.65,'produce'],[4.12,'flowers'],[4.59,'produce'],[5.06,'produce'],
+];
 // Leave the clock-tower entrance, ferry gates, and the pedestrian spine open.
 // Rear stalls occupy the fixed plaza only on Saturdays. Arts vendors occupy the measured
 // edge of the brick court, along the foot of Market. Actual traders rotate.
 const sites:Site[]=[
-  ...[-5.35,-4.88,-4.41,-3.64,-3.17,-2.70,-2.23,1.94,2.41,2.88,3.65,4.12,4.59,5.06].map(x=>({x,z:-1.84,floor:.031,section:'front' as const})),
+  ...frontPitches.map(([x,stall])=>({x,z:-1.84,floor:.031,section:'front' as const,stall})),
   ...[3.39,3.96,4.52,5.08].flatMap(z=>[-4.97,-4.48,-3.41,-2.94].map(x=>({x,z,floor:.096,section:'rear' as const}))),
   ...[[.713,-8.175],[.787,-8.450],[.900,-8.713],[1.025,-8.988],[1.175,-9.238]].map(([x,z])=>({x,z,floor:.127-.0012*(x-2)+.0008*(z+8),section:'artist' as const})),
 ];
-const canvas=['#eee9d9','#e3dfca','#c7cbb7','#e9e3d0','#baccbf','#e5d2af'];
+const canvas=['#f2f1e9','#e8e7e2','#f4f0e2','#e9e5d7','#e2e4dd','#f1eae0'];
+const tablecloth=['#647c73','#a35437','#63738a','#9f824b'];
+const flowers=['#c46678','#dbb350','#b15c48','#a684ac'];
 const produce=['#af5240','#738852','#cd9c53','#9e6658'];
 const coats=['#566b77','#ae8268','#667969','#6f737f'];
 const range=(v:number,start:number,end:number)=>clamp((v-start)/(end-start));
@@ -87,33 +99,63 @@ export function createFerryMarket(){
       person(workerX,workerZ,coats[i%4]);
       const lift=range(phase,.23,.58),spread=range(phase,.33,.62);
       const frame=.035+.095*lift,span=.021+.169*spread;
+      // Long farmers' tables fit beneath a rectangular fly. Keep the front-to-back
+      // dimension and all four feet within the original strip of sidewalk.
+      const width=site.stall==='produce'||site.stall==='flowers'?span*1.45:span;
+      const cloth=artist?'#f6f4e8':site.stall==='info'?'#408456':site.stall==='tasting'?'#da7731':canvas[i%canvas.length];
       if(phase>.18){
         for(const dx of [-1,1])for(const dz of [-1,1])
-          shape(boxes,dx*span*.47,frame/2,dz*span*.47,.003,frame,.003,steel);
-        const height=.022+.032*spread,cloth=artist?'#f6f4e8':canvas[i%canvas.length];
-        shape(roofs,0,frame+height/2,0,span,height,span,cloth);
-        for(const dz of [-1,1])shape(boxes,0,frame-.004,dz*span*.49,span,.009,.002,cloth);
+          shape(boxes,dx*width*.47,frame/2,dz*span*.47,.003,frame,.003,steel);
+        const height=.022+.032*spread;
+        shape(roofs,0,frame+height/2,0,width,height,span,cloth);
+        for(const dz of [-1,1])shape(boxes,0,frame-.007,dz*span*.49,width,.014,.002,cloth);
+        for(const dx of [-1,1])shape(boxes,dx*width*.49,frame-.007,0,.002,.014,span,cloth);
       }
       const unfold=range(phase,.36,.65),tableY=.025+.027*unfold;
       if(phase>.22){
-        const tableX=.05*(1-unfold);
-        shape(boxes,tableX,tableY,-.031,.128,.007,.047,wood,(1-unfold)*.29);
-        for(const dx of [-.048,.048])for(const dz of [-.016,.016])
-          shape(boxes,tableX+dx,tableY/2,-.031+dz,.003,tableY,.003,steel);
+        const tableX=.05*(1-unfold),topWidth=site.section==='front'?width*.87:.128;
+        shape(boxes,tableX,tableY,-.031,topWidth,.007,.047,wood,(1-unfold)*.29);
+        for(const side of [-1,1])for(const dz of [-.016,.016])
+          shape(boxes,tableX+side*topWidth*.375,tableY/2,-.031+dz,.003,tableY,.003,steel);
+      }
+      if(site.section==='front'){
+        const cover=site.stall==='info'||site.stall==='tasting'?cloth:tablecloth[i%4];
+        const tableWidth=width*.87;
+        shape(boxes,0,tableY+.0045,-.031,tableWidth,.002,.056,cover);
+        shape(boxes,0,tableY-.018,-.058,tableWidth,.041,.002,cover);
+        for(const x of [-1,1])shape(boxes,x*tableWidth*.49,tableY-.018,-.031,.002,.041,.056,cover);
+        // Laminated seller cards hang on the posts. The program desks set out
+        // market maps and recipes. No lettering or photo textures are needed.
+        shape(boxes,-width*.47,.091,-span*.475,.025,.032,.002,'#e7d7ad');
+        shape(boxes,-width*.47,.102,-span*.485,.022,.006,.001,'#5e7258');
       }
       if(artist&&phase>.57&&i%3===1){
         for(let k=0;k<4;k++){
           const x=(k-1.5)*.029;
           shape(boxes,x,.082,-.036,.025,.047,.003,wood,-.04);
-          shape(boxes,x,.082,-.039,.021,.042,.002,['#6a8d90','#c69469','#878562','#586e81'][k]);
+          shape(boxes,x,.082,-.039,.021,.042,.002,'#e8dec4');
+          shape(boxes,x,.084,-.041,.017,.025,.001,['#6a8d90','#c69469','#878562','#586e81'][k]);
+          shape(boxes,x,.079,-.042,.016,.006,.001,'#475c5e');
         }
       }else if(artist&&phase>.57&&i%3===2){
         for(let k=0;k<3;k++){
           const x=(k-1)*.039;shape(boxes,x,.059,-.03,.035,.004,.029,'#595b58');
-          for(const dx of [-.008,.005])shape(rounds,x+dx,.063,-.03,.005,.002,.006,'#d0ae71');
+          shape(rounds,x,.078,-.018,.023,.033,.012,'#474848');
+          for(const side of [-1,1])shape(boxes,x+side*.004,.081,-.024,.0017,.014,.0015,'#d0ae71',-side*.34);
+          shape(rounds,x,.074,-.025,.005,.006,.003,'#c4a275');
         }
       }else if(artist&&phase>.57){
-        const rack=.091*range(phase,.57,.81);
+        // The plaza sells original silk-screened city apparel as well as prints
+        // and jewelry. Display the shirt fronts on the back rail.
+        // https://www.cityartapparel.com/about
+        const rack=.056+.068*range(phase,.57,.81);
+        for(const x of [-.067,.067])shape(boxes,x,rack/2,.069,.003,rack,.003,steel);
+        shape(boxes,0,rack,.069,.137,.003,.003,steel);
+        for(const [x,color] of [[-.040,'#d4b584'],[0,'#7e9fa0'],[.040,'#ece2c9']] as const){
+          shape(boxes,x,rack-.026,.066,.026,.039,.004,color);
+          shape(boxes,x,rack-.015,.066,.038,.013,.004,color);
+          shape(boxes,x,rack-.023,.062,.016,.008,.001,'#465d63');
+        }
         for(const z of [-.04,.04])shape(boxes,-.078,rack/2,z,.003,rack,.003,steel);
         shape(boxes,-.078,rack,0,.003,.003,.084,steel);
         for(let k=0;k<5;k++){
@@ -127,13 +169,43 @@ export function createFerryMarket(){
           shape(boxes,dx,.076,-.038,.027,.039,.001,'#e9e0c6');
           shape(boxes,dx,.075,-.039,.018,.019,.001,coats[Math.round((dx+.04)*60)%4]);
         }
+      }else if(site.stall==='flowers'){
+        for(const [k,x] of [-.080,-.028,.028,.080].entries()){
+          shape(boxes,x,.067,-.031,.032,.023,.028,'#7f8881');
+          for(let j=0;j<3;j++){
+            const dx=(j-1)*.010,top=.099+((j+k)%3)*.006;
+            shape(boxes,x+dx/2,(.076+top)/2,-.031,.003,top-.076,.003,'#58774f',-.25*(j-1));
+            shape(rounds,x+dx,top,-.031+(j%2)*.004,.019,.016,.018,flowers[(k+j)%4]);
+          }
+        }
+      }else if(site.stall==='info'||site.stall==='tasting'){
+        for(const x of [-.046,-.007,.034]){
+          shape(boxes,x,.059,-.037,.030,.003,.022,'#efe5c8');
+          shape(boxes,x,.061,-.035,.021,.001,.010,'#8d9a78');
+        }
+        // A board behind the counter and a sampling bowl are visible across
+        // the plaza, without occupying the public aisle in front of the table.
+        shape(boxes,-.042,.079,.041,.006,.105,.004,wood);
+        shape(boxes,-.042,.094,.038,.079,.057,.003,'#e9dcbc');
+        shape(boxes,-.042,.110,.035,.074,.009,.002,cloth);
+        if(site.stall==='tasting'){
+          shape(rounds,.054,.065,-.013,.041,.015,.034,'#d0b286');
+          for(const dx of [-.011,0,.011])shape(rounds,.054+dx,.073,-.013,.012,.010,.012,'#bf754e');
+        }
       }else if(!artist){
         for(let k=0;k<3;k++){
           const carried=range(phase,.49+k*.09,.66+k*.09);
-          const x=THREE.MathUtils.lerp(cartX,(k-1)*.040,carried),z=THREE.MathUtils.lerp(cartZ,-.030,carried);
+          const x=THREE.MathUtils.lerp(cartX,(k-1)*(site.stall ? .071 : .040),carried),z=THREE.MathUtils.lerp(cartZ,-.030,carried);
           const y=THREE.MathUtils.lerp(.034+k*.013,tableY+.011,carried)+Math.sin(carried*Math.PI)*.035;
-          shape(boxes,x,y,z,.037,.013,.034,wood);
-          for(let j=0;j<6;j++)shape(rounds,x+(j%3-1)*.010,y+.009,z+(j<3?-.006:.006),.011,.009,.011,produce[(i+k)%4]);
+          const binWidth=site.stall ? .064 : .037,binDepth=site.stall ? .044 : .034;
+          shape(boxes,x,y,z,binWidth,.013,binDepth,wood);
+          if(site.stall){
+            for(const side of [-1,1])shape(boxes,x+side*binWidth*.47,y+.008,z,.003,.010,binDepth,'#b99970');
+            shape(boxes,x,y+.006,z-binDepth/2,binWidth,.006,.003,'#bd9a6a');
+          }
+          for(let j=0;j<6;j++)
+            shape(rounds,x+(j%3-1)*binWidth*.27,y+.012,z+(j<3?-.006:.006),
+              binWidth*.29,site.stall ? .016 : .009,.013,produce[(i+k)%4]);
         }
       }
       if(phase>.87&&i%3===0)person(-.030,-.115,coats[(i+2)%4]);

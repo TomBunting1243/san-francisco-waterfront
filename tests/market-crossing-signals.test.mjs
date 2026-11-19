@@ -62,3 +62,59 @@ test('Market WALK and flashing clearance/countdown stay legible day and night in
   }
   lighting.dispose();
 });
+
+test('the two streams from Market enter on WALK, clear the traffic lane, and reach supported landings',async()=>{
+  const {plazaCrossingCount,plazaCrossingPose}=await import('../app/plaza-walkers.ts');
+  const {waterfrontCar,waterfrontCarCount,waterfrontWalker,waterfrontWalkerCount}=await import('../app/waterfront-routes.ts');
+  const {frontMarketShopperCount}=await import('../app/market-shoppers.ts');
+  const world=createLandscape();
+  const granite=world.root.getObjectByName('Market granite and herringbone promenade');
+  const zone=new THREE.Box3(new THREE.Vector3(-1.8,-.1,-8.6),new THREE.Vector3(-.12,.48,-4.25));
+  const tri=new THREE.Triangle(),box=new THREE.Box3(),points=[];
+  for(const mesh of [...world.architectureChunks,granite]){
+    const g=mesh.geometry;g.computeBoundingBox();
+    if(!g.boundingBox.intersectsBox(zone))continue;
+    const pos=g.attributes.position,ix=g.index;
+    for(let i=0;i<(ix?.count??pos.count);i+=3){
+      const corners=[tri.a,tri.b,tri.c];
+      for(const [j,v] of corners.entries())v.fromBufferAttribute(pos,ix?ix.getX(i+j):i+j);
+      if(box.setFromPoints(corners).intersectsBox(zone))for(const v of corners)points.push(v.x,v.y,v.z);
+    }
+  }
+  const paving=new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(points,3)),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.22);
+  const street=z=>z> -6.249&&z< -5.45;
+  for(let i=0;i<plazaCrossingCount;i++){
+    let entries=0,waited=false,seenWest=false,seenMedian=false,previous=plazaCrossingPose(-.25,i);
+    for(let step=0;step<512;step++){
+      const t=step/4,p=plazaCrossingPose(t,i);
+      if(street(p.z)){
+        assert.notEqual(marketPedestrianPhase(t),'stop');
+        if(!street(previous.z)){entries++;assert.equal(marketPedestrianPhase(t),'walk');}
+        for(let j=1;j<waterfrontCarCount();j+=2){
+          const car=waterfrontCar(t,j);
+          if(car.active&&Math.abs(car.z-p.z)<.09)assert.ok(Math.abs(car.x-p.x)>.20,'vehicle encroaches on walker');
+        }
+      }
+      waited ||= p.standing&&p.z< -5&&marketPedestrianPhase(t)==='stop';
+      seenWest ||= p.z< -8;seenMedian ||= p.z> -4.7;
+      assert.ok(Math.hypot(p.x-previous.x,p.z-previous.z)<.035);
+      for(let j=0;j<i;j++){
+        const q=plazaCrossingPose(t,j);
+        assert.ok(Math.hypot(p.x-q.x,p.z-q.z)>.047,'walking companions need shoulder room');
+      }
+      if(step%3===0){
+        ray.ray.origin.set(p.x,p.y+.155,p.z);
+        const floor=ray.intersectObject(paving,false)[0];
+        assert.ok(floor&&Math.abs(floor.point.y-p.y)<.006,'unsupported foot or obstruction at '+p.x+','+p.z);
+      }
+      previous=p;
+    }
+    assert.equal(entries,2);
+    assert.ok(waited&&seenWest&&seenMedian);
+    for(const region of [undefined,'plaza']){
+      const offset=waterfrontWalkerCount(region)-2-frontMarketShopperCount-plazaCrossingCount;
+      assert.deepEqual(waterfrontWalker(42,offset+i,region),plazaCrossingPose(42,i));
+    }
+  }
+});

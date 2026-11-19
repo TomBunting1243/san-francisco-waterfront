@@ -21,7 +21,8 @@ const leaf={
   evergreen:pigment('#3c594d','#56775e','#7c956e'),
   magnolia:pigment('#745e48','#496655','#789076'),
   ash:pigment('#596d5b','#809368','#a8ae7e'),
-  palm:pigment('#48684e','#728c61','#a2ae79'),
+  palm:pigment('#414f3f','#637657','#86916a'),
+  palmSkirt:pigment('#544e38','#786e49','#97855b'),
   fan:pigment('#5e796b','#819b82','#a6b69a'),
   dry:pigment('#776e50','#90825e','#aa9972'),
 };
@@ -431,7 +432,7 @@ export function waterfrontPalm(mesh:PlantMesh,x:number,y:number,z:number,id:numb
     const r=trunk*(fan?.95:1.32-.44*f);
     limb(center,center.clone().add(vec(0,trunk*.46,0)),r*.82,r,j%2?'#928260':'#aa956f');
   }
-  const paint=new Paint(),rib=new Paint(),count=fan?14:18;
+  const paint=new Paint(),rib=new Paint(),count=fan?14:23;
   for(let i=0;i<count;i++){
     const az=angle+i*2.39996+.19*(seed(id,i+18)-.5),out=vec(Math.cos(az),0,Math.sin(az)),side=vec(-out.z,0,out.x);
     const tier=i%3,length=radius*(.79+.23*seed(id,i+3)),base=top.clone().add(vec(0,(tier-1)*trunk*.35,0));
@@ -455,22 +456,38 @@ export function waterfrontPalm(mesh:PlantMesh,x:number,y:number,z:number,id:numb
         palmPanel(paint,[edge(m,.012),ridge,edge(b,.79),edge(b,.015)],[tones[0],tones[2],tones[1],tones[0]]);
       }
     }else{
-      const reach=length*[.85,1,.54][tier],rise=length*[.46,.67,1.03][tier],fall=length*[.86,.64,.36][tier];
-      const mid=(t:number)=>base.clone().addScaledVector(out,reach*t).addScaledVector(vec(0,1,0),rise*Math.sin(t*Math.PI*.76)-fall*t*t);
-      // Each feather joins the central blade. Deeper cuts between leaflet groups
-      // give the compound frond a comb edge while retaining a continuous mass.
-      for(const sign of [-1,1]){
-        const edge=(j:number)=>{
-          const t=j/12,w=length*(.005+.13*Math.sin(Math.PI*t)**.7)*(j%2===0?.43:1);
-          return mid(t).addScaledVector(side,w*sign).addScaledVector(out,w*.50).add(vec(0,-w*.40,0));
-        };
-        for(const back of [false,true]){
-          let previousMid=paint.vertex(mid(0),tones[1]),previousEdge=paint.vertex(edge(0),tones[sign>0?2:0]);
-          for(let j=1;j<=12;j++){
-            const nextMid=paint.vertex(mid(j/12),tones[1]),nextEdge=paint.vertex(edge(j),tones[sign>0?2:0]);
-            if(back)paint.quad(nextMid,nextEdge,previousEdge,previousMid);
-            else paint.quad(previousMid,previousEdge,nextEdge,nextMid);
-            previousMid=nextMid;previousEdge=nextEdge;
+      // Miia Ranta's close and wide plaza photographs (May 2011) show an
+      // upright central spray above broad arches and a skirt of pendant tips.
+      // https://commons.wikimedia.org/wiki/File:San_Francisco_Ferry_Building_from_the_Embarcadero_Plaza_(May_2011).jpg
+      // https://commons.wikimedia.org/wiki/File:Ferry_Building_clock_tower_in_San_Francisco_obfuscated_by_palm_trees.jpg
+      const youth=(i+seed(id,i+32))/count;
+      const spear=THREE.MathUtils.smoothstep(youth,.54,1);
+      const reach=length*(.97-.57*spear),tip=length*(-.83+1.73*youth);
+      const rise=length*(1.22+.55*youth),turn=length*.17*(seed(id,i+41)-.5);
+      const dry=THREE.MathUtils.clamp((.38-youth)*2.8+.20*(seed(id,i+27)-.5),0,1);
+      const shade=leaf.palm[0].clone().lerp(leaf.palmSkirt[0],dry);
+      const ridge=leaf.palm[1].clone().lerp(leaf.palmSkirt[1],dry);
+      const light=leaf.palm[2].clone().lerp(leaf.palmSkirt[2],dry);
+      const sections=9;
+      for(let j=0;j<=sections;j++){
+        const t=j/sections,bow=t*(1-t);
+        const mid=base.clone().addScaledVector(out,reach*(t+(.83-.40*spear)*bow)).addScaledVector(side,turn*t*t);
+        mid.y+=rise*bow+tip*t*t;
+        // Group the pinnae into tapered, swept feather edges. The broad
+        // V-fold remains visible at phone scale without individual needles.
+        const width=length*(.002+(.147-.044*spear)*Math.sin(Math.PI*t)**.94)*(j%2===0?.74:1);
+        for(const sign of [-1,1]){
+          const edge=mid.clone().addScaledVector(side,sign*width).addScaledVector(out,width*(j%2===0?.20:.72));
+          edge.y-=width*(.72-.42*spear);
+          const tint=sign>0?light:shade;
+          // Keep the folded ridge and the underside independently lit using
+          // the existing single-sided tree material.
+          for(const reverse of [false,true]){
+            const m=paint.vertex(mid,ridge),e=paint.vertex(edge,tint);
+            if(!j)continue;
+            const stride=8;
+            if(reverse===(sign>0))paint.quad(m-stride,e-stride,e,m);
+            else paint.quad(m,e,e-stride,m-stride);
           }
         }
       }

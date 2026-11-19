@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.ts';
+import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
 import {streetPose} from './streets.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
@@ -138,23 +140,28 @@ function passageVisitor(time:number,index:number){
   return {x:p.x,z:p.z,y:pierOneHalfPassageHeight(p.x,p.z),heading:Math.atan2(d.z,d.x)+glance,standing};
 }
 
-const cityRoutes=[
+type Walk={line:THREE.CatmullRomCurve3;count:number}|{pose:(time:number,index:number)=>ReturnType<typeof along>;count:number};
+const crossing:Walk={pose:plazaCrossingPose,count:plazaCrossingCount};
+const shoppers:Walk={pose:frontMarketShopperPose,count:frontMarketShopperCount};
+const passage:Walk={pose:passageVisitor,count:2};
+const cityRoutes:Walk[]=[
   {line:rinconWalkers,count:12}, {line:ferry,count:10},
   {line:pierSeven,count:10}, {line:northShore,count:8}, {line:southShore,count:10},
-  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {line:pierPassage,count:2},
+  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, crossing, shoppers, passage,
 ];
 const streetRoutes=[cityRoutes[0],cityRoutes[5],cityRoutes[6],{line:southShore,count:5}];
-const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],cityRoutes[7]];
+const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],crossing,shoppers,passage];
 type Region='street'|'plaza';
 const walks=(region?:Region)=>region==='street'?streetRoutes:region==='plaza'?plazaRoutes:cityRoutes;
 export const waterfrontWalkerCount=(region?:Region)=>walks(region).reduce((sum,r)=>sum+r.count,0);
 
 export function waterfrontWalker(time:number,index:number,region?:Region){
-  for(const {line,count} of walks(region)){
+  for(const route of walks(region)){
+    const {count}=route;
     if(index<count){
-      if(line===pierPassage)return passageVisitor(time,index);
+      if('pose' in route)return route.pose(time,index);
       const phase=(index+.18+.17*Math.sin(index*3.51))/count+.093;
-      return along(line,time,pedestrianPace,phase);
+      return along(route.line,time,pedestrianPace,phase);
     }
     index-=count;
   }
