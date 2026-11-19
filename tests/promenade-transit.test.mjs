@@ -112,6 +112,84 @@ test('front boarding follows supported paving, passes the exiting rider and reac
     assert.ok(surface(at(1.27),ground)<.033);
     assert.ok(surface(at(1.53),ground)>.0405);
   }
-  assert.equal(scene.batch.instanceCount,69);
-  assert.ok(scene.batch.geometry.index.count/3<6200);
+  const cableCar=scene.poses.getObjectByName('California Street cable car 49');
+  const carParts=cableCar.getObjectsByProperty('isMesh',true);
+  const newGeometry=new Set(carParts.map(p=>p.geometry));
+  const carTriangles=[...newGeometry].reduce((n,g)=>n+g.index.count/3,0);
+  assert.equal(scene.batch.instanceCount-carParts.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-carTriangles<6200);
+  assert.ok(carTriangles<4600);
+});
+
+test('California 49 dwells at Drumm, boards from the island and runs on the narrow gauge through the crossover',async()=>{
+  const {createCaliforniaCar,californiaRailGeometry,cableRailHead,californiaIslandTop}=await import('../app/california-terminal.ts');
+  const {default:track}=await import('../public/data/california-terminal.json',{with:{type:'json'}});
+  const {default:street}=await import('../public/data/market-street.json',{with:{type:'json'}});
+  const pictured=createCaliforniaCar(),{car}=pictured,rider=car.getObjectByName('California cable car running-board rider');
+  const body=car.children[0],island=street.platforms.find(([id])=>id===773030143)[2];
+  const rail=new THREE.Mesh(californiaRailGeometry(),new THREE.MeshBasicMaterial());
+  const surface=(x,y,z,mesh)=>new THREE.Raycaster(new THREE.Vector3(x,y,z),new THREE.Vector3(0,-1,0),0,.15).intersectObject(mesh)[0];
+  function step(t,clock=720){pictured.update(t,clock);car.updateMatrixWorld(true);}
+  function inside(p){
+    let yes=false;
+    for(let i=0,j=island.length-1;i<island.length;j=i++){
+      const [ax,az]=island[j],[bx,bz]=island[i];
+      if((az>p.z)!==(bz>p.z)&&p.x<(bx-ax)*(p.z-az)/(bz-az)+ax)yes=!yes;
+    }
+    return yes;
+  }
+  step(0);const berth=car.position.clone(),yaw=car.rotation.y;
+  assert.ok(Math.hypot(berth.x-track.nodes[5150140443][0],berth.z-track.nodes[5150140443][1])<.001);
+  assert.equal(car.scale.x,.06);const bounds=body.geometry.boundingBox.getSize(new THREE.Vector3());
+  assert.ok(Math.abs(bounds.x-9.2202)<.001&&Math.abs(bounds.z-2.4384)<.002&&Math.abs(bounds.y-3.0988)<.001);
+  for(const t of [0,3,8,9,10]){
+    step(t);const foot=rider.getWorldPosition(new THREE.Vector3());assert.ok(inside(foot));
+    if(t<=9)assert.ok(Math.abs(foot.y-californiaIslandTop)<.0001);
+  }
+  for(const t of [16,31,46,96]){
+    step(t);const feet=rider.getWorldPosition(new THREE.Vector3()),top=surface(feet.x,feet.y+.0005,feet.z,body);
+    assert.ok(top&&Math.abs(top.point.y-feet.y)<.0004,'running board contact at '+t);
+    const hand=rider.getObjectByName('Left hand gripping the cable car rail');
+    const grip=car.worldToLocal(hand.localToWorld(new THREE.Vector3(-.125,-.05,.201)));
+    assert.ok(Math.abs(grip.x+3.8)<.002&&Math.abs(grip.z+.919)<.002&&grip.y>=.655&&grip.y<=1.62);
+    for(const z of [-.5335,.5335]){
+      const wheel=car.localToWorld(new THREE.Vector3(0,0,z));const head=surface(wheel.x,wheel.y+.02,wheel.z,rail);
+      assert.ok(head&&Math.abs(head.point.y-cableRailHead(wheel.z))<.0005,'rail below tread at '+t);
+    }
+  }
+  step(96);assert.ok(car.position.distanceTo(berth)>5);
+  step(599.99);assert.ok(car.position.distanceTo(berth)<.001&&Math.abs(car.rotation.y-yaw)<.005);
+  step(11,419);assert.equal(car.visible,false);step(11,420);assert.equal(car.visible,true);
+  step(11,1260);assert.equal(car.visible,false);
+});
+
+test('car 49 lights only its saloon glass and leading dash lens in the existing transit draw',()=>{
+  const scene=createPromenadeTransit(),batch=scene.batch;
+  const position=batch.geometry.attributes.position,mask=batch.geometry.attributes.cableLight;
+  const byKind=[[],[],[],[]];
+  for(let i=0;i<mask.count;i++)if(mask.getX(i))byKind[mask.getX(i)].push(new THREE.Vector3().fromBufferAttribute(position,i));
+  assert.ok(byKind[1].length>80);
+  assert.ok(byKind[1].every(v=>Math.abs(v.x)<1.69&&v.y>1.28&&v.y<2.42));
+  for(const [kind,sign] of [[2,1],[3,-1]]){
+    assert.ok(byKind[kind].length>=12);
+    assert.ok(byKind[kind].every(v=>Math.abs(v.x-sign*4.511)<.0001&&Math.hypot(v.y-.845,v.z)<.07301));
+  }
+  const compile=mat=>{
+    const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};
+    mat.onBeforeCompile(shader,{});return shader;
+  };
+  const shader=compile(batch.material);
+  assert.equal(shader.uniforms.cableDusk.value,0);
+  scene.setNight(.75);
+  assert.equal(shader.uniforms.cableDusk.value,.75);
+  scene.update(16,1259);assert.equal(shader.uniforms.cableHeadlamp.value,2);
+  scene.update(598,1259);assert.equal(shader.uniforms.cableHeadlamp.value,3);
+  scene.update(16,1260);assert.equal(batch.getVisibleAt(0),false);
+  const copy=batch.material.clone();copy.onBeforeCompile=batch.material.onBeforeCompile;
+  const vignette=createPromenadeTransit(copy);vignette.setNight(.2);
+  const local=compile(vignette.batch.material);
+  assert.equal(local.uniforms.cableDusk.value,.2);
+  assert.equal(shader.uniforms.cableDusk.value,.75);
+  assert.equal(local.vertexShader.split('attribute float cableLight;').length,2);
+  assert.equal(scene.root.children.length,1);
 });

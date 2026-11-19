@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {californiaRailGeometry,californiaIslandTop} from './california-terminal.ts';
 import {treeWell} from './tree-wells.ts';
 import data from '../public/data/market-street.json' with {type:'json'};
 import {footprintGeometry} from './sf-map.ts';
@@ -51,17 +52,18 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
     }
   }
   for(const [,cable,points] of records.tracks){
-    const gauge=(cable?1.067:1.435)*.06;
+    if(cable)continue; // The complete California terminal uses its own surveyed crossover.
+    const gauge=1.435*.06;
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
       for(const sign of [-1,1]){
         const ox=dz/len*gauge*.5*sign,oz=-dx/len*gauge*.5*sign;
         line([a[0]+ox,a[1]+oz],[b[0]+ox,b[1]+oz],.060,streetcarTrack.railHead,.004,'#a9aaa0').name='Market running rail';
       }
-      if(cable)line(a,b,.059,.007,.003,'#65665e').name='California cable slot';
-      else line(a,b,.060+streetcarTrack.wireRise,.003,.003,'#606a65').name='F line contact wire';
+      line(a,b,.060+streetcarTrack.wireRise,.003,.003,'#606a65').name='F line contact wire';
     }
   }
+  part(californiaRailGeometry(),'#ffffff',0,0,0).name='Lower California cable rails and crossover';
   for(const [,points] of records.crossings){
     const path=new THREE.CurvePath<THREE.Vector3>();
     for(let j=1;j<points.length;j++)path.add(new THREE.LineCurve3(new THREE.Vector3(points[j-1][0],0,points[j-1][1]),new THREE.Vector3(points[j][0],0,points[j][1])));
@@ -71,8 +73,10 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
       box(p.x,.055,p.z,.17,.003,.032,'#d6d0b9',Math.atan2(axis.x,axis.z)).name='Marked Market crossing';
     }
   }
-  for(const [,shelter,p] of records.platforms){
-    part(footprintGeometry(p,.018),'#c5bfb0',0,.045,0).name='Mapped Muni boarding island';
+  for(const [id,shelter,p] of records.platforms){
+    const base=.045;
+    const top=id===773030143?californiaIslandTop:.063;
+    part(footprintGeometry(p,top-base),'#c5bfb0',0,base,0).name='Mapped Muni boarding island';
     if(!shelter)continue;
     const a=p[0],b=p.reduce((best,pt)=>Math.hypot(pt[0]-a[0],pt[1]-a[1])>Math.hypot(best[0]-a[0],best[1]-a[1])?pt:best,a);
     const length=Math.hypot(a[0]-b[0],a[1]-b[1]);if(length<.44)continue;

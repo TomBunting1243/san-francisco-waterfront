@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {createCaliforniaCar} from './california-terminal.ts';
 import {batchTraffic} from './traffic-batches.ts';
 import {StreetAssembly,createStreetAmenities,streetPassenger} from './street-amenities.ts';
 import routes from '../public/data/promenade-transit.json' with {type:'json'};
@@ -191,6 +192,7 @@ function coach(){
 
 export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const poses=new THREE.Group();
+  const california=createCaliforniaCar();poses.add(california.car);
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
   // Surveyed curb points. The F-line islands have a separate builder in market-street.ts.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
@@ -226,9 +228,40 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
     actor.root.position.set(x,THREE.MathUtils.lerp(walk,sill,clamp((1.50-across)/.25)),z);
     actor.root.rotation.y=terminal.yaw+heading;actor.stride(t,walking);
   }
-  const {batch,sync}=batchTraffic(poses,material??model.body.material.clone(),'Batched Muni vehicles, passengers and street furniture');
+  const paint=material??model.body.material.clone();
+  const {batch,sync}=batchTraffic(poses,paint,'Batched Muni vehicles, passengers and street furniture');
+  // batchTraffic packs unique geometries in traversal order. Only mark the saloon
+  // glazing and two physical lenses in the single combined transit draw.
+  const geometries=new Set<THREE.BufferGeometry>();
+  poses.traverse(part=>{if(part instanceof THREE.Mesh)geometries.add(part.geometry);});
+  const range=batch.getGeometryRangeAt([...geometries].indexOf(california.body.geometry))!;
+  const mask=new Uint8Array(batch.geometry.attributes.position.count);
+  for(const {start,count,kind} of california.body.lightRanges){
+    mask.fill(kind,range.vertexStart+start,range.vertexStart+start+count);
+  }
+  batch.geometry.setAttribute('cableLight',new THREE.BufferAttribute(mask,1));
+  const dusk={value:0},headlamp={value:california.headlamp};
+  const previous=paint.onBeforeCompile,program=paint.customProgramCacheKey();
+  paint.onBeforeCompile=function(shader,renderer){
+    previous.call(this,shader,renderer);
+    shader.uniforms.cableDusk=dusk;shader.uniforms.cableHeadlamp=headlamp;
+    // A plaza vignette can inherit the source shader hook, but owns its clock.
+    if(shader.vertexShader.includes('attribute float cableLight;'))return;
+    shader.vertexShader='attribute float cableLight; varying float vCableLight;\n'+shader.vertexShader.replace(
+      '#include <begin_vertex>','#include <begin_vertex>\nvCableLight=cableLight;');
+    shader.fragmentShader='uniform float cableDusk,cableHeadlamp; varying float vCableLight;\n'+shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      if(vCableLight>0.5){
+        vec3 lamp=vCableLight<1.5?vec3(.36,.22,.11):
+          (abs(vCableLight-cableHeadlamp)<.5?vec3(2.2,1.92,1.49):vec3(0.));
+        totalEmissiveRadiance+=lamp*cableDusk;
+      }`);
+  };
+  paint.customProgramCacheKey=()=>program.endsWith('|cal49')?program:program+'|cal49';
+  function setNight(amount:number){dusk.value=THREE.MathUtils.clamp(amount,0,1);}
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
-  function update(elapsed:number){
+  function update(elapsed:number,localMinutes=720){
+    california.update(elapsed,localMinutes);headlamp.value=california.headlamp;
     reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
     for(const [i,{group,leaves}] of coaches.entries()){
       const pose=busPose(elapsed+7+i*period/coaches.length),t=pose.t;
@@ -253,5 +286,5 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
     }
     sync();
   }
-  update(0);return {root,poses,batch,update};
+  update(0);return {root,poses,batch,update,setNight};
 }

@@ -326,6 +326,12 @@ test('fireboat departs, salutes and returns without crossing piers or ferry lane
   assert.equal(fireboatPose(16).phase,'departing');assert.ok(fireboatPose(45).spray>.99);assert.equal(fireboatPose(87).phase,'returning');
   assert.ok(Math.hypot(fireboatPose(45).x-dock.x,fireboatPose(45).z-dock.z)>12);
   const boat=createFireboat();let previous=fireboatPose(0);
+  const body=boat.root.getObjectByName('Fireboat hull, wheelhouse and monitors');
+  assert.equal(body.parent.children.length,1);assert.equal(body.geometry.attributes.position.count/3,2212);
+  const pigment=body.geometry.attributes.color,paint=new Set();
+  for(let i=0;i<pigment.count;i++)paint.add(new THREE.Color().fromBufferAttribute(pigment,i).getHexString());
+  assert.equal(paint.size,18);assert.ok(['b84f3c','eee7ce','385c64','304647'].every(hex=>paint.has(hex)));
+  assert.ok(body.castShadow&&body.receiveShadow&&body.material.vertexColors);
   for(let t=0;t<=fireboatCycle*2;t+=.25){
     const pose=boat.update(t);assert.ok([pose.x,pose.y,pose.z,pose.heading,pose.spray].every(Number.isFinite));
     const surface=waterHeight(pose.x,pose.z,t);assert.ok(pose.y-.13<surface&&pose.y+.23>surface,'hull sits in the water with its deck above it');

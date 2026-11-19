@@ -45,9 +45,28 @@ export function createFireboat(){
   const monitors=[{x:.76,y:.40,z:0,angle:0,reach:4.9,peak:2.6},{x:.16,y:1.01,z:0,angle:.35,reach:5.4,peak:3.5},{x:-.69,y:.49,z:.26,angle:1.65,reach:4.5,peak:2.8},{x:-.69,y:.49,z:-.26,angle:-1.65,reach:4.5,peak:2.8},{x:-.92,y:.45,z:0,angle:Math.PI,reach:4.2,peak:2.5}];
   for(const m of monitors){box(.07,.10,.07,m.x,m.y-.04,m.z,'#b84f3c');pole(new THREE.Vector3(m.x,m.y,m.z),new THREE.Vector3(m.x+Math.cos(m.angle)*.12,m.y+.06,m.z+Math.sin(m.angle)*.12),.032,'#c4533f');}
   // Batch the boat itself once; animated spray uses fixed instanced buffers.
-  vessel.updateMatrixWorld(true);const groups=new Map<THREE.Material,THREE.BufferGeometry[]>();
-  vessel.traverse(o=>{if(o instanceof THREE.Mesh){const g=o.geometry.clone().applyMatrix4(o.matrix);const list=groups.get(o.material as THREE.Material)||[];list.push(g);groups.set(o.material as THREE.Material,list);o.geometry.dispose();}});vessel.clear();
-  for(const [mat,geos]of groups){const geometry=mergeGeometries(geos.map(g=>g.index?g.toNonIndexed():g));if(!geometry)throw new Error('Fireboat merge failed');const m=new THREE.Mesh(geometry,mat);m.castShadow=true;m.receiveShadow=true;vessel.add(m);geos.forEach(g=>g.dispose());}
+  const painted:THREE.BufferGeometry[]=[];
+  // Preserve the original material order at adjoining painted faces.
+  const paintOrder=new Map(Array.from(materials.values(),(paint,i)=>[paint,i] as const));
+  const hullParts=(vessel.children as THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]).slice()
+    .sort((a,b)=>paintOrder.get(a.material)!-paintOrder.get(b.material)!);
+  for(const part of hullParts){
+    part.updateMatrix();
+    const geometry=part.geometry.index?part.geometry.toNonIndexed():part.geometry;
+    geometry.applyMatrix4(part.matrix);
+    const rgb=new Float32Array(geometry.attributes.position.count*3);
+    const {r,g,b}=part.material.color;
+    for(let i=0;i<rgb.length;i+=3){rgb[i]=r;rgb[i+1]=g;rgb[i+2]=b;}
+    geometry.setAttribute('color',new THREE.BufferAttribute(rgb,3));
+    painted.push(geometry);if(geometry!==part.geometry)part.geometry.dispose();
+  }
+  const hullPaint=mergeGeometries(painted);
+  if(!hullPaint)throw new Error('Fireboat merge failed');
+  const body=new THREE.Mesh(hullPaint,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.67}));
+  body.name='Fireboat hull, wheelhouse and monitors';body.castShadow=body.receiveShadow=true;
+  vessel.clear();vessel.add(body);
+  for(const geometry of painted)geometry.dispose();
+  for(const paint of materials.values())paint.dispose();
   const water=new THREE.MeshBasicMaterial({color:'#d8eeee',transparent:true,opacity:.72,depthWrite:false});
   const mist=new THREE.MeshBasicMaterial({color:'#f2faf5',transparent:true,opacity:.52,depthWrite:false});
   const spray=new THREE.Group();root.add(spray);

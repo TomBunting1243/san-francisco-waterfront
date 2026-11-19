@@ -3,6 +3,7 @@ import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { center, footprintGeometry, mappedBuildings, sfMap } from './sf-map.ts';
 import {centralPierBulkhead} from './central-pier-bulkhead.ts';
+import {build181Fremont} from './181-fremont.ts';
 import {pierFive} from './pier-five.ts';
 import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import type { FerryConnection } from './ferry-terminal.ts';
@@ -296,45 +297,7 @@ function mira(b:Building,m:Model) {
 }
 
 function fremont(b:Building,m:Model){
-  const points=openRing(b.p);
-  const corners=points.filter(([x,z],i)=>{
-    const [ax,az]=points[(i+points.length-1)%points.length], [bx,bz]=points[(i+1)%points.length];
-    return Math.abs((x-ax)*(bz-z)-(z-az)*(bx-x))>.025;
-  });
-  const height=b.h, top=height-.48;
-  const section=(y:number)=>scaleRing(corners,1-y/height*.16,y/height*.24,-y/height*.13);
-  const bands=[0,.44,3.2,6.25,9.36,12.05,top];
-  for(let i=1;i<bands.length;i++){
-    const low=bands[i-1], high=bands[i], bottom=section(low), upper=section(high);
-    skin(m,bottom,upper,low,high,['#79969b','#536f78','#6e8992','#9eaead']);
-    if(i===1)continue;
-    bottom.forEach(([x,z],j)=>{
-      const next=(j+1)%bottom.length;
-      const [bx,bz]=bottom[next];
-      if(Math.hypot(bx-x,bz-z)<1.15)return;
-      const [tx,tz]=upper[j], [ux,uz]=upper[next];
-      const [cx,cz]=center(bottom);
-      const p=(x:number,y:number,z:number)=>new THREE.Vector3(x+(x-cx)*.032,y,z+(z-cz)*.032);
-      const offset=i%2?.16:.81;
-      m.beam(p(x,low,z),p(tx+(ux-tx)*offset,high,tz+(uz-tz)*offset),.066,'#dce1d7');
-      m.beam(p(bx,low,bz),p(tx+(ux-tx)*offset,high,tz+(uz-tz)*offset),.056,'#cad5d1');
-    });
-    for(let y=low+.21;y<high-.08;y+=.23){
-      skin(m,scaleRing(section(y),1.011),scaleRing(section(y+.016),1.011),y,y+.016,['#a2b6b6']);
-    }
-  }
-  const base=section(top), crown=scaleRing(base,.46,.36,-.15);
-  const [cx]=center(crown);
-  const ridges=crown.map(([x])=>height+(x-cx)*.51);
-  skin(m,base,crown,top,ridges,['#abbfbe','#6a8790','#8ca2a7','#d0d6cb']);
-  const cap=new THREE.BufferGeometry();
-  const triangles=THREE.ShapeUtils.triangulateShape(crown.map(([x,z])=>new THREE.Vector2(x,-z)),[]);
-  const vertices=triangles.flatMap(tri=>tri.flatMap(i=>[crown[i][0],ridges[i],crown[i][1]]));
-  cap.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
-  cap.computeVertexNormals();
-  m.mesh(cap,'#a1b4b6');
-  const [sx,sz]=center(crown);
-  m.beam(new THREE.Vector3(sx+.13,height-.08,sz),new THREE.Vector3(sx+.16,height+.34,sz),.028,'#c8d1c6');
+  m.root.add(build181Fremont(b.p));
 }
 
 function infinity(b:Building,m:Model){

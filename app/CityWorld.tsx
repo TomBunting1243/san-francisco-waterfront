@@ -118,7 +118,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const culled=instanceModule?.cullHarborInstances(renderer,world.root,world.windowMesh);
       let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
-      let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
+      let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastTransitMinute=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       const startYaw=openingYaw(host.clientWidth,host.clientHeight);settings.current.yaw=startYaw;
       const target = new THREE.Vector3(...openingCamera.target);
       const clearKeys=()=>{travelKeys.current.clear();tapKeys.current.clear();};
@@ -568,6 +568,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.setFacadeClock(lighting.hours,lighting.minutes,duskAmount,lighting.litShare);
         if(mode)streetIllumination.setCabLamp(lampPosition,lampAim,2.1*Math.max(duskAmount,Math.min(.36,fog*.4+rain*.22)));
         interiors?.setNight(duskAmount);
+        world.transit?.setNight(duskAmount);
         interiors?.updateRain(snowfall?0:rain,dt,still||reducedMotion.current);
         const directSun=nightPrint?0:directSunVisibility(lighting.altitude,cloud,fog);
         world.people.setPaintLight(fillColor,lighting.direction,directSun,duskAmount);
@@ -661,8 +662,10 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           updatePier14Visitors(world.people,world.seatStart,world.pier14Visitors,elapsed,hoveredPerson);
           world.people.flush();
         }
+        const localMinutes=lighting.hours*60+lighting.minutes;
+        if(motionChanged||lastTransitMinute!==localMinutes){world.transit?.update(elapsed,localMinutes);lastTransitMinute=localMinutes;}
         if(motionChanged){
-        world.transit?.update(elapsed);world.updateApproach(mode==='bridge'?rideSeconds:elapsed);
+        world.updateApproach(mode==='bridge'?rideSeconds:elapsed);
         if(world.fireboat){const fireboatPose=world.fireboat.update(elapsed,tideOffset);host.dataset.fireboat=fireboatPose.phase;}
         world.sailboats.forEach((boat,i)=>{const p=sailingPose(elapsed,i,tideOffset);boat.position.set(p.x,p.y,p.z);boat.rotation.set(p.heel,p.heading,0,'YXZ');});
         world.ferries.forEach((boat,i)=>{

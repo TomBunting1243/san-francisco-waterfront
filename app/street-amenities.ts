@@ -34,19 +34,35 @@ export class StreetAssembly {
   }
 }
 
-export function streetPassenger(coat:string,skin:string){
+export function streetPassenger(coat:string,skin:string,holdsRunningBoardRail=false){
   const root=new THREE.Group(),body=new StreetAssembly(),trousers=new StreetAssembly();
   const oval=(w:number,h:number,d:number)=>new THREE.SphereGeometry(1,8,5).scale(w,h,d);
   body.add(oval(.19,.32,.13),coat,0,1.10,0);
   body.add(oval(.119,.146,.117),skin,0,1.53,0);
   body.add(oval(.121,.079,.119),'#53433e',0,1.61,-.01);
-  for(const side of [-1,1])body.box(side*.195,1.10,.02,.085,.44,.105,coat).rotation.z=side*.095;
+  for(const side of holdsRunningBoardRail?[1]:[-1,1])body.box(side*.195,1.10,.02,.085,.44,.105,coat).rotation.z=side*.095;
   root.add(body.bake('Painted passenger'));
   trousers.box(0,-.208,0,.13,.42,.15,'#4c5962');trousers.box(0,-.58,0,.115,.36,.14,'#515c60');
   trousers.box(0,-.772,.045,.135,.085,.24,'#514c46');
   const left=trousers.bake('Walking leg'),right=left.clone();root.add(left,right);
   left.position.set(-.083,.817,0);right.position.set(.083,.817,0);
-  function stride(t:number,walking:boolean){left.rotation.x=walking?.37*Math.sin(5.6*t):.014;right.rotation.x=-left.rotation.x;}
+  let reachingArm:THREE.Mesh|undefined;
+  if(holdsRunningBoardRail){
+    const arm=new StreetAssembly();
+    const upper=new THREE.Vector3(-.10,-.195,.107),wrist=new THREE.Vector3(-.125,-.05,.201);
+    const limb=(a:THREE.Vector3,b:THREE.Vector3,diameter:number)=>{
+      const axis=b.clone().sub(a),mid=a.clone().lerp(b,.5);
+      const sleeve=arm.box(mid.x,mid.y,mid.z,diameter,axis.length(),diameter,coat);
+      sleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),axis.normalize());
+    };
+    limb(new THREE.Vector3(),upper,.096);limb(upper,wrist,.081);
+    arm.add(oval(.047,.053,.040),skin,wrist.x,wrist.y,wrist.z);
+    reachingArm=arm.bake('Left hand gripping the cable car rail');reachingArm.position.set(-.195,1.28,0);root.add(reachingArm);
+  }
+  function stride(t:number,walking:boolean,grip=0){
+    left.rotation.x=walking?.37*Math.sin(5.6*t):.014;right.rotation.x=-left.rotation.x;
+    if(reachingArm)reachingArm.rotation.x=(1-grip)*1.18;
+  }
   return {root,stride};
 }
 
