@@ -15,7 +15,7 @@ function scene(market,iso,still=false){
   }
   return {rev,boxes:transforms(boxes),roofs:transforms(roofs),people:transforms(people)};
 }
-const section=(array,where)=>array.filter(m=>where==='rear'?m[14]>1:where==='artist'?m[14]<-8:m[14]>-3&&m[14]<-1);
+const section=(array,where)=>array.filter(m=>where==='rear'?m[14]>1:where==='artist'?m[14]<-6:m[14]>-3&&m[14]<-1);
 const position=(matrix)=>matrix.slice(12,15);
 const width=(matrix)=>Math.hypot(...matrix.slice(0,3));
 test('Foodwise dates follow Pacific trading time through DST and the three published closures',()=>{
@@ -48,7 +48,7 @@ test('front stalls stay fully stocked at midnight while Saturday crews pack the 
 test('Saturday rear pitches remain on the fixed deck clear of the loop, with three active batches',()=>{
   const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');
   const rear=section(s.roofs,'rear'),artists=section(s.roofs,'artist');
-  assert.equal(rear.length,16);assert.equal(artists.length,5);
+  assert.equal(rear.length,16);assert.equal(artists.length,7);
   const boundary=fixedFerryApron.p.map(p=>new THREE.Vector2(...p));
   const shape=new THREE.Shape(boundary),geometry=new THREE.ShapeGeometry(shape);
   const deck=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
@@ -126,7 +126,7 @@ test('the baked waterfront keeps populated farmers market batches in the opening
     }
   }
   const target=new THREE.Vector3(...openingCamera.target),matrix=new THREE.Matrix4(),frustum=new THREE.Frustum();
-  for(const [w,h] of [[1440,950],[390,844]]){
+  for(const [w,h] of [[1440,950],[1920,1080],[390,844]]){
     const camera=new THREE.PerspectiveCamera(20,w/h,.35,1800),lens=openingLens(w,h);
     orbitOffset(lens,openingYaw(w,h),0,camera.position);
     camera.position.add(target);camera.lookAt(target);camera.setFocalLength(lens.focalLength);
@@ -143,6 +143,23 @@ test('the baked waterfront keeps populated farmers market batches in the opening
       }
       assert.ok(frontInView>=8,batch.name+' front instances inside the '+w+'px opening');
     }
+    // Trace the colored face of the print itself. This also checks the awning,
+    // both people, the palm line and the grade between the stall and the eye.
+    const boxes=market.root.children[0],paint=new THREE.Color();
+    let printVisible=false;
+    for(let i=0;i<boxes.count;i++){
+      boxes.getColorAt(i,paint);if(paint.getHexString()!=='5c8681')continue;
+      boxes.getMatrixAt(i,matrix);
+      const aim=new THREE.Vector3().setFromMatrixPosition(matrix);
+      assert.ok(frustum.containsPoint(aim),'held print in '+w+'px opening');
+      const ray=new THREE.Raycaster(camera.position,aim.sub(camera.position).normalize());
+      const hit=ray.intersectObjects(market.root.children,false)[0];
+      assert.ok(hit?.object===boxes&&hit.instanceId===i,'open sightline below canvas');
+      ray.far=hit.distance-.001;
+      const blockers=world.architectureChunks.filter(m=>ray.ray.intersectsBox(m.geometry.boundingBox));
+      printVisible=!ray.intersectObjects(blockers,false).length;
+    }
+    assert.ok(printVisible,'visible Market Street print at '+w+'px');
     // A surveyed plaza furnishing can cover part of a tent. Rays must still
     // actually reach each program desk's canvas through the built architecture.
     const roofs=market.root.children[1];
@@ -214,4 +231,33 @@ test('four shoppers walk separate aisles and stop within reach of goods at both 
   }
   assert.deepEqual(checked,new Set(pitches.keys()));
   assert.ok(movingAtStart>0&&movingAtStart<frontMarketShopperCount);
+});
+
+test('Market Street displays stand on the striped grade and keep both crossing parties clear',async()=>{
+  const {westMarketGround}=await import('../app/curb-survey.ts');
+  const {plazaCrossingCount,plazaCrossingPose}=await import('../app/plaza-walkers.ts');
+  const {signalPeriod}=await import('../app/waterfront-signals.ts');
+  const market=createFerryMarket(),matrix=new THREE.Matrix4(),objects=[];
+  market.update(+at('2026-11-21T20:00Z'));
+  let frameFeet=0;
+  for(const batch of market.root.children){
+    batch.geometry.computeBoundingBox();
+    for(let i=0;i<batch.count;i++){
+      batch.getMatrixAt(i,matrix);const {elements:m}=matrix;
+      if(m[14]<-7.15||m[14]>-6.4)continue;
+      const b=batch.geometry.boundingBox.clone().applyMatrix4(matrix);
+      objects.push(b);
+      if(Math.abs(m[0]-.003)<1e-6&&m[5]>.1){
+        assert.ok(Math.abs(b.min.y-westMarketGround(m[12],m[14])-.00035)<.0001);
+        frameFeet++;
+      }
+    }
+  }
+  assert.equal(frameFeet,12,'eight awning posts and four clothes-rail uprights');
+  for(let t=0;t<signalPeriod*2;t+=.125)for(let i=0;i<plazaCrossingCount;i++){
+    const p=plazaCrossingPose(t,i);
+    if(p.z< -7.25||p.z> -6.3)continue;
+    assert.ok(objects.every(b=>Math.hypot(Math.max(0,b.min.x-p.x,p.x-b.max.x),
+      Math.max(0,b.min.z-p.z,p.z-b.max.z))>.025),'crossing shoulder clearance');
+  }
 });

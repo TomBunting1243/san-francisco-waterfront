@@ -1,3 +1,4 @@
+import {setPackedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
 import {observedCanopy} from './surveyed-canopies.ts';
 
@@ -72,7 +73,7 @@ class Paint {
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(this.xyz,3));
     g.setAttribute('color',new THREE.Float32BufferAttribute(this.rgb,3));g.setIndex(this.indices);
-    g.computeVertexNormals();g.userData.paintVertices=true;
+    setPackedNormals(g);g.userData.paintVertices=true;
     const part=mesh(g,'#ffffff',x,y,z);part.name=name;
     if(name.endsWith('foliage')){part.userData.plantCrown=true;g.userData.plantCrown=true;}
     return part;

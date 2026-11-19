@@ -1,3 +1,4 @@
+import {setPackedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
 
 export type FacadePoint=[number,number,number];
@@ -23,7 +24,7 @@ export class FacadePanels {
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(this.positions,3));
     g.setAttribute('color',new THREE.Float32BufferAttribute(this.colors,3));
-    g.setIndex(this.indices);g.computeVertexNormals();
+    g.setIndex(this.indices);setPackedNormals(g);
     return new THREE.Mesh(g,material);
   }
 }

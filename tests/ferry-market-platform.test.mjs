@@ -66,7 +66,8 @@ test('both Ferry Terminal roofs clear the plaza trees and their wells stand on t
   const {waterfrontGardens}=await import('../app/waterfront-gardens.ts');
   const {sfMap}=await import('../app/sf-map.ts');
   const {addSurveyCurbs}=await import('../app/curb-survey.ts');
-  const gardens=waterfrontGardens(sfMap.buildings),paving=[];
+  const {createMarketPaving}=await import('../app/market-paving.ts');
+  const gardens=waterfrontGardens(sfMap.buildings),paving=[createMarketPaving()];
   addSurveyCurbs(geometry=>{
     const mesh=new T.Mesh(geometry);paving.push(mesh);return mesh;
   });

@@ -59,6 +59,46 @@ test('Both square colonnades and both round lanterns have open sightlines throug
   near(new THREE.Box3().setFromObject(root,true).max.y,235*foot);
 });
 
+test('both ends of the Ferry hall have one roof surface and a closed eave on all six pitches',()=>{
+  const {root}=ferryHall(font);
+  root.updateMatrixWorld(true);
+  const roof=root.getObjectByName('Ferry hall joined roof and portico');
+  const gables=root.getObjectsByProperty('name','Ferry Hall end gable');
+  assert.equal(gables.length,6);
+  const towardGround=new THREE.Vector3(0,-1,0);
+  const towardSky=new THREE.Vector3(0,1,0);
+  for(const coping of root.getObjectsByProperty('name','Long arcade coping')){
+    const box=new THREE.Box3().setFromObject(coping),bay=coping.parent.name==='Ferry Plaza elevation';
+    const inner=bay?box.min.z:box.max.z;
+    // The metal ends at the inward cheek of the coping on both long walls.
+    const sample=z=>new THREE.Raycaster(new THREE.Vector3(2.12,1.4,z),towardGround,0,.55).intersectObject(roof);
+    const edge=sample(inner+(bay?-.001:.001))[0];
+    assert.ok(edge&&edge.point.y>box.min.y&&edge.point.y<box.max.y);
+    assert.equal(sample(inner+(bay?.001:-.001)).length,0);
+  }
+  for(const gable of gables){
+    const center=gable.parent.getWorldPosition(new THREE.Vector3());
+    const side=Math.sign(center.x);
+    const fromEnd=new THREE.Vector3(-side,0,0);
+    const bounds=new THREE.Box3().setFromObject(gable);
+    for(const fraction of [.13,.24,.76,.88]){
+      const z=THREE.MathUtils.lerp(bounds.min.z,bounds.max.z,fraction);
+      const x=center.x-side*.016;
+      const at=(x,y,d,far)=>new THREE.Raycaster(new THREE.Vector3(x,y,z),d,0,far);
+      const surface=at(x,1.4,towardGround,.55).intersectObject(roof)[0];
+      assert.ok(surface,'weather skin reaches the end wall');
+      const height=surface.point.y;
+      const hits=at(x,height+.003,towardGround,.006).intersectObjects([roof,gable]);
+      assert.equal(hits.length,1,'stone and metal compete on the end pitch at '+[x,z]);
+      const overhang=center.x+side*.012;
+      const under=at(overhang,height-.030,towardSky,.030).intersectObject(roof)[0];
+      assert.ok(under&&height-under.point.y>.005,'overhang has a distinct underside');
+      assert.ok(at(center.x+side*.070,(height+under.point.y)/2,fromEnd,.085).intersectObject(roof).length,'exposed eave edge is closed');
+      assert.ok(at(center.x+side*.070,under.point.y-.003,fromEnd,.080).intersectObject(gable).length,'masonry reaches the underside');
+    }
+  }
+});
+
 test('the baked Ferry roof closes the portico, fits the clock shaft and carries both sign racks',async()=>{
   const {createLandscape}=await import('../app/landscape.ts');
   const world=createLandscape(),hall=ferryHall(font);

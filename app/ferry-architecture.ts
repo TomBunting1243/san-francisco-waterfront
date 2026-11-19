@@ -266,9 +266,10 @@ export function ferryHall(font:Font) {
   box(width+.06,.037,.195,0,.391,-.055,ashlar,bay).name='Cantilevered east arcade soffit';
   box(width,.018,.053,0,.422,.023,pale,bay);
   box(width+.021,.018,.044,0,.602,.013,'#b4b8aa',bay);
+  const copingDepth=.084,copingCenter=.010;
   for(const g of [street,bay]){
     const y=g===street?.94:.90;
-    box(width+.12,.045,.084,0,y,.010,pale,g);
+    box(width+.12,.045,copingDepth,0,y,copingCenter,pale,g).name='Long arcade coping';
     box(width+.10,.015,.076,0,y-.028,.008,'#b1b4a8',g);
     // The water table terminates at the through door; its moulding cannot
     // run across the central walking surface.
@@ -284,7 +285,11 @@ export function ferryHall(font:Font) {
   // 2023 USGS 1.5 m DSM profiles across the nave place the three crests
   // around z=-.18, +.66 and +1.40; the clock returns span z=-1.315..-.505.
   const towerZ=ferryTowerZ,shaft=.324;
-  const roofWest=streetZ+.018,roofEast=bayZ+.057,firstEave=-.66;
+  // Both long roof edges terminate against the inner cheek of the stone
+  // coping. The old bay slope continued through it, leaving a flickering
+  // sliver of sheet metal poking out underneath the cornice.
+  const copingInset=copingDepth/2-copingCenter;
+  const roofWest=streetZ+copingInset,roofEast=bayZ-copingInset,firstEave=-.66;
   const roofs=[
     {start:firstEave,ridge:-.180,end:.305,low:.952,high:1.151,tone:'#717973'},
     {start:.305,ridge:.665,end:1.145,low:.882,high:1.047,tone:'#757d77'},
@@ -337,6 +342,10 @@ export function ferryHall(font:Font) {
   const span=roofR-roofL;
   for(const [i,{start,end,ridge,low,high,tone}] of roofs.entries()){
     const ranges=i===0?skylights:i===1?monitors:[];
+    // Keep the surveyed east pitch while cutting it back to the parapet.
+    const endLow=i===2?THREE.MathUtils.lerp(high,low,(end-ridge)/(bayZ+.057-ridge)):low;
+    const roofY=(z:number)=>z<=ridge?THREE.MathUtils.lerp(low,high,(z-start)/(ridge-start))
+      :THREE.MathUtils.lerp(high,endLow,(z-ridge)/(end-ridge));
     const xs=new Set<number>([roofL,roofR]);
     for(let x=roofL+.115;x<roofR-.008;x+=.193){xs.add(x);xs.add(x+.006);}
     for(const pair of ranges)for(const f of pair)xs.add(roofL+span*f);
@@ -345,11 +354,11 @@ export function ferryHall(font:Font) {
       const a=cuts[k-1],b=cuts[k],f=((a+b)/2-roofL)/span;
       const raised=ranges.some(([l,r])=>f>l&&f<r);
       const cap=raised?(i===0?.097:.102):.016;
-      const y0=high-(high-low)*cap/(ridge-start),y1=high-(high-low)*cap/(end-ridge);
+      const y0=roofY(ridge-cap),y1=roofY(ridge+cap);
       const seam=b-a<.0061;
       const sheet=seam?'#858b81':tone;
       cutStrip(a,b,start,low,ridge-cap,y0,sheet);
-      cutStrip(a,b,ridge+cap,y1,end,low,sheet);
+      cutStrip(a,b,ridge+cap,y1,end,endLow,sheet);
       if(raised){
         const curb=high+(i===0?.036:.066),top=curb+(i===0?.035:.021);
         strip(a,b,ridge-cap,y0,ridge-cap,curb,'#798782');
@@ -377,14 +386,30 @@ export function ferryHall(font:Font) {
     // the second gable along the full valley; the two eastern eaves coincide.
     if(i+1<roofs.length&&low!==roofs[i+1].low)
       strip(roofL,roofR,end,low,end,roofs[i+1].low,'#81867d');
+    // A gable's extruded stone cap used to occupy the same inclined plane
+    // as the metal sheet. Build the three visible faces of a real eave:
+    // folded edge, soffit, and upright masonry meeting its underside.
+    const endMonitor=i===1,edgeCap=endMonitor?.102:.016,thickness=.012;
+    const profile=[[start,low],[ridge-edgeCap,roofY(ridge-edgeCap)],
+      [ridge,high+(endMonitor?0:.006)],[ridge+edgeCap,roofY(ridge+edgeCap)],[end,endLow]];
     for(const x of [left,right]){
       const endElevation=new THREE.Group(),z=(start+end)/2,leg=(end-start)/2;
       endElevation.position.set(x,0,z);endElevation.rotation.y=x===left?-Math.PI/2:Math.PI/2;root.add(endElevation);
-      box(end-start,.770,.048,0,.483,-.023,ashlar,endElevation);
-      const peak=new THREE.Shape(),center=(x===left?1:-1)*(ridge-z);
-      peak.moveTo(-leg,.868);peak.lineTo(leg,.868);peak.lineTo(leg,low);
-      peak.lineTo(center,high);peak.lineTo(-leg,low);peak.closePath();
-      extrude(peak,.048,ashlar,0,0,-.047,endElevation).name='Ferry Hall end gable';
+      const outer=x===left?roofL:roofR,along=x===left?1:-1;
+      const peak=new THREE.Shape();
+      peak.moveTo((start-z)*along,.098);
+      for(const [station,y] of profile)peak.lineTo((station-z)*along,y-thickness);
+      peak.lineTo((end-z)*along,.098);peak.closePath();
+      mesh(new THREE.ShapeGeometry(peak),ashlar,0,0,0,endElevation).name='Ferry Hall end gable';
+      for(let j=1;j<profile.length;j++){
+        const [z0,y0]=profile[j-1],[z1,y1]=profile[j],v=roofPoints.length/3;
+        roofPoints.push(outer,y0,z0,outer,y0-thickness,z0,outer,y1-thickness,z1,outer,y1,z1);
+        pigment.set('#778078');
+        for(let k=0;k<4;k++)roofColors.push(pigment.r,pigment.g,pigment.b);
+        if(x===left)roofIndices.push(v,v+1,v+2,v,v+2,v+3);
+        else roofIndices.push(v,v+2,v+1,v,v+3,v+2);
+        strip(Math.min(x,outer),Math.max(x,outer),z0,y0-thickness,z1,y1-thickness,'#85897f',true);
+      }
       sash(endElevation,0,.388,leg*.96,.452,.009,'end');
       storefront(endElevation,0,leg*1.28,.108,.245,.009,'#63786d');
       box(end-start,.023,.065,0,.360,.017,pale,endElevation);

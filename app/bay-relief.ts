@@ -1,3 +1,4 @@
+import {setPackedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
 import {oaklandContainerCranes} from './oakland-cranes.ts';
 import {distantEastSpan} from './east-span.ts';
@@ -184,7 +185,7 @@ class ColoredTriangles {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.colors, 3));
-    geometry.computeVertexNormals();
+    setPackedNormals(geometry);
     geometry.computeBoundingSphere();
     return geometry;
   }
@@ -277,7 +278,7 @@ function terrain(grid: HeightGrid, material: THREE.Material) {
   geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
+  setPackedNormals(geometry);
   // Keep shared normals at tile boundaries while giving each surface tile its own culling bounds.
   const group = new THREE.Group();
   group.name = grid.name + ' elevation';

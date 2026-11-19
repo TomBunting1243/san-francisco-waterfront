@@ -59,13 +59,26 @@ function brickMaterial(){
   material.onBeforeCompile=shader=>{
     shader.vertexShader='varying vec2 plazaPosition;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nplazaPosition=position.xz;');
     shader.fragmentShader='varying vec2 plazaPosition;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      vec2 q=mat2(.985,.172,-.172,.985)*plazaPosition/.0061;
-      vec2 cell=floor(q);vec2 f=fract(q);float lane=mod(cell.x-cell.y,4.);
-      vec2 p=lane<2.?vec2(.5*(lane+f.x),f.y):vec2(f.x,.5*(3.-lane+f.y));
+      // Public Works field photograph 126 shows running bond separated by
+      // double red-brick courses radiating from the Vaillancourt basin.
+      vec2 q=mat2(.985,.172,-.172,.985)*plazaPosition/vec2(.0122,.0061);
+      vec2 p=fract(q+vec2(.5*mod(floor(q.y),2.),0.));
       float lod=1.-smoothstep(.18,.85,max(fwidth(q.x),fwidth(q.y)));
-      float edge=min(min(p.x,1.-p.x)*2.,min(p.y,1.-p.y));
-      float joint=(1.-smoothstep(.014,.07,edge))*lod;
-      diffuseColor.rgb*=1.+.13*joint;
+      vec2 edges=min(p,1.-p)*vec2(2.,1.);
+      float joint=(1.-smoothstep(.014,.07,min(edges.x,edges.y)))*lod;
+      // Fold the field into 22.5-degree sectors around the fountain. The
+      // crossing distance stays in scene units, so courses keep their width.
+      vec2 d=abs(plazaPosition-vec2(5.26,-8.22));
+      d=vec2(max(d.x,d.y),min(d.x,d.y));
+      float radiusLine=min(d.y,abs(.707107*(d.x-d.y)));
+      radiusLine=min(radiusLine,abs(.382683*d.x-.923880*d.y));
+      float pixel=max(fwidth(plazaPosition.x)+fwidth(plazaPosition.y),.0001);
+      float course=(1.-smoothstep(.006,.006+.5*pixel,radiusLine))*min(1.,.012/pixel);
+      float centerJoint=(1.-smoothstep(.0003,.0007+.5*pixel,radiusLine))*lod;
+      float endDistance=abs(fract(length(d)/.0122+.5)-.5)*.0122;
+      float headJoint=(1.-smoothstep(.00025,.00065,endDistance))*lod;
+      diffuseColor.rgb=mix(diffuseColor.rgb*(1.+.13*joint),
+        diffuseColor.rgb*vec3(1.02,.88,.85)*(1.+.14*max(centerJoint,headJoint)),course);
       diffuseColor.rgb*=.975+.025*sin(plazaPosition.x*.97+plazaPosition.y*1.91);
     `);
   };

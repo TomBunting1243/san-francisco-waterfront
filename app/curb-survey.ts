@@ -18,6 +18,7 @@ type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number
 type Run=[number,number,number[][]];
 export const curbRuns=frostCurbRuns(data.lines as Run[]);
 export const medianPaving=data.medianPaving;
+export const medianSlab=data.medianSlab;
 export const ferryRefugePaving=data.ferryRefugePaving;
 // Sample the very same inclined stone facets that reach the renderer. This
 // keeps feet on the two curb cuts when the surveyed paving is regenerated.
@@ -120,7 +121,6 @@ export function addSurveyCurbs(mesh:MeshFactory){
       const v=t.map(([x,z]):Vec=>[x,y(x,z),z]);triangle(v[0],v[1],v[2],color);
     }
   }
-  surface(data.medianSlab,medianGrade,'#c4b8a3');
   surface(data.westFlanks,westMarketGround,'#b58a73');
   for(const [id,t] of tiles){
     const g=new THREE.BufferGeometry();

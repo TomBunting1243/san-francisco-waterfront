@@ -43,6 +43,29 @@ test('surveyed median, separate planting island, and curved grade preserve all t
   assert.ok(curb.medianGates.length>=4);
   assert.ok(curb.ramps.some(([x,z])=>Math.hypot(x+2.2,z+10.49)<.15));
 });
+test('granite covers each surveyed island facet once and turns through the Ferry refuge',()=>{
+  const paving=createMarketPaving(),downward=new THREE.Vector3(0,-1,0);
+  const hitAt=(x,z)=>new THREE.Raycaster(new THREE.Vector3(x,.16,z),downward).intersectObject(paving)[0];
+  for(const tri of curb.medianSlab){
+    const x=tri.reduce((sum,v)=>sum+v[0]/3,0),z=tri.reduce((sum,v)=>sum+v[1]/3,0);
+    const hit=hitAt(x,z);
+    assert.ok(hit,'missing island facet at '+[x,z]);
+    assert.ok(Math.abs(hit.uv.x-x)<.00001&&Math.abs(hit.uv.y-z)<.00001);
+    if(down(edges.children,x,z)!==undefined){
+      const nearest=Math.min(...[curb.median,curb.plantingIsland].flatMap(ring=>ring.map(([ax,az],i)=>{
+        const [bx,bz]=ring[(i+1)%ring.length],dx=bx-ax,dz=bz-az;
+        const t=THREE.MathUtils.clamp(((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz||1),0,1);
+        return Math.hypot(x-ax-t*dx,z-az-t*dz);
+      })));
+      assert.ok(nearest<.0311,'second curb fill beyond the physical cap at '+[x,z]);
+    }
+  }
+  const refuge=hitAt(-.2013,-3.245);
+  assert.ok(Math.abs(refuge.uv.x+.2013)<.00001&&Math.abs(refuge.uv.y+11.245)<.00001);
+  const west=hitAt(marketAxis(-7),-7);
+  assert.ok(Math.abs(west.uv.x)<.00001&&Math.abs(west.uv.y-7)<.00001);
+});
+
 test('production paving descends to the actual roadway at each end, without a concealed raised slab',()=>{
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const pavement=world.root.getObjectByName('Market granite and herringbone promenade');
