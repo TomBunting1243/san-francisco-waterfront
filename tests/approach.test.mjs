@@ -164,14 +164,16 @@ test('road and kiosk layouts select different complete prints for every illustra
 });
 
 test('the Ferry Loop rack presents one clear print surface above the hotel terrace from the published camera',async()=>{
-  const {mappedBuildings,footprintGeometry}=await import('../app/sf-map.ts');
+  const {mappedBuildings}=await import('../app/sf-map.ts');
   const {buildingCharacter}=await import('../app/building-character.ts');
   const font=new FontLoader().parse(fontData),scene=new THREE.Group(),hotel=new THREE.Group();
-  const host=mappedBuildings.find(b=>b.id===1487225647);
-  // Actual roof and adjoining planted terraces preserved in the production hotel.
-  const roof=new THREE.Mesh(footprintGeometry(host.p,host.h),new THREE.MeshBasicMaterial());
-  hotel.add(roof);
-  for(const b of mappedBuildings.filter(b=>b.name==='1 Hotel San Francisco'))hotel.add(buildingCharacter(b,mappedBuildings,font).root);
+  let roof;
+  for(const b of mappedBuildings.filter(b=>b.name==='1 Hotel San Francisco')){
+    const detail=buildingCharacter(b,mappedBuildings,font).root;
+    if(b.id===1487225647)roof=detail.getObjectByName('Surveyed hotel roof');
+    hotel.add(detail);
+  }
+  assert.ok(roof);
   scene.add(hotel);
   const boards=buildApproachBillboards(addMesh,scene,font,billboardSites.map(()=> 'a16z'));
   const rack=boards.getObjectByName('Market · Ferry Loop long roof face'),art=rack.getObjectByName('Printed artwork');
@@ -198,4 +200,26 @@ test('the Ferry Loop rack presents one clear print surface above the hotel terra
     }
   });
   assert.equal(feet,8);
+});
+
+
+test('the neighboring Ferry Loop rack bears on solid concrete beside the ventilation grille',async()=>{
+  const {addSurveyBlocks}=await import('../app/survey-blocks.ts');
+  const root=new THREE.Group();
+  addSurveyBlocks((g,c,x,y,z)=>addMesh(g,c,x,y,z,root));
+  const vent=root.getObjectByName('Don Chee Way Muni vent structure');
+  assert.ok(vent);
+  const font=new FontLoader().parse(fontData);
+  const boards=buildApproachBillboards(addMesh,root,font,billboardSites.map(()=> 'a16z'));
+  const rack=boards.getObjectByName('Market · Ferry Loop neighboring face');
+  root.updateMatrixWorld(true);
+  const feet=rack.getObjectsByProperty('name','Rack bearing foot');
+  assert.equal(feet.length,8);
+  for(const foot of feet)for(const u of [-.021,.021])for(const v of [-.021,.021]){
+    const sole=foot.getWorldPosition(new THREE.Vector3());
+    sole.add(new THREE.Vector3(u,-.008,v).applyAxisAngle(new THREE.Vector3(0,1,0),rack.rotation.y));
+    const ray=new THREE.Raycaster(sole.clone().add(new THREE.Vector3(0,.03,0)),new THREE.Vector3(0,-1,0),0,.04);
+    const hit=ray.intersectObject(vent)[0];
+    assert.ok(hit&&Math.abs(hit.point.y-sole.y)<.0001);
+  }
 });

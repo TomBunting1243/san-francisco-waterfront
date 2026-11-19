@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {terreneDiners} from './terrene-diners.ts';
 import {frostPlazaPhoto} from './frost-plaza.ts';
 import {frostPlazaSurface} from './california-sidewalk.ts';
 import {createCaliforniaCar} from './california-terminal.ts';
@@ -234,6 +235,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const poses=new THREE.Group();
   const california=createCaliforniaCar();poses.add(california.car);
   const photograph=plazaPhotograph();poses.add(photograph.pair);
+  const diners=terreneDiners();poses.add(diners.root);
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
   // Surveyed curb points. The F-line islands have a separate builder in market-street.ts.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
@@ -301,7 +303,8 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   paint.customProgramCacheKey=()=>program.endsWith('|cal49')?program:program+'|cal49';
   function setNight(amount:number){dusk.value=THREE.MathUtils.clamp(amount,0,1);}
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
-  function update(elapsed:number,localMinutes=720){
+  function update(elapsed:number,localMinutes=720,sheltered=false){
+    diners.update(elapsed,localMinutes,sheltered);
     california.update(elapsed,localMinutes);headlamp.value=california.headlamp;
     photograph.update(elapsed);reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
     for(const [i,{group,leaves}] of coaches.entries()){

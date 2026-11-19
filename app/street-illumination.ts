@@ -3,7 +3,7 @@ import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
 
-const width=768,height=656,minX=-56,minZ=-64,pitch=.12;
+const width=784,height=672,minX=-56,minZ=-64,pitch=.12;
 type Axis=0|1;
 type Signal={x:number;z:number;y:number;heading:number;axis:Axis};
 const fromSouth=-Math.PI/2+.13,fromNorth=Math.PI/2+.13,fromStreet=Math.PI;
@@ -122,7 +122,7 @@ varying vec3 waterfrontLightPosition;
 `;
 const illumination=`
   if(waterfrontStreetNight>.001 && waterfrontLightPosition.y>-.09 && waterfrontLightPosition.y<1.15){
-    vec2 streetUv=(waterfrontLightPosition.xz-vec2(-56.,-64.))/vec2(92.16,78.72);
+    vec2 streetUv=(waterfrontLightPosition.xz-vec2(-56.,-64.))/vec2(${(width*pitch).toFixed(2)},${(height*pitch).toFixed(2)});
     if(all(greaterThan(streetUv,vec2(0.))) && all(lessThan(streetUv,vec2(1.)))){
       vec4 field=texture2D(waterfrontStreetField,streetUv);
       float lampZ=1.-smoothstep(max(.08,field.a*.84),field.a+.28,waterfrontLightPosition.y);

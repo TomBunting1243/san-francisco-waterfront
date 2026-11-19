@@ -1,3 +1,5 @@
+import {addDonCheeVent} from './don-chee-vent.ts';
+import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,replacementPavement} from './curb-survey.ts';
@@ -36,7 +38,14 @@ class Tile {
     const faces=THREE.ShapeUtils.triangulateShape(outer,holes);
     const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height,-y]);
     const i=this.vertices(points,color);
-    for(const [a,b,c] of faces)this.indices.push(i+a,i+b,i+c);
+    for(const [a,b,c] of faces){
+      const cut=height>=.025&&height<=.06?stationPavingCut(points[a],points[b],points[c]):undefined;
+      if(!cut){this.indices.push(i+a,i+b,i+c);continue;}
+      for(const tri of cut){
+        const first=this.vertices(tri,color);
+        this.indices.push(first,first+1,first+2);
+      }
+    }
   }
   geometry(){
     const geo=new THREE.BufferGeometry();
@@ -150,6 +159,7 @@ export function addSurveyBlocks(mesh:Surface){
   }
   const masonry=['#c0b59f','#b8b5a2','#c6b39e','#abae9f'];
   for(const [i,[height,plan]] of (survey.buildings as [number,Plan][]).entries()){
+    if(addDonCheeVent(mesh,plan[0]))continue;
     const tile=at(plan);
     walls(tile,plan,height,masonry[i%masonry.length],false);
     tile.top(plan,height,'#afa998');

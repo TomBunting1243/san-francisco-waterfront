@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
 import {ferryPublicRealm} from '../app/ferry-architecture.ts';
-import {driverPose} from '../app/driver-rides.ts';
+import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
 import {createLandscape} from '../app/landscape.ts';
 import {plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
 import {waterfrontGardens} from '../app/waterfront-gardens.ts';
@@ -167,7 +167,7 @@ test('the streetcar sees dry Ferry Building forecourt, stepped entry and open wa
   const water=world.root.children.find(m=>m.material===world.waterMaterial);
   const candidates=[water,...world.architectureChunks],ray=new THREE.Raycaster();
   const camera=new THREE.PerspectiveCamera(52,1280/760,.013,1800);
-  const p=driverPose('streetcar',0);camera.position.copy(p.eye);
+  const p=driverPose('streetcar',museumLegDuration);camera.position.copy(p.eye);
   camera.lookAt(p.look.x,p.look.y,p.look.z);camera.updateMatrixWorld(true);
   function first(){
     return ray.intersectObjects(candidates.filter(o=>!o.geometry.boundingBox||ray.ray.intersectsBox(o.geometry.boundingBox)||o===water),false)[0];

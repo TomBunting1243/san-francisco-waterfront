@@ -26,7 +26,7 @@ import {addSurveyBlocks,addSurveyFront,outsideSurveyRoads,surveyedHeight} from '
 import {hasShorelineFacade,shorelineFacade} from './shoreline-facades.ts';
 import * as THREE from 'three';
 import {buildStreetcarTrack} from './streets.ts';
-import {createStreetcar} from './streetcar.ts';
+import {bakeStreetcarTrucks,createStreetcar,setStreetcarTrucks} from './streetcar.ts';
 import {createWaterfrontTraffic} from './waterfront-traffic.ts';
 import {createPlazaSkaters} from './plaza-skaters.ts';
 import {createPeople} from './people.ts';
@@ -226,6 +226,9 @@ export function createLandscape() {
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;
+    }
+    if(b.name==='1 Hotel San Francisco'){
+      const hotel=buildingCharacter(b,detailedBuildings,font);root.add(hotel.root);windowPositions.push(...hotel.windows);return;
     }
     if(addGoldenGatewayGarage(b,root,windowPositions))return;
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
@@ -687,6 +690,7 @@ export function createLandscape() {
   // Keep each moving object intact while batching its own small components.
   const ferryPaint=serviceFerryPaint;
   for(const group of [tram,...ferries,...cyclists]) {
+    const trucks=group===tram?bakeStreetcarTrucks(tram):null;
     const isFerry=ferries.includes(group);
     const boardingBody=group.children.find(o=>o.userData.pyxisBoardingBody) as THREE.Mesh|undefined;
     group.updateMatrixWorld(true);
@@ -729,6 +733,7 @@ export function createLandscape() {
       batch.objects.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});batch.geometries.forEach(g=>g.dispose());
       const m=new THREE.Mesh(g,mat);m.castShadow=true;m.receiveShadow=true;group.add(m);
     });
+    if(trucks){group.add(trucks);setStreetcarTrucks(group);}
   }
   for(const object of moving)object.traverse(child=>{child.castShadow=false;});
   const transit=createPromenadeTransit();root.add(transit.root);

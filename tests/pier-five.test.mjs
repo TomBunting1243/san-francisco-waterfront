@@ -5,7 +5,7 @@ import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import {harborBuilding} from '../app/harbor-architecture.ts';
 import {mappedBuildings} from '../app/sf-map.ts';
 import {pierOneHalfPassageHeight} from '../app/central-pier-bulkhead.ts';
-import {driverPose} from '../app/driver-rides.ts';
+import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 
 const record=mappedBuildings.find(b=>b.id===91913148);
@@ -41,7 +41,7 @@ test('the lower flanks, raised gable and flagstaff follow the measured street el
 });
 test('the northbound streetcar approaches the anonymous ground-floor entries before passing Pier 5',()=>{
   const camera=new THREE.PerspectiveCamera(52,1280/760,.005,1800);
-  const pose=driverPose('streetcar',49);
+  const pose=driverPose('streetcar',museumLegDuration+7+49);
   camera.position.copy(pose.eye);camera.lookAt(pose.look.x,pose.look.y,pose.look.z);camera.updateMatrixWorld();
   const p=at(.247,.19,.12).project(camera),q=at(3.152,.16,.06).project(camera);
   assert.ok(p.z>0&&p.z<1&&q.z>0&&q.z<1);

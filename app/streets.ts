@@ -16,6 +16,15 @@ export function streetPose(x:number,direction=1){
 export const streetcarTrack={
   gauge:1.435*.06, railHead:.068*.06, railTop:.057, wireRise:19*.3048*.06,
 };
+// At the Don Chee wye the rail heads are embedded in the surveyed .031 carriageway.
+export const junctionRailTop=.0331;
+export function waterfrontRailTop(x:number){
+  const flat=Math.min(THREE.MathUtils.smoothstep(x,-9.85,-8.90),1-THREE.MathUtils.smoothstep(x,-6.40,-5.45));
+  return THREE.MathUtils.lerp(streetcarTrack.railTop,junctionRailTop,flat);
+}
+export function donCheeRailTop(z:number){
+  return THREE.MathUtils.lerp(.062,junctionRailTop,THREE.MathUtils.smoothstep(z,-5.3,-4.65));
+}
 export const trackCenterlines=tracks.tracks;
 export function trackAt(x:number,line=trackCenterlines[0]){
   let lo=0,hi=line.length-1;
@@ -37,29 +46,35 @@ export function streetcarPose(x:number){
     const trailing=trackAt(x-shoeTrail*Math.cos(heading));
     heading=-Math.atan2(point.z-trailing.z,point.x-trailing.x);
   }
-  return {...point,y:streetcarTrack.railTop,heading};
+  return {...point,y:waterfrontRailTop(x),heading};
 }
 
 type TrackBox=(w:number,h:number,d:number,x:number,y:number,z:number,color:string)=>THREE.Mesh;
 type TrackPole=(a:THREE.Vector3,b:THREE.Vector3,r:number,color:string)=>THREE.Mesh;
 export function buildStreetcarTrack(box:TrackBox,pole:TrackPole){
-  const {gauge,railHead,railTop,wireRise}=streetcarTrack;
-  for(const track of trackCenterlines){
+  const {gauge,railHead,wireRise}=streetcarTrack;
+  for(const original of trackCenterlines){
+    // Retain surveyed plan segments while resolving the short approach grades.
+    const track=original.flatMap((p,i)=>{
+      if(i===0)return [p];
+      const a=original[i-1],cuts=[-9.85,-9.60,-9.37,-9.14,-8.90,-6.40,-6.16,-5.92,-5.69,-5.45];
+      return [...cuts.filter(x=>a[0]<x&&x<p[0]).map(x=>[x,a[1]+(p[1]-a[1])*(x-a[0])/(p[0]-a[0])]),p];
+    });
     let nextSupport=0;
     for(let i=1;i<track.length;i++){
       const [x,z]=track[i],[a,b]=track[i-1],dx=x-a,dz=z-b,len=Math.hypot(dx,dz);
       if(len<.001)continue;
-      const nx=-dz/len,nz=dx/len,wireY=railTop+wireRise;
+      const nx=-dz/len,nz=dx/len,y0=waterfrontRailTop(a),y1=waterfrontRailTop(x),wireY=y1+wireRise;
       for(const sign of [-1,1]){
         const offset=sign*(gauge+railHead)/2;
-        const rail=box(railHead,.009,len+.001,(a+x)/2+offset*nx,railTop-.0045,(b+z)/2+offset*nz,'#909991');
-        rail.name='Running rail';rail.rotation.y=Math.atan2(dx,dz);
+        const rail=box(railHead,.009,Math.hypot(len,y1-y0)+(x>-10&&a< -5?.004:.001),(a+x)/2+offset*nx,(y0+y1)/2-.0045,(b+z)/2+offset*nz,'#909991');
+        rail.name='Running rail';rail.rotation.order='YXZ';rail.rotation.y=Math.atan2(dx,dz);rail.rotation.x=-Math.atan2(y1-y0,len);
       }
-      pole(new THREE.Vector3(a,wireY,b),new THREE.Vector3(x,wireY,z),.0012,'#53645e').name='Contact wire';
+      pole(new THREE.Vector3(a,y0+wireRise,b),new THREE.Vector3(x,wireY,z),.0012,'#53645e').name='Contact wire';
       nextSupport-=len;
       if(nextSupport<=0){
         // One cantilever per track, on the outside of the pair.
-        const side=track===trackCenterlines[0]?1:-1;
+        const side=original===trackCenterlines[0]?1:-1;
         const sx=x+nx*side*.25,sz=z+nz*side*.25;
         pole(new THREE.Vector3(sx,.032,sz),new THREE.Vector3(sx,wireY+.04,sz),.0055,'#345564');
         pole(new THREE.Vector3(sx,wireY+.035,sz),new THREE.Vector3(x,wireY,z),.0028,'#345564');

@@ -138,7 +138,17 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
       }
     `+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       vec3 roomEmission=vec3(0.);
-      if(buildingGrid.z>-.5){
+      if(buildingGrid.z< -1.5){
+        // Half-lap brick. Filter in unwrapped course coordinates so the
+        // stagger itself cannot inflate derivatives at a horizontal joint.
+        vec2 uv=buildingGrid.xy,aa=max(fwidth(uv),vec2(.0001));
+        vec2 cell=fract(uv+vec2(.5*mod(floor(uv.y),2.),0.));
+        vec2 edge=min(cell,1.-cell);
+        vec2 seam=1.-smoothstep(vec2(.023,.062)-.5*aa,vec2(.023,.062)+.5*aa,edge);
+        float joint=max(seam.x,seam.y);
+        float detail=1.-smoothstep(.32,.90,max(aa.x,aa.y));
+        diffuseColor.rgb*=1.+detail*.32*(joint-.165);
+      }else if(buildingGrid.z>-.5){
         vec2 uv=buildingGrid.xy,cell=fract(uv)-.5,aa=max(fwidth(uv),vec2(.0001));
         bool early=buildingGrid.z==1.,glass=buildingGrid.z==2.,loft=buildingGrid.z==3.;
         vec2 opening=glass?vec2(.467,.369):early?vec2(.291,.338):loft?vec2(.384,.294):vec2(.289,.308);
@@ -184,5 +194,5 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
       }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=roomEmission;');
   };
   bindFacadeClock(material,clock);
-  material.customProgramCacheKey=()=> 'measured-downtown-facades-v3';
+  material.customProgramCacheKey=()=> 'measured-downtown-facades-v4';
 }

@@ -2,24 +2,27 @@ import {approachPose} from './approach-road.ts';
 import {bridgeLaneCenters} from './bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
 import {pccDimensions} from './streetcar.ts';
-import {streetcarPose} from './streets.ts';
+import {museumDoorStation,streetcarRideBody} from './streetcar-ride-path.ts';
 
+export {setStreetcarTrucks} from './streetcar.ts';
 export type RideMode='bridge'|'streetcar';
 type Point={x:number;y:number;z:number};
 const metres=.06;
 const bridgeStart=bridgeLayout.length+7.65,approachEnd=32,bridgeSpeed=1.10;
 const streetcarSpeed=.72,acceleration=.075,dwell=7;
 const bodyScale=pccDimensions.length/3.629;
-// SFMTA northbound stops 14513, 14532 and 14503, projected onto the mapped rail.
+// SFMTA northbound stops 14727, 14513, 14532 and 14503, projected onto the mapped rail.
 // The front boarding door (1.21 in the 1051 body mesh) meets each stop marker.
 const doorAhead=1.21*bodyScale;
 const ferry=-1.1513-doorAhead,washington=15.1602-doorAhead,broadway=35.3121-doorAhead;
-const rampTime=streetcarSpeed/acceleration;
-const legDuration=(length:number)=>length/streetcarSpeed+rampTime;
+const legDuration=(length:number,speed=streetcarSpeed)=>length/speed+speed/acceleration;
+const museum=museumDoorStation-doorAhead;
+const turnSpeed=.32; // 11.9 mph in the switch and across the arterial.
+export const museumLegDuration=legDuration(ferry-museum,turnSpeed);
 const firstLeg=legDuration(washington-ferry),lastLeg=legDuration(broadway-washington);
 
 export function rideDuration(mode:RideMode){
-  return mode==='bridge'?(bridgeStart+approachEnd)/bridgeSpeed:firstLeg+dwell+lastLeg;
+  return mode==='bridge'?(bridgeStart+approachEnd)/bridgeSpeed:museumLegDuration+dwell+firstLeg+dwell+lastLeg;
 }
 
 // OSM 8921938 / 1343738800 mark lane five Fremont/Folsom exit-only.
@@ -56,30 +59,31 @@ function sedanEye(station:number):Point{
 }
 
 // Constant acceleration into cruise, then a matching braking distance into the platform.
-function legStation(start:number,end:number,time:number){
-  const length=end-start,duration=legDuration(length);
+function legStation(start:number,end:number,time:number,speed=streetcarSpeed){
+  const length=end-start,duration=legDuration(length,speed),rampTime=speed/acceleration;
   if(time<=0)return start;
   if(time>=duration)return end;
   if(time<rampTime)return start+.5*acceleration*time*time;
   if(time>duration-rampTime)return end-.5*acceleration*(duration-time)**2;
-  return start+streetcarSpeed*(time-rampTime/2);
+  return start+speed*(time-rampTime/2);
 }
 
-/** The station is bridge-local Z (negative onto the approach), or streetcarPose's body X. */
+/** The station is bridge-local Z (negative onto the approach), or distance along the museum curve switching to mainline X. */
 export function driverPose(mode:RideMode,seconds:number){
   const t=Math.max(0,Math.min(rideDuration(mode),Number.isNaN(seconds)?0:seconds));
   if(mode==='bridge'){
     const station=Math.max(-approachEnd,bridgeStart-t*bridgeSpeed);
-    return {eye:sedanEye(station),look:sedanEye(station-2.6),station};
+    return {eye:sedanEye(station),look:sedanEye(station-2.6),station,body:undefined};
   }
-  const station=t<=firstLeg?legStation(ferry,washington,t):legStation(washington,broadway,t-firstLeg-dwell);
-  const p=streetcarPose(station),dx=Math.cos(p.heading),dz=-Math.sin(p.heading);
+  const onward=t-museumLegDuration-dwell;
+  const station=t<=museumLegDuration?legStation(museum,ferry,t,turnSpeed):onward<=firstLeg?legStation(ferry,washington,onward):legStation(washington,broadway,onward-firstLeg-dwell);
+  const p=streetcarRideBody(station),dx=Math.cos(p.heading),dz=-Math.sin(p.heading);
   // Left pane of the PCC windshield, one metre behind the glass, 2.15 m above the rails.
   const forward=1.801*bodyScale-1.04*metres,left=.30*metres;
-  const eye={x:p.x+dx*forward+dz*left,y:p.y+2.15*metres,z:p.z+dz*forward-dx*left};
-  // The motorman looks through the bend; the eye remains fixed to the rigid vehicle.
-  const ahead=streetcarPose(station+2.1);
-  const look={x:ahead.x+forward*Math.cos(ahead.heading)-left*Math.sin(ahead.heading),y:eye.y,
-    z:ahead.z-forward*Math.sin(ahead.heading)-left*Math.cos(ahead.heading)};
-  return {eye,look,station};
+  const cosPitch=Math.cos(p.pitch),sinPitch=Math.sin(p.pitch),height=2.15*metres;
+  const along=forward*cosPitch-height*sinPitch;
+  const eye={x:p.x+dx*along+dz*left,y:p.y+forward*sinPitch+height*cosPitch,z:p.z+dz*along-dx*left};
+  // The cab, eye and lamp follow the same rigid heading through the switch.
+  const look={x:eye.x+2.1*dx*cosPitch,y:eye.y+2.1*sinPitch,z:eye.z+2.1*dz*cosPitch};
+  return {eye,look,station,body:p};
 }

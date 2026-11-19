@@ -142,6 +142,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const refreshPrint=()=>{lastVisual='';requestFrame();};
       window.addEventListener('waterfront-print-loaded',refreshPrint);
       let figureViewX=NaN,figureViewZ=NaN;
+      let lastPatioSheltered=false;
       let snowfall=false,customEpoch:number|undefined;
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
@@ -663,7 +664,11 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.people.flush();
         }
         const localMinutes=lighting.hours*60+lighting.minutes;
-        if(motionChanged||lastTransitMinute!==localMinutes){world.transit?.update(elapsed,localMinutes);lastTransitMinute=localMinutes;}
+        const patioSheltered=snowfall||rain>.35;
+        if(motionChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
+          world.transit?.update(elapsed,localMinutes,patioSheltered);
+          lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
+        }
         if(motionChanged){
         world.updateApproach(mode==='bridge'?rideSeconds:elapsed);
         if(world.fireboat){const fireboatPose=world.fireboat.update(elapsed,tideOffset);host.dataset.fireboat=fireboatPose.phase;}
@@ -694,7 +699,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
           bike.rotation.y=-p.heading;
         });
-        const tramPose=streetcarPose(mode==='streetcar'&&driver?driver.station:streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);world.tram.rotation.y=tramPose.heading;
+        const tramPose=driver?.body??streetcarPose(streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);world.tram.rotation.y=tramPose.heading;world.tram.rotation.z=driver?.body?.pitch??0;
+        rides?.[0].setStreetcarTrucks(world.tram,driver?.body);
         world.birds.forEach((bird,i)=>{const pose=birdPose(elapsed,i);bird.group.position.set(pose.x,pose.y,pose.z);bird.group.rotation.set(0,pose.heading,Math.cos(elapsed*.1+i)*.12);bird.wings[0].rotation.x=pose.flap;bird.wings[1].rotation.x=-pose.flap;});
         lastMotion=elapsed;
         }

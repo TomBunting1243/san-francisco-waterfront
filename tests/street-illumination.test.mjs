@@ -4,6 +4,7 @@ import * as T from 'three';
 import {createLandscape,createCityVignette} from '../app/landscape.ts';
 import {createStreetField,createStreetIllumination,waterfrontSignals,signalAspects} from '../app/street-illumination.ts';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
+import grades from '../public/data/promenade-light-grades.json' with {type:'json'};
 import {addSurveyBlocks} from '../app/survey-blocks.ts';
 
 const channelAt=(field,x,z,c=0)=>{
@@ -28,6 +29,42 @@ test('field derives from the scene globes, is local, and reaches the same shader
   assert.deepEqual(visible.array,Float32Array.from(globes));
   for(const row of [fixtures.curb,fixtures.inland])for(const [,x,z] of row){
     assert.ok(channelAt(field,x,z)>220,'surface beneath mapped light at '+[x,z]);
+  }
+  for(const row of [fixtures.curb,fixtures.inland]){
+    const [,x,z]=row.at(-1);
+    assert.ok(channelAt(field,x+.46,z)>25,'Broadway pool extends north past its source');
+  }
+  const [tip,x0]=fixtures.pier.at(-1);
+  assert.ok(channelAt(field,x0,tip+.36)>25,'Pier 7 tip pool retains its offshore side');
+  const terrain=[];
+  scene.root.traverse(node=>{if(node.isMesh&&node.parent?.name.endsWith(' elevation'))terrain.push(node);});
+  const streetSurfaces=[...scene.architectureChunks,...terrain],down=new T.Vector3(0,-1,0);
+  for(const [id,x,z] of [...fixtures.curb,...fixtures.inland].filter(([id])=>
+    [287051,282079,284944,281691,281690,281688,287068,287069,282128,282127].includes(id))){
+    const support=new T.Raycaster(new T.Vector3(x,.14,z),down,0,.30)
+      .intersectObjects(streetSurfaces,false).find(hit=>hit.face.normal.y>.6);
+    assert.ok(support&&Math.abs(grades[id]-support.point.y)<.00002,'fixture sits on the final streetscape at '+id);
+  }
+  // Inspect the final material/geometry along each row, after the city bake.
+  // Every halo must share a housing with vertices that the night shader lights.
+  const vertices=new Map(),key=(x,z)=>Math.floor(x*4)+','+Math.floor(z*4);
+  for(const chunk of scene.architectureChunks){
+    const lights=chunk.geometry.attributes.signLight;
+    if(!lights)continue;
+    assert.match(compile(chunk.material).fragmentShader,/nightSignLight\s*\*\s*smoothstep/);
+    const pos=chunk.geometry.attributes.position;
+    for(let i=0;i<lights.count;i++)if(lights.getX(i)>.85&&lights.getY(i)>.52&&pos.getY(i)<.7){
+      const p=new T.Vector3().fromBufferAttribute(pos,i),k=key(p.x,p.z);
+      if(!vertices.has(k))vertices.set(k,[]);
+      vertices.get(k).push(p);
+    }
+  }
+  let index=0;
+  for(const row of [fixtures.curb,fixtures.inland])for(const [id,,,,heads] of row)for(let j=0;j<heads;j++){
+    const center=new T.Vector3().fromArray(globes,index);index+=3;
+    const near=new Set();
+    for(const dx of [-.02,0,.02])for(const dz of [-.02,0,.02])near.add(key(center.x+dx,center.z+dz));
+    assert.ok([...near].some(k=>vertices.get(k)?.some(p=>p.distanceTo(center)<.018)),'emissive glass at municipal pole '+id);
   }
   // The static bake removes the source lenses. Check the four authored
   // globe positions independently of both the source array and the halo batch.

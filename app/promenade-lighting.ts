@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
-import shore from '../public/data/survey-shore.json' with {type:'json'};
-import {insideBuilding} from './building-character.ts';
-import {bayReliefGround} from './bay-relief.ts';
+import gradeData from '../public/data/promenade-light-grades.json' with {type:'json'};
+const grades:Record<string,number>=gradeData;
 
 const units=.06;
 const iron='#37626c',cast='#427580',pierIron='#435555',cap='#6c6760',lens='#ebdcc2';
@@ -92,15 +91,10 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
     const mesh=new THREE.Mesh(geometry,material);mesh.name=name;mesh.castShadow=mesh.receiveShadow=true;
     root.add(mesh);positions.length=colors.length=indices.length=glassLight.length=0;
   }
-  // Three inventory pins fall in small gaps in the city's sidewalk mesh.
-  // Ground their bases on the underlying registered land at those sites.
-  const landOnly=new Set([284943,281687,282992]);
+  // SFPUC gives plan positions. Pin the complete fixture and its halo to the
+  // local gutter, sidewalk or terrain sampled by survey-promenade-light-grades.
   for(const row of [fixtures.curb,fixtures.inland])for(const [id,x,z,yaw,heads] of row){
-    const rincon=shore.rincon.some(([outside,...holes])=>insideBuilding(x,z,outside)&&!holes.some(h=>insideBuilding(x,z,h)));
-    // The Ferry forecourt approaches have a lower paving datum than the
-    // standard inland sidewalk. The shore-side Rincon lawn is raised.
-    const inlandGround=landOnly.has(id)?bayReliefGround(x,z):x>=-7.28&&x<=-1.56?.031:.045;
-    setOrigin(x,z,row===fixtures.inland?inlandGround:rincon?.11:Math.max(.04,bayReliefGround(x,z)),yaw);
+    setOrigin(x,z,grades[id]??.045,yaw);
     if(heads===1){pedestal(false,5.55-.83);lantern(0,5.55,false);finish('Single fluted promenade light');continue;}
     pedestal(false,6.36);
     rings([[6.36,.080],[6.42,.09],[6.50,.042],[6.62,0]],iron,8);

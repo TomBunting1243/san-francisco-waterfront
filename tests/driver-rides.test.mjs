@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as T from 'three';
-import {driverPose,rideDuration} from '../app/driver-rides.ts';
+import {driverPose,rideDuration,museumLegDuration} from '../app/driver-rides.ts';
 import {addBridgeDeck,roadPaintLift} from '../app/bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from '../app/bridge-layout.ts';
 import {approachPose,buildApproachRoad} from '../app/approach-road.ts';
 import {bayReliefGround} from '../app/bay-relief.ts';
-import {streetcarPose} from '../app/streets.ts';
+import {museumDoorStation} from '../app/streetcar-ride-path.ts';
 import {pccDimensions} from '../app/streetcar.ts';
 
 const near=(x,y,eps=1e-6)=>assert.ok(Math.abs(x-y)<=eps,x+' vs '+y);
@@ -80,16 +80,17 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
 });
 test('1051 stops northbound at the correct doors, holds at Washington, then brakes into Broadway',()=>{
   const door=1.21*pccDimensions.length/3.629,leg=(15.1602+1.1513)/.72+.72/.075;
-  for(const [time,stop] of [[0,-1.1513],[leg,15.1602],[leg+3,15.1602],[leg+7,15.1602],[Infinity,35.3121]]){
-    const p=driverPose('streetcar',time),body=streetcarPose(p.station);
+  const depart=museumLegDuration+7;
+  for(const [time,stop] of [[0,museumDoorStation],[museumLegDuration,-1.1513],[depart,-1.1513],[depart+leg,15.1602],[depart+leg+3,15.1602],[depart+leg+7,15.1602],[Infinity,35.3121]]){
+    const p=driverPose('streetcar',time),body=p.body;
     near(p.station+door,stop);
     near(p.eye.y-body.y,2.15*.06);
     const dx=Math.cos(body.heading),dz=-Math.sin(body.heading);
     near((p.eye.x-body.x)*dz-(p.eye.z-body.z)*dx,.30*.06);
     near((p.eye.x-body.x)*dx+(p.eye.z-body.z)*dz,1.801*pccDimensions.length/3.629-1.04*.06);
-    assert.ok(p.look.x>p.eye.x+2);
+    near(p.look.x-p.eye.x,2.1*dx);near(p.look.z-p.eye.z,2.1*dz);
   }
-  const station=t=>driverPose('streetcar',t).station;
+  const station=t=>driverPose('streetcar',depart+t).station;
   near(station(11.1)-station(11),.072);
   near(station(leg)-station(leg-.1),.5*.075*.1**2);
   near(station(leg+7.1)-station(leg+7),.5*.075*.1**2);

@@ -1,3 +1,4 @@
+import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {marketAxis,medianGrade,medianPaving,westMarketGround} from './curb-survey.ts';
 import {frostBrickTriangles,frostWalkHeight} from './california-sidewalk.ts';
 import * as THREE from 'three';
@@ -13,7 +14,9 @@ export function createMarketPaving(){
     const up=(b[1]-a[1])*(c[0]-a[0])-(b[0]-a[0])*(c[1]-a[1]);
     indices.push(n,n+(up>0?1:2),n+(up>0?2:1));
   }
-  for(const tri of frostBrickTriangles)paint(tri,frostWalkHeight,true);
+  for(const t of frostBrickTriangles){
+    for(const tri of stationPavingCut(t[0],t[1],t[2])??[t])paint(tri,frostWalkHeight,true);
+  }
   for(const tri of medianPaving)paint(tri,medianGrade);
   for(let i=0;i<32;i++){
     const z=-6.249-i*2.817/32,next=-6.249-(i+1)*2.817/32;

@@ -119,8 +119,11 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const visitors=scene.poses.getObjectByName('Frost Plaza photo visitors').getObjectsByProperty('isMesh',true);
   const visitTriangles=[...new Set(visitors.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
   assert.equal(visitors.length,7);assert.ok(visitTriangles<850);
-  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length,69);
-  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles<6200);
+  const diners=scene.poses.getObjectByName('Terrene patio diners').getObjectsByProperty('isMesh',true);
+  const dinerTriangles=diners.reduce((n,o)=>n+o.geometry.index.count/3,0);
+  assert.equal(diners.length,5);assert.ok(dinerTriangles<900);
+  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles<6200);
   assert.ok(carTriangles<4600);
 });
 
@@ -218,4 +221,24 @@ test('the friends compose the cable-car picture then meet to review it without s
   assert.ok(original.distanceTo(subject.position)<1e-6);
   transit.update(15);assert.ok(subject.position.distanceTo(friend.position)<.055);
   assert.ok(hands.rotation.x-angle>.7);assert.equal(transit.root.children.length,1);assert.ok(transit.root.children[0].isBatchedMesh);
+});
+
+test('Terrene seats its guests facing the same table during opening hours in fair weather',async()=>{
+  const {patioFurniture}=await import('../app/hotel-terraces.ts');
+  const scene=createPromenadeTransit(),diners=scene.poses.getObjectByName('Terrene patio diners');
+  const arm=diners.getObjectByName('Hand holding a tumbler');
+  for(const [minute,rain,visible] of [[419,false,false],[420,false,true],[1319,false,true],[1320,false,false],[705,true,false],[705,false,true]]){
+    scene.update(1,minute,rain);assert.equal(diners.visible,visible);
+  }
+  const friends=diners.children;
+  for(const fig of friends){
+    const facing=new THREE.Vector3(0,0,1).applyQuaternion(fig.quaternion);
+    assert.ok(facing.dot(fig.position.clone().negate().normalize())>.999);
+    assert.equal(Math.abs(fig.position.z),patioFurniture.chairOffset);
+  }
+  const glass=new THREE.Vector3(-.092,.087,.260);
+  const height=()=>glass.clone().applyQuaternion(arm.quaternion).add(arm.position).y;
+  const resting=height();
+  scene.update(6,735,false);assert.ok(resting>.74&&height()>resting+.15);
+  scene.update(12,735,false);assert.equal(height(),resting);
 });

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
+import {railwayHotel} from './railway-museum.ts';
 import {center,footprintGeometry,mappedBuildings} from './sf-map.ts';
 
 type Building={id:number;name:string;p:number[][];h:number;minH?:number;parent?:number};
@@ -31,6 +32,7 @@ export function insideBuilding(x:number,z:number,points:number[][]){
 
 /** Selective detail on exposed faces only; adjoining mapped parts hide shared walls. */
 export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
+  if(b.name==='1 Hotel San Francisco')return railwayHotel(b,neighbors,font,insideBuilding);
   const root=new THREE.Group(),windows:Pane[]=[],materials=new Map<string,THREE.MeshStandardMaterial>();
   root.name=`${b.name} character pass`;
   const [cx,cz]=center(b.p),base=b.minH||0,cream='#e7dcc4',dark='#426369',trim='#bdac8f';
@@ -76,19 +78,6 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
         }else if(b.name==='Harbor Court Hotel')text('HARBOR COURT',.08,0,b.h-.25,.11,face);
       }
       if(harbor&&len>.5&&nz>.5){for(let x=-len/2+.04;x<len/2;x+=.085){const tile=box(.055,.025,.23,x,b.h+.05,-.035,'#ac7658',face);tile.rotation.x=.22;}}
-    }else if(b.name==='1 Hotel San Francisco'){
-      band(base+.035,.065,.11,base===0?cream:'#ba9077');band(b.h+.018,.044,.13,'#c59b7d');
-      const bays=Math.max(1,Math.round(len/.32)),spacing=len/bays;
-      for(let i=0;i<bays;i++){
-        const x=-len/2+(i+.5)*spacing;
-        for(let y=base+.145;y<b.h-.055;y+=.215)pane(x,y,Math.min(.215,spacing*.73),.14,face);
-        if(exposed(face,x,b.h+.08)&&b.minH&&len>.45){box(spacing,.018,.018,x,b.h+.13,.035,dark,face);box(.013,.14,.02,x-spacing/2,b.h+.067,.035,dark,face);if(i%2===0)shrub(x,b.h+.055,-.095,face);}
-      }
-      for(let y=base+.105;y<b.h-.06;y+=.105)band(y,.009,.012,'#c99d82');
-      if(!b.minH&&face===front?.face){
-        const curve=new THREE.EllipseCurve(0,0,.50,.12,0,Math.PI,false,0).getPoints(20);const pts=curve.map(p=>new THREE.Vector3(p.x,.33+p.y,.27));mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),20,.018,5,false),dark,0,0,0,face);
-        for(let i=0;i<7;i++){const x=-.46+i*.153;box(.025,.018,.26,x,.33+.12*Math.sqrt(1-(x/.5)**2),.14,dark,face);}text('1 HOTEL',.079,0,.26,.09,face);for(const x of [-.61,.61])shrub(x,.10,.15,face);
-      }
     }else if(b.name==='Fireboat Station 35'){
       band(b.h+.035,.065,.20,'#d4dcce');band(.08,.10,.10,'#82999a');
       for(let y=.14;y<b.h-.08;y+=.039)band(y,.012,.025,'#bdc9c3');

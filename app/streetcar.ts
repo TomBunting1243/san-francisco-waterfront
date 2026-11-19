@@ -1,5 +1,6 @@
 import {streetcarTrack} from './streets.ts';
 import * as THREE from 'three';
+import {bakeRigidChunk} from './city-blocks.ts';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
@@ -31,10 +32,10 @@ export function createStreetcar(){
   box(2.8,.12,.56,0,.24,0,materials.dark);
   const wheelCenter=(streetcarTrack.gauge+streetcarTrack.railHead)/(2*group.scale.z);
   for(const x of [-1.08,1.08]){
-    box(.69,.14,.49,x,.19,0,materials.dark);
+    box(.69,.14,.49,x,.19,0,materials.dark).userData.truck=x;
     for(const dx of [-.22,.22])for(const z of [-wheelCenter,wheelCenter]){
-      const wheel=part(new THREE.CylinderGeometry(.14,.14,.07,14),materials.rubber,x+dx,.14,z);wheel.rotation.x=Math.PI/2;wheel.name='Wheel tread';
-      const hub=part(new THREE.CylinderGeometry(.079,.079,.074,12),materials.metal,x+dx,.14,z);hub.rotation.x=Math.PI/2;
+      const wheel=part(new THREE.CylinderGeometry(.14,.14,.07,14),materials.rubber,x+dx,.14,z);wheel.rotation.x=Math.PI/2;wheel.name='Wheel tread';wheel.userData.truck=x;
+      const hub=part(new THREE.CylinderGeometry(.079,.079,.074,12),materials.metal,x+dx,.14,z);hub.rotation.x=Math.PI/2;hub.userData.truck=x;
     }
   }
   // Both sides have divided passenger windows and the smaller standee windows above.
@@ -80,4 +81,41 @@ export function createStreetcar(){
   rod([.1,1.07,0],[-1.05,wire-.018,0],.013);rod([.1,1.07,.02],[-.24,1.36,.02],.021,materials.metal);
   box(.085,.023,.07,-1.05,wire-.0115,0,materials.dark).name='Trolley contact shoe';
   return {group,glazing,lamp};
+}
+
+const truckBatchName='PCC swivel trucks';
+type TruckPose={x:number;y:number;z:number;heading:number;pitch:number};
+type CarPose={x:number;y:number;z:number;heading:number;pitch:number;front:TruckPose;rear:TruckPose};
+const instanceTransform=new THREE.Matrix4(),inverseScale=new THREE.Matrix4(),pitchMatrix=new THREE.Matrix4();
+export function setStreetcarTrucks(group:THREE.Group,ride?:CarPose){
+  const trucks=group.getObjectByName(truckBatchName) as THREE.InstancedMesh|undefined;
+  if(!trucks||(!ride&&trucks.userData.atRest))return;
+  inverseScale.makeScale(1/group.scale.x,1/group.scale.y,1/group.scale.z);
+  for(let i=0;i<2;i++){
+    if(ride){
+      const p=i?ride.front:ride.rear,c=Math.cos(ride.heading),s=Math.sin(ride.heading);
+      const dx=p.x-ride.x,dz=p.z-ride.z;
+      instanceTransform.makeRotationY(p.heading-ride.heading).multiply(pitchMatrix.makeRotationZ(p.pitch));
+      instanceTransform.setPosition(dx*c-dz*s,p.y-ride.y,dx*s+dz*c);
+      instanceTransform.premultiply(pitchMatrix.makeRotationZ(-ride.pitch));
+    }else instanceTransform.makeTranslation((i?1:-1)*1.08*group.scale.x,0,0);
+    trucks.setMatrixAt(i,instanceTransform.premultiply(inverseScale));
+  }
+  trucks.instanceMatrix.needsUpdate=true;trucks.userData.atRest=!ride;
+}
+/** The two identical trucks replace the original single rubber-tread draw.
+ * Bake the steel frame, hubs and treads together in real scene units before
+ * undoing the body's non-uniform miniature scale at each kingpin. */
+export function bakeStreetcarTrucks(group:THREE.Group){
+  const parts=group.children.filter((o):o is THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>=>o instanceof THREE.Mesh&&o.userData.truck!==undefined);
+  const front=parts.filter(o=>o.userData.truck>0);
+  const basis=new THREE.Matrix4().makeScale(group.scale.x,group.scale.y,group.scale.z);
+  basis.multiply(new THREE.Matrix4().makeTranslation(-1.08,0,0));
+  for(const part of front){part.updateMatrix();part.matrixWorld.multiplyMatrices(basis,part.matrix);}
+  const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.72,metalness:.08});
+  const source=bakeRigidChunk(truckBatchName,front,material);
+  for(const part of parts){part.removeFromParent();part.geometry.dispose();}
+  const trucks=new THREE.InstancedMesh(source.geometry,material,2);trucks.name=truckBatchName;
+  trucks.frustumCulled=false;trucks.receiveShadow=true;
+  return trucks;
 }

@@ -1,12 +1,13 @@
+import {addEmbarcaderoEntrance} from './embarcadero-station.ts';
+import {addMarketRunningRails,makeSteuartJunction} from './steuart-junction.ts';
 import {addSurveyedFrostTree} from './frost-trees.ts';
 import {addMarketLights,insideMarketLampFooting} from './market-lights.ts';
 import * as THREE from 'three';
-import {addCaliforniaSidewalk,marketRailCenter,marketRailTop,registeredMarketTracks,replacedMarketCrossings} from './california-sidewalk.ts';
+import {addCaliforniaSidewalk,replacedMarketCrossings} from './california-sidewalk.ts';
 import {californiaRailGeometry,californiaIslandTop,cableRailHead} from './california-terminal.ts';
 import {treeWell} from './tree-wells.ts';
 import data from '../public/data/market-street.json' with {type:'json'};
 import {footprintGeometry} from './sf-map.ts';
-import {streetcarTrack} from './streets.ts';
 import {waterfrontLandscape} from './waterfront-gardens.ts';
 import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
 
@@ -52,25 +53,8 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
       part(new THREE.CylinderGeometry(radius,radius,h,12,1,true,angle-arc/2,arc),paint,kioskX,kioskY+y,kioskZ).name='Curved poster frame and paper';
     }
   }
-  for(const [id,cable,original] of records.tracks){
-    if(cable)continue; // The complete California terminal uses its own surveyed crossover.
-    const points=registeredMarketTracks[id]??original;
-    const gauge=1.435*.06;
-    for(let i=1;i<points.length;i++){
-      const a=points[i-1],b=points[i],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
-      function trackStrip(offset:number,y0:number,y1:number,w:number,h:number,color:string){
-        const ox=dz/len*offset,oz=-dx/len*offset;
-        const obj=line([a[0]+ox,a[1]+oz],[b[0]+ox,b[1]+oz],(y0+y1)/2,w,h,color);
-        obj.scale.z=Math.hypot(len,y1-y0);
-        obj.rotation.order='YXZ';obj.rotation.x=-Math.atan2(y1-y0,len);
-        return obj;
-      }
-      for(const sign of [-1,1]){
-        trackStrip(gauge*.5*sign,marketRailCenter(a[1]),marketRailCenter(b[1]),streetcarTrack.railHead,.004,'#a9aaa0').name='Market running rail';
-      }
-      trackStrip(0,marketRailTop(a[1])+streetcarTrack.wireRise,marketRailTop(b[1])+streetcarTrack.wireRise,.003,.003,'#606a65').name='F line contact wire';
-    }
-  }
+  addMarketRunningRails(records.tracks,line);
+  root.add(makeSteuartJunction());
   part(californiaRailGeometry(),'#ffffff',0,0,0).name='Lower California cable rails and crossover';
   addCaliforniaSidewalk(part,cableRailHead);
   for(const [id,points] of records.crossings){
@@ -94,7 +78,8 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
     for(const end of [-1,1])mast(x+end*Math.sin(ry)*span*.36,z+end*Math.cos(ry)*span*.36,.006,.145,.064,steel);
     box(x,.215,z,.094,.009,span,'#acaaa0',ry);
   }
-  for(const [,a,b] of records.entrances){
+  for(const [id,a,b] of records.entrances){
+    if(addEmbarcaderoEntrance(part,id))continue;
     const length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!length)continue;
     const dx=(b[0]-a[0])/length,dz=(b[1]-a[1])/length,span=Math.min(.99,length),w=.175;
     const cx=a[0]+dx*span/2,cz=a[1]+dz*span/2,ry=Math.atan2(dx,dz);

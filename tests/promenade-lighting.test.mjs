@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import lamps from '../public/data/promenade-lights.json' with {type:'json'};
+import grades from '../public/data/promenade-light-grades.json' with {type:'json'};
 import {bakeRigidChunk} from '../app/city-blocks.ts';
 import {sfMap} from '../app/sf-map.ts';
 import {insideBuilding} from '../app/building-character.ts';
@@ -10,16 +11,16 @@ import {buildPromenadeLighting} from '../app/promenade-lighting.ts';
 
 const root=new THREE.Group(),halos=buildPromenadeLighting(root);
 root.updateMatrixWorld(true);
-test('the SFPUC fluted pole row follows the waterfront curb from the bridge to Pier 7',()=>{
-  assert.equal(lamps.curb.length,67);
-  assert.equal(new Set(lamps.curb.map(p=>p[0])).size,67);
-  assert.ok(lamps.curb[0][1]<-53 && lamps.curb.at(-1)[1]>26.7);
+test('the SFPUC fluted pole row follows the waterfront curb from the bridge through the Broadway stop',()=>{
+  assert.equal(lamps.curb.length,77);
+  assert.equal(new Set(lamps.curb.map(p=>p[0])).size,77);
+  assert.ok(lamps.curb[0][1]<-53 && lamps.curb.at(-1)[1]>35.70);
   for(const [,x,z] of lamps.curb){
     const {z:road}=streetPose(x,1);
     assert.ok(z>road+.1&&z<road+1);
   }
-  assert.equal(lamps.inland.length,61);
-  assert.equal(new Set([...lamps.curb,...lamps.inland].map(p=>p[0])).size,128);
+  assert.equal(lamps.inland.length,69);
+  assert.equal(new Set([...lamps.curb,...lamps.inland].map(p=>p[0])).size,146);
   for(const [,x,z] of lamps.inland){
     const road=streetPose(x,-1).z;
     assert.ok(z<road-.10&&z>road-1.0,'inland municipal pin outside southbound lanes');
@@ -42,7 +43,7 @@ test('the Ferry frontage carries two separate lanterns above its branched orname
     }
     k+=3*heads;
   }
-  assert.equal(k/3,78);
+  assert.equal(k/3,88);
 });
 test('aerial Pier 7 pairs stand on the timber deck and the night glows sit inside the glass',()=>{
   const pier=sfMap.piers.find(p=>p.name==='Pier 7');
@@ -64,11 +65,14 @@ test('aerial Pier 7 pairs stand on the timber deck and the night glows sit insid
     }
   }
   assert.equal(k,halos.length);
-  assert.equal(halos.length/3,207);
+  assert.equal(halos.length/3,225);
   const triangles=root.children.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0);
-  const original=root.children.filter((_,i)=>i<lamps.curb.length||i>=lamps.curb.length+lamps.inland.length);
+  const original=root.children.filter((_,i)=>i<67||i>=lamps.curb.length+lamps.inland.length);
   assert.ok(original.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0)<40000);
-  assert.ok(triangles<59000);
+  const broadway=root.children.filter((_,i)=>i>=67&&i<77||i>=77+61&&i<77+69);
+  assert.equal(broadway.length,18);
+  assert.ok(broadway.every(m=>m.geometry.index.count/3<=280));
+  assert.ok(triangles-broadway.reduce((n,m)=>n+m.geometry.index.count/3,0)<59000);
 });
 
 test('baked lantern glass emits on its actual faces while iron stays dark',()=>{
@@ -85,4 +89,15 @@ test('baked lantern glass emits on its actual faces while iron stays dark',()=>{
     assert.ok(glass>=18&&iron>glass,name);
     baked.geometry.dispose();
   }
+});
+
+test('both curb rows stand on their registered supporting surfaces, including the six lowered Rincon bases',()=>{
+  const poles=[...lamps.curb,...lamps.inland];
+  assert.equal(Object.keys(grades).length,poles.length);
+  for(const [i,[id]] of poles.entries()){
+    const geometry=root.children[i].geometry;geometry.computeBoundingBox();
+    assert.ok(Math.abs(geometry.boundingBox.min.y-grades[id])<.00001,id);
+  }
+  for(const id of [287051,282079,284944,281691,281690,281688])assert.equal(grades[id],-.040);
+  assert.equal(grades[287068],.045);assert.equal(grades[287069],.031);
 });

@@ -21,7 +21,8 @@ segments = [(a,b) for road in sf['roads'] if road['name']=='The Embarcadero'
 bridgeStart, bridgeEnd = sf['bridge']['centerline'][:2]
 bridgeSlope=(bridgeEnd[0]-bridgeStart[0])/(bridgeEnd[1]-bridgeStart[1])
 pier = next(p['p'] for p in sf['piers'] if p['name']=='Pier 7')
-pierX = (min(p[0] for p in pier)+max(p[0] for p in pier))/2
+# First opposite-side poles beyond the Broadway 14503 platform end the driven corridor.
+broadwayEnd = 36.03
 # City General Plan Policy 10.15: double heads between the Agriculture Building
 # and Pier 1. The inventory has pole type and location but no luminaire counts.
 doubleStart = min(p[0] for p in next(b['p'] for b in sf['buildings'] if b['name']=='Ferry Station Post Office Building'))
@@ -34,7 +35,7 @@ for feature in inventory['features']:
     lng,latitude=feature['geometry']['coordinates']
     e,n=(lng-lon)*111320*math.cos(math.radians(lat)),(latitude-lat)*111320
     x,z=-.03552029735*e+.04836012986*n,.04836012986*e+.03552029735*n
-    if x<bridgeStart[0]+bridgeSlope*(z-bridgeStart[1]) or x>pierX:
+    if x<bridgeStart[0]+bridgeSlope*(z-bridgeStart[1]) or x>broadwayEnd:
         continue
     surfaces=[(a[1]+(x-a[0])*(b[1]-a[1])/(b[0]-a[0]),(b[1]-a[1])/(b[0]-a[0])) for a,b in segments if min(a[0],b[0])<=x<=max(a[0],b[0])]
     if not surfaces:
