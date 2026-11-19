@@ -49,7 +49,7 @@ export const billboardSites:BillboardSite[]=[
   // Heights and sidewalk offsets follow the modeled Market Street column.
   kiosk('Pier 22½ · Harrison poster kiosk',-43.85,-1.18,.046,-.18,campaign),
   kiosk('Pier 7 · Broadway poster kiosk',26.68,-1.95,.046,-.18,campaign),
-  kiosk('SFO0002SF · Ferry Building poster kiosk',1.75,-1.86,.046,-.12,license),
+  kiosk('SFO0002SF · Ferry Building poster kiosk',1.75,-1.86,.031,-.12,license),
   kiosk('SFO0003SF · 19 Market at Steuart poster kiosk',-1.425,-12.51,.046,.24,license,true),
   kiosk('SFO0004SF · Market at Spear poster kiosk',-2.64,-15.67,.046,.24,license),
 ];

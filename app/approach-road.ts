@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import data from '../public/data/approach-soma.json' with {type:'json'};
 import { bayReliefGround } from './bay-relief.ts';
 import { bridgeLayout } from './bridge-layout.ts';
+import {roadPaintLift} from './bridge-deck.ts';
 import { createStreetVehicle, streetVehicleMaterial } from './street-vehicles.ts';
 
 export type ApproachMesh = (shape:THREE.BufferGeometry,color:string,x:number,y:number,z:number,parent:THREE.Group) => THREE.Mesh;
@@ -9,7 +10,7 @@ type Knot = {x:number;z:number;s:number;lanes:number};
 type Grade = (s:number,z:number) => number;
 const {lerp,smoothstep}=THREE.MathUtils;
 const laneWidth=.216;
-const concrete='#a6aba1', beamPaint='#8c9a98', roadPaint='#738587', shoulderPaint='#c9c2a5';
+const concrete='#a6aba1', beamPaint='#8c9a98', roadPaint='#738587';
 export const approachGround=(x:number,z:number)=>Math.max(bayReliefGround(x,z),-.01-.51*smoothstep(-z,114,126));
 
 export function approachDistance(x:number,z:number,points:number[][]) {
@@ -102,6 +103,49 @@ function slabGeometry(axis:typeof main[number],from:number,to:number,offsetA:num
   return geometry;
 }
 
+// Use the same two planes per road section as slabGeometry. A dash starting in
+// the middle of a curved grade must lie on the rendered slab, not on a fresh
+// evaluation of the road profile at its endpoints.
+function pavementMarkings(axis:typeof main[number]){
+  const stations=[...new Set([0,...intervals(axis.length,axis.knots),axis.length])].sort((a,b)=>a-b);
+  const rows=stations.map(s=>{
+    const a=axis.sample(s);
+    return {s,w:a.width,left:section(a,-a.width,0),right:section(a,a.width,0)};
+  });
+  type UV=[number,number];
+  return (from:number,to:number,center:(w:number)=>number,width:number)=>{
+    const vertices:number[]=[];
+    for(let j=1;j<rows.length;j++){
+      const a=rows[j-1],b=rows[j];
+      if(b.s<=from)continue;
+      if(a.s>=to)break;
+      const lo=(Math.max(a.s,from)-a.s)/(b.s-a.s),hi=(Math.min(b.s,to)-a.s)/(b.s-a.s);
+      const point=(v:number,edge:number):UV=>{
+        const w=lerp(a.w,b.w,v);return [.5+(center(w)+edge*width/2)/(2*w),v];
+      };
+      const quad=[point(lo,1),point(hi,1),point(hi,-1),point(lo,-1)];
+      for(const first of [true,false]){
+        const poly:UV[]=[];
+        for(let i=0;i<4;i++){
+          const p=quad[i],q=quad[(i+1)%4],d=p[0]+p[1]-1,e=q[0]+q[1]-1;
+          if(first?d<=0:d>=0)poly.push(p);
+          if(d*e<0)poly.push([lerp(p[0],q[0],d/(d-e)),lerp(p[1],q[1],d/(d-e))]);
+        }
+        const vertex=([u,v]:UV)=>{
+          for(let k=0;k<3;k++){
+            const value=first?a.left[k]+u*(a.right[k]-a.left[k])+v*(b.left[k]-a.left[k]):
+              b.right[k]+(1-u)*(b.left[k]-b.right[k])+(1-v)*(a.right[k]-b.right[k]);
+            vertices.push(value+(k===1?roadPaintLift:0));
+          }
+        };
+        for(let i=1;i+1<poly.length;i++){vertex(poly[0]);vertex(poly[i]);vertex(poly[i+1]);}
+      }
+    }
+    const g=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    g.computeVertexNormals();g.userData.roadPaint='SoMa approaches';return g;
+  };
+}
+
 export function approachPose(eastbound:boolean,distance:number,lane:number){
   const axis=main[eastbound?1:0],at=axis.sample(distance);
   const laneLimit=Math.max(0,Math.floor((at.lanes-1)/2));
@@ -124,6 +168,7 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
   for(const [routeIndex,axis] of [...main,...ramps.map(r=>r.ramp)].entries()){
     const branch=routeIndex>1,westbound=routeIndex===0;
     const bridgeFoot=!branch;
+    const marking=pavementMarkings(axis);
     const right=(w:number)=>w,left=(w:number)=>-w;
     // Continuous extruded top and side surfaces, with joints between consecutive
     // spans placed in the darker concrete beam and a low cast parapet.
@@ -141,17 +186,16 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
         add(slabGeometry(axis,start,to,outer,outer,side>0?-.072:.103,side>0?.103:-.072),concrete);
         add(slabGeometry(axis,start,to,inner,inner,side>0?.103:0,side>0?0:.103),concrete);
         add(slabGeometry(axis,start,to,side>0?outer:inner,side>0?inner:outer,.103,.103),concrete);
-        const edge=(w:number)=>side*(w-.062);
-        const lineGeometry=slabGeometry(axis,start,to,w=>edge(w)+.005,w=>edge(w)-.005,.003,.003);
-        add(lineGeometry,side===(westbound?-1:1)?shoulderPaint:'#d3d2b9');
+        const edge=(w:number)=>side*(w-.059);
+        add(marking(from,to,edge,.011),side===(westbound?-1:1)?'#c4ab72':'#d8d8c3');
       }
     }
-    for(let s=bridgeFoot?.56:1.4;s<axis.length-.6;s+=.86){
+    for(let s=bridgeFoot?.115:1.4;s<axis.length-.6;s+=.86){
       const p=axis.sample(s);
       const lanes=Math.round(p.lanes);
       for(let lane=1;lane<lanes;lane++){
         const x=(lane-lanes/2)*laneWidth;
-        mesh(slabGeometry(axis,s,Math.min(s+.29,axis.length),x+.005,x-.005,.004,.004),'#d6d1b3',0,0,0,group);
+        mesh(marking(s,Math.min(s+.25,axis.length),()=>x,.008),'#cbcbbb',0,0,0,group);
       }
     }
     for(let s=branch?1.8:2.6;s<axis.length-1.5;s+=branch?2.8:3.1){

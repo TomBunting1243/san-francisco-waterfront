@@ -113,6 +113,20 @@ test('both bridge roadways have five marked lanes wide enough for the traffic mo
   for(const level of [3.6,4.4]){
     assert.equal(new Set(stripes.filter(o=>Math.abs(o.position.y-level)<.10).map(o=>o.position.x)).size,4);
   }
+  const shoulders=deck.children.filter(o=>o.name==='Left shoulder'||o.name==='Right shoulder');
+  for(const o of [...stripes,...shoulders]){
+    assert.equal(o.geometry.index.count,6);
+    const verts=o.geometry.getAttribute('position'),normals=o.geometry.getAttribute('normal');
+    for(let i=0;i<verts.count;i++){
+      assert.ok(Math.abs(verts.getY(i))<1e-8);assert.ok(normals.getY(i)>.99999);
+    }
+    assert.ok(o.geometry.userData.roadPaint);
+  }
+  for(const o of shoulders){
+    const westbound=o.position.y>4;
+    assert.equal(Math.sign(o.position.x),(o.name==='Left shoulder'?-1:1)*(westbound?1:-1));
+    assert.ok(Math.abs(o.position.y-(westbound?4.4+.0755:3.6+.058)-.00012)<1e-6);
+  }
   const paint=streetVehicleMaterial();
   for(let i=0;i<4;i++){
     const car=createStreetVehicle(i,paint,true);

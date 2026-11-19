@@ -139,6 +139,12 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
     };
     panel(0,1,0,1,edge);
     if (nose || index%4!==3) panel(.085,.915,.14,.89,nose?windshield:glass,.012);
+    else {
+      // Opaque split cargo doors follow the rake of the rear cabin panel.
+      panel(.494,.506,0,.98,skirt,.007);
+      panel(.527,.624,.14,.194,rubber,.012);
+      for(const u of [.035,.938])panel(u,u+.027,.66,.735,rim,.012);
+    }
   }
 
   const box=(w:number,h:number,d:number,c:THREE.Color,x:number,y:number,z:number)=>
@@ -156,7 +162,19 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
     if(!distant) box(.14,.075,.12,edge,p.frontBelt-.22,p.waist+.14,wide*side*.95);
   }
   box(.064,.093,wide*.69,rubber,half-.018,bonnet-.275,0);
-  if(!distant)box(.05,.071,.23,plate,-half+.014,.48,0);
+  if(p.name==='delivery van'){
+    // Carry the door joint across the stepped sill and down to the bumper.
+    const sill=[[-half-.005,.465],[-half-.005,p.waist-.207],[-half+.178,p.waist-.086],[p.rearBelt-.009,p.waist+.003]];
+    for(let i=1;i<sill.length;i++){
+      const [x,y]=sill[i-1],[nextX,nextY]=sill[i];
+      form.panel([x,y,-.009],[x,y,.009],[nextX,nextY,.009],[nextX,nextY,-.009],skirt);
+    }
+    const rear=-half-.010;
+    form.panel([rear,.525,.16],[rear,.525,.465],[rear,.677,.465],[rear,.677,.16],plate);
+    const lip=rear-.040;
+    form.panel([lip,.347,-wide*.78],[lip,.347,wide*.78],[lip,.461,wide*.78],[lip,.461,-wide*.78],rubber);
+    form.panel([lip,.461,-wide*.78],[lip,.461,wide*.78],[-half,.461,wide*.78],[-half,.461,-wide*.78],edge);
+  }else if(!distant)box(.05,.071,.23,plate,-half+.014,.48,0);
 
   const vehicle = new THREE.Group();
   vehicle.name = p.name;

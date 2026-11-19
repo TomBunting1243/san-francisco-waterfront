@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
 import {ferryPublicRealm} from '../app/ferry-architecture.ts';
+import {driverPose} from '../app/driver-rides.ts';
 import {createLandscape} from '../app/landscape.ts';
 import {plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
 import {waterfrontGardens} from '../app/waterfront-gardens.ts';
 import {sfMap} from '../app/sf-map.ts';
 import survey from '../public/data/plaza-survey.json' with {type:'json'};
+
+let sharedLandscape;
+const landscape=()=>sharedLandscape??=createLandscape();
 
 test('all observed crowns are rendered on mapped stems at lidar height and spread; aerial-only estimates stay distinct',()=>{
   const measured=survey.trees.filter(row=>row.heightM);
@@ -32,7 +36,7 @@ test('all observed crowns are rendered on mapped stems at lidar height and sprea
 
 test('36 benches have mapped seats, correct scale, independent feet and a supporting finished surface',()=>{
   const realm=ferryPublicRealm(),field=realm.getObjectByName('Mapped waterfront benches');
-  const world=createLandscape();
+  const world=landscape();
   world.root.updateMatrixWorld(true);realm.updateMatrixWorld(true);
   const meshes=[...world.architectureChunks];
   world.relief.root.traverse(o=>{if(o.isMesh)meshes.push(o);});
@@ -156,4 +160,30 @@ test('every measured Ferry crown is a single closed density surface with baked c
     assert.ok(max-min>.06,'flat canopy pigment '+key);
   }
   assert.ok(apertures>0,'the survey-backed light gaps should survive reconstruction');
+});
+
+test('the streetcar sees dry Ferry Building forecourt, stepped entry and open water beyond the hall',()=>{
+  const world=landscape();world.root.updateMatrixWorld(true);
+  const water=world.root.children.find(m=>m.material===world.waterMaterial);
+  const candidates=[water,...world.architectureChunks],ray=new THREE.Raycaster();
+  const camera=new THREE.PerspectiveCamera(52,1280/760,.013,1800);
+  const p=driverPose('streetcar',0);camera.position.copy(p.eye);
+  camera.lookAt(p.look.x,p.look.y,p.look.z);camera.updateMatrixWorld(true);
+  function first(){
+    return ray.intersectObjects(candidates.filter(o=>!o.geometry.boundingBox||ray.ray.intersectsBox(o.geometry.boundingBox)||o===water),false)[0];
+  }
+  for(const [x,y] of [[1217,424],[1150,415],[1050,408]]){
+    ray.setFromCamera(new THREE.Vector2(x/640-1,1-y/380),camera);
+    const h=first();assert.ok(h&&h.object!==water);
+    const c=new THREE.Color().fromBufferAttribute(h.object.geometry.attributes.color,h.face.a);
+    assert.ok(['c9c5b3','ccc4b1'].includes(c.getHexString()));assert.ok(h.point.y>=.0309&&h.point.y<=.113);
+  }
+  const down=new THREE.Vector3(0,-1,0);
+  for(const [x,z,y] of [[-5.35,-1.84,.031],[2.5,-1.84,.031]]){
+    ray.set(new THREE.Vector3(x,.115,z),down);assert.ok(Math.abs(first().point.y-y)<.0001);
+  }
+  for(const [z,y] of [[-1.94,.0825],[-1.88,.0975],[-1.81,.1125],[-1.53,.103]]){
+    ray.set(new THREE.Vector3(-.12,.115,z),down);assert.ok(Math.abs(first().point.y-y)<.00005);
+  }
+  ray.set(new THREE.Vector3(3.6,.15,5),down);assert.equal(first().object,water);
 });

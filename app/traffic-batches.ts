@@ -34,18 +34,33 @@ export function batchTraffic(poses:THREE.Group,material:THREE.Material,name:stri
 
 export function createBridgeTraffic(material:THREE.MeshStandardMaterial){
   const poses=new THREE.Group(),models=Array.from({length:12},(_,i)=>createStreetVehicle(i,material,true));
-  const cars=Array.from({length:22},(_,i)=>{
-    const car=models[i%models.length].clone(),westbound=i%2===0;
-    car.scale.setScalar(.25);
-    car.position.set(bridgeLaneCenters[Math.floor(i/2)%bridgeLaneCenters.length],
-      westbound?bridgeLayout.upperDeck+.063:bridgeLayout.lowerDeck+.044,i*8);
-    car.rotation.y=westbound?Math.PI/2:-Math.PI/2;poses.add(car);return car;
-  });
+  // Local -Z is San Francisco. The inner (left) lane is fastest on each deck.
+  // Equal speed within a lane preserves its headways, including through the loop.
+  const westSpeeds=[1.34,1.22,1.10,.98,.84],eastSpeeds=[.88,.99,1.08,1.19,1.29];
+  const phases=[.19,.58,.37,.85,.07];
+  const fleet:{car:THREE.Group;phase:number;speed:number;length:number}[]=[];
+  for(const westbound of [true,false]){
+    const count=westbound?14:6;
+    // Upper-deck asphalt continues to the YBI tunnel portal, 8.6 units past the span.
+    const length=bridgeLayout.length+(westbound?8.6:0),spacing=length/count;
+    for(const [lane,x] of bridgeLaneCenters.entries()){
+      const speed=westbound?-westSpeeds[lane]:eastSpeeds[lane];
+      for(let row=0;row<count;row++){
+        const car=models[fleet.length%models.length].clone();
+        car.scale.setScalar(.25);
+        car.position.set(x,westbound?bridgeLayout.upperDeck+.063:bridgeLayout.lowerDeck+.044,0);
+        car.rotation.y=westbound?Math.PI/2:-Math.PI/2;
+        poses.add(car);
+        const stagger=.09*Math.sin(row*2.4+lane);
+        fleet.push({car,phase:(row+phases[lane]+stagger)*spacing,speed,length});
+      }
+    }
+  }
+  const cars=fleet.map(vehicle=>vehicle.car);
   const {batch,sync}=batchTraffic(poses,material,'Bay Bridge vehicles');
   function update(elapsed:number){
-    for(const [i,car] of cars.entries()){
-      const z=i*8+(i%2?1.1:-1.1)*elapsed;
-      car.position.z=THREE.MathUtils.euclideanModulo(z,bridgeLayout.length);
+    for(const {car,phase,speed,length} of fleet){
+      car.position.z=THREE.MathUtils.euclideanModulo(phase+speed*elapsed,length);
     }
     sync();
   }

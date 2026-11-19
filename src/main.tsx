@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import CustomConditions from './CustomConditions';
+import {useCallback,useRef,useState} from 'react';
+import CustomConditions, {type Ride} from './CustomConditions';
 import {loadConditions,saveConditions,type Conditions} from './conditions.ts';
 import {createRoot} from 'react-dom/client';
 import CityWorld from '../app/CityWorld';
@@ -24,10 +24,17 @@ const lines=[
 
 function StandaloneCity(){
   const [conditions,setConditions]=useState(loadConditions);
+  const [ride,setRide]=useState<Ride|null>(null);
+  const customButton=useRef<HTMLButtonElement>(null);
+  const endRide=useCallback(()=>{
+    setRide(null);
+    customButton.current?.focus({preventScroll:true});
+  },[]);
   function apply(value:Conditions){setConditions(value);saveConditions(value);}
   return <main>
-    <CityWorld conditions={conditions} passerbyLines={lines}
-      overlay={<CustomConditions value={conditions} change={apply}/>}
+    <CityWorld conditions={conditions} passerbyLines={lines} ride={ride} onRideEnd={endRide}
+      overlay={<CustomConditions value={conditions} change={apply} ride={ride} customButton={customButton}
+        startRide={mode=>setRide({mode,paused:false})} toggleRide={()=>setRide(current=>current&&{...current,paused:!current.paused})} endRide={endRide}/>}
       fallback={<p className="standalone-fallback" role="status">The interactive city needs a browser with WebGL. You can still enjoy this view of the waterfront.</p>}/>
     <footer className="standalone-credit">
       Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>

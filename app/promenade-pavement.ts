@@ -15,6 +15,7 @@ export function addPromenadeCrossings(mesh:Surface){
   for(const [tile,vertices] of tiles){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.computeVertexNormals();
+    g.userData.roadPaint='Waterfront crossings';
     mesh(g,'#e1ddcd',0,0,0).name='Embarcadero crosswalk paint '+tile;
   }
 }

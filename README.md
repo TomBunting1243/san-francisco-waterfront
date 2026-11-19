@@ -19,6 +19,7 @@ Build static files with `npm run build`; review that build with `npm run preview
 
 ## Explore
 
+- In **Custom → View**, choose **Bay Bridge drive** for the westbound upper deck into San Francisco, or **F-line streetcar** for a northbound ride past the Ferry Building. Each ride has its own pause button. **Return** or Escape brings you back to your waterfront view.
 - Drag to orbit and tilt. Double-click or pinch to change the focal length. On touchscreens, move two fingers vertically together to tilt. The lens stays aimed at the Ferry Building.
 - The bottom-right controls zoom, return to the opening view, and pause or resume motion.
 - With the city focused, use the arrow keys to orbit and tilt, `+` and `−` to zoom, Escape to reset, and Enter to hear from a passerby.

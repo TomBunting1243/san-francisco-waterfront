@@ -156,7 +156,35 @@ export function ferryHall(font:Font) {
   for(const y of [.938,.973,1.018]){
     box(porticoWidth+.07,.027,.091,0,y,.023,pale,portico);
   }
-  for(let step=0;step<3;step++)box(porticoWidth+.08+step*.058,.017,.09,0,.104-step*.015,.055+step*.057,'#ccc4b1',portico);
+  // The three treads rise from the curbside pavement to the existing hall floor.
+  for(let step=0;step<3;step++){
+    const top=.1125-step*.015,base=.030;
+    box(porticoWidth+.08+step*.058,top-base,.09,0,(top+base)/2,.055+step*.057,'#ccc4b1',portico);
+  }
+  const landingDepth=streetZ-porticoZ;
+  box(porticoWidth,.054,landingDepth+.015,0,.076,.014-landingDepth/2,ashlar,portico).name='Portico landing';
+
+  // Port/SFMTA right-of-way polygons 110 and 128 already pave the west
+  // approach, including the curb returns and accessible ramps. Match their
+  // east edge at the existing .031 grade, then rise to the hall foundation.
+  const interpolateZ=(x:number,ax:number,az:number,bx:number,bz:number)=>
+    THREE.MathUtils.lerp(az,bz,(x-ax)/(bx-ax));
+  const forecourt=[
+    [left,interpolateZ(left,-11.572,-1.266,-1.536,-1.524)],
+    [-1.536,-1.524],[-1.537,-1.729],[-1.418,-1.723],[-1.418,-1.748],
+    [0,-1.745],[1.181,-1.744],[1.181,-1.594],
+    [right,interpolateZ(right,1.181,-1.594,11.570,-1.862)],
+    [right,streetZ+.025],[left,streetZ+.025]
+  ];
+  const pavement:number[]=[];
+  const triangles=THREE.ShapeUtils.triangulateShape(forecourt.map(([x,z])=>new THREE.Vector2(x,-z)),[]);
+  for(const tri of triangles)for(const i of tri){
+    const [x,z]=forecourt[i];
+    pavement.push(x,i>=forecourt.length-2?.064:.031,z);
+  }
+  const walk=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(pavement,3));
+  walk.computeVertexNormals();
+  mesh(walk,'#c9c5b3',0,0,0).name='Embarcadero forecourt pavement';
 
   // The restored bay-side elevation has 23 round-headed office windows above
   // a rectangular arcade with independent iron columns and recessed shops.
@@ -280,13 +308,46 @@ export function ferryPublicRealm() {
   addMarketStreet(mesh,root);
   root.add(createFerryBikeRacks());
   // The Ferry Building's forecourt has its own single-head plaza lights.
-  for(const z of [-2.05,-4.1,-7.45])for(const side of [-1,1]){
+  for(const z of [-2.05,-7.45])for(const side of [-1,1]){
     const streetX=-.13+z*.133;
     const x=streetX+side*(z>-10?.83:.90), y=harryBridgesGround(x,z)??(z>-3?.031:westMarketGround(x,z));
     mesh(new THREE.CylinderGeometry(.018,.035,.64,7),metal,x,y+.32,z);
     box(.067,.082,.064,x,y+.049,z,metal);
     box(.039,.068,.041,x,y+.64,z,'#e8d4a6');
     mesh(new THREE.ConeGeometry(.039,.045,8),metal,x,y+.693,z);
+  }
+  // Port inventory C3 identifies the two Millennium light sculptures. The
+  // 2024 8 cm orthophoto places their eight-sided landings at these OSM pins.
+  // https://www.sfport.com/media/9230/download
+  // https://artandarchitecture-sf.com/light-cannons-at-the-ferry-building.html
+  for(const [x,z] of [[1.266,-4.647],[-2.218,-4.670]]){
+    const y=harryBridgesGround(x,z)!,steel='#a5afad',stone='#b8b2a3';
+    const tower=new THREE.Group();tower.name='Harry Bridges Plaza Millennium light';root.add(tower);
+    tower.position.set(x,y,z);
+    const section=(base:number,top:number,bottomRadius:number,topRadius:number,sides:number,color:string)=>{
+      const part=mesh(new THREE.CylinderGeometry(topRadius,bottomRadius,top-base,sides),color,0,(base+top)/2,0,tower);
+      part.rotation.y=Math.PI/sides;
+      return part;
+    };
+    for(let i=0;i<4;i++)section(.009*i,.009*(i+1),.413-i*.021,.413-i*.021,8,stone);
+    section(.036,.089,.157,.157,8,stone);
+    section(.089,.376,.118,.112,12,'#afa99b');
+    section(.376,.395,.115,.091,12,steel);
+    section(.395,.638,.052,.049,12,steel);
+    section(.636,.657,.064,.064,12,'#8f9999');
+    section(.657,.855,.022,.021,10,steel);
+    for(let i=0;i<4;i++){
+      const a=Math.PI*(.25+i/2),out=new THREE.Vector3(Math.cos(a),0,Math.sin(a));
+      const bottom=out.clone().multiplyScalar(.038);bottom.y=.654;
+      const top=out.clone().multiplyScalar(.088);top.y=.859;
+      const brace=box(.015,bottom.distanceTo(top),.015,0,0,0,steel,tower);
+      brace.position.copy(bottom).lerp(top,.5);
+      brace.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),top.sub(bottom).normalize());
+    }
+    section(.855,.871,.114,.114,4,'#838e90');
+    section(.871,1.011,.114,.183,4,steel);
+    section(1.011,1.021,.184,.184,4,'#7e8889');
+    section(1.021,1.189,.004,.0008,6,steel);
   }
   addPlazaBenches(mesh,root);
   // The granite map occupies the plaza between the hall and Agriculture Building.

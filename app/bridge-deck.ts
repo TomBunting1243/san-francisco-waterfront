@@ -5,6 +5,42 @@ const laneWidth = .216;
 export const bridgeLaneCenters = [-2,-1,0,1,2].map(lane=>lane*laneWidth);
 const floorHalfWidth = .607;
 
+export const roadPaintLift=.002*.06;
+
+/** Paint film on the wearing surface. Local +Z heads to the island. */
+export function addBridgeMarkings(parent:THREE.Group,mesh:BridgeMesh,from:number,to:number,asphalt:number,westbound:boolean){
+  const plane=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);
+  plane.userData.roadPaint='West span';
+  function stripe(x:number,a:number,b:number,width:number,color:string,name:string){
+    const m=mesh(plane,color,x,asphalt+roadPaintLift,(a+b)/2,parent);
+    m.scale.set(width,1,b-a);m.name=name;
+  }
+  const left=westbound?-1:1;
+  stripe(left*.548,from,to,.011,'#c4ab72','Left shoulder');
+  stripe(-left*.548,from,to,.011,'#d8d8c3','Right shoulder');
+  const start=Math.max(0,Math.ceil((from-.125-.62)/.86));
+  for(let i=start;.62+i*.86-.125<to;i++){
+    const z=.62+i*.86,a=Math.max(from,z-.125),b=Math.min(to,z+.125);
+    for(let lane=1;lane<5;lane++)stripe((lane-2.5)*laneWidth,a,b,.008,'#cbcbbb','Lane stripe');
+  }
+}
+
+/** Steel-faced westbound parapet, continuous through the island approach. */
+export function addUpperParapet(parent:THREE.Group,mesh:BridgeMesh,from:number,to:number,asphalt:number){
+  const plate=new THREE.BoxGeometry(1,1,1);
+  function panel(x:number,y:number,z:number,w:number,h:number,d:number,c:string,name:string){
+    const m=mesh(plate,c,x,y,z,parent);m.scale.set(w,h,d);m.name=name;
+  }
+  for(const side of [-1,1]){
+    panel(side*.595,asphalt+.012,(from+to)/2,.046,.030,to-from,'#96968b','Parapet toe');
+    panel(side*.597,asphalt+.035,(from+to)/2,.034,.046,to-from,'#98a39e','Solid parapet face');
+    panel(side*.597,asphalt+.058,(from+to)/2,.038,.004,to-from,'#aab1a8','Parapet cap');
+    for(let i=Math.ceil(from/.43);i*.43<to;i++){
+      panel(side*.580,asphalt+.040,i*.43,.002,.036,.004,'#868f8b','Parapet panel joint');
+    }
+  }
+}
+
 /** The western suspension span's two roadways form a Warren stiffening truss. */
 export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: number, lower: number, upper: number) {
   const group = new THREE.Group();
@@ -23,7 +59,7 @@ export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: num
     beam.rotation.x=-Math.atan2(dy,dz);
   }
   const gray='#778c90', high='#a1aca7', low='#6c8185', braces=['#8b9c9c','#819596','#91a1a0'];
-  const upperRail=upper+.30, lowerRail=lower+.25;
+  const lowerRail=lower+.25;
   const topChord=upper-.037, bottomChord=lower-.064;
   box(floorHalfWidth*2,.094,length,0,lower,length/2,'#9ba59f','Lower eastbound deck slab');
   box(floorHalfWidth*2,.102,length,0,upper,length/2,'#a7aaa0','Upper westbound deck slab');
@@ -36,9 +72,6 @@ export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: num
     box(.12,.103,length,x,topChord,length/2,gray,'Upper chord web');
     box(.139,.024,length,x,topChord+.052,length/2,high,'Upper chord flange');
     box(.037,.044,length,side*.59,lower+.071,length/2,high);
-    box(.039,.050,length,side*.595,upper+.088,length/2,high);
-    box(.028,.030,length,side*.608,upperRail,length/2,'#a5b2aa');
-    box(.023,.021,length,side*.608,upperRail-.104,length/2,'#a8b1a9');
     box(.024,.035,length,side*.602,lowerRail,length/2,'#98aaa5');
   }
   for (const x of [-.40,-.20,0,.20,.40]) {
@@ -58,7 +91,6 @@ export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: num
       box(.054,topChord-bottomChord,.044,x,(topChord+bottomChord)/2,a,low,'Vertical stiffener');
       box(.017,.13,.138,x+side*.027,bottomChord+.036,a,'#8b9b9b','Lower gusset plate');
       box(.018,.12,.132,x+side*.028,topChord-.018,mid,'#94a4a2','Upper gusset plate');
-      box(.022,upperRail-upper-.065,.026,side*.61,(upperRail+upper+.09)/2,a,'#9aaca6');
       box(.022,lowerRail-lower-.07,.026,side*.607,(lowerRail+lower+.085)/2,mid,'#829896');
     }
     // Horizontal cross bracing is visible under the lower floor.
@@ -68,14 +100,8 @@ export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: num
     }
   }
 
-  for(const [deck,westbound] of [[upper,true],[lower,false]] as const){
-    const surface=deck+(westbound?.078:.061);
-    const left=westbound?1:-1;
-    box(.011,.003,length,left*.548,surface,length/2,'#c4ab72','Left shoulder');
-    box(.011,.003,length,-left*.548,surface,length/2,'#d8d8c3','Right shoulder');
-    for(let z=.62;z<length-.42;z+=.86){
-      for(let lane=1;lane<5;lane++) box(.008,.003,.25,(lane-2.5)*laneWidth,surface,z,'#cbcbbb','Lane stripe');
-    }
-  }
+  addUpperParapet(group,mesh,0,length,upper+.0755);
+  addBridgeMarkings(group,mesh,0,length,upper+.0755,true);
+  addBridgeMarkings(group,mesh,0,length,lower+.058,false);
   return group;
 }

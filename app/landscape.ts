@@ -44,7 +44,7 @@ import {createServiceFerry,serviceFerryPaint} from './service-ferries.ts';
 import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
-import {bakeBlocks,freezeBakedArchitecture} from './city-blocks.ts';
+import {bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
@@ -105,7 +105,7 @@ import {addFortyFiveFremont} from './forty-five-fremont.ts';
 import {addMarketFlatiron} from './market-flatiron.ts';
 import {addFolgerBuilding} from './folger-building.ts';
 import {addMarketHistoricFrontage} from './market-historic-frontages.ts';
-import {addBridgeDeck} from './bridge-deck.ts';
+import {addBridgeDeck,addBridgeMarkings,addUpperParapet} from './bridge-deck.ts';
 import {addBridgeAnchorages} from './bridge-anchorage.ts';
 import {sfMap,mappedBuildings,footprintGeometry,center} from './sf-map.ts';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
@@ -371,7 +371,23 @@ export function createLandscape() {
   }
   const bayLights=createBayLights(cableLightPositions,artClock);bridge.add(bayLights.lights);
   const roadLightPositions:number[]=[];
-  for(let z=0;z<bridgeEnd;z+=3)roadLightPositions.push(-.61,deckHigh+.64,z,.61,deckHigh+.64,z);
+  // Westbound driver photograph: AARoads, I-80 West, Bay Bridge. Both railings
+  // carry swept silver arms, with a shallow lamp housing over the outer lane.
+  const lampPole=new THREE.CylinderGeometry(.0048,.008,.51,8);
+  const lampArm=new THREE.TubeGeometry(new THREE.CubicBezierCurve3(
+    new THREE.Vector3(0,0,0),new THREE.Vector3(.046,.025,0),
+    new THREE.Vector3(.071,.065,0),new THREE.Vector3(.143,.059,0)),6,.0038,6,false);
+  const lampShell=new THREE.SphereGeometry(1,10,6);
+  for(let i=0,z=1.2;z<bridgeEnd;z+=2.45,i++){
+    const side=i%2===0?-1:1,x=side*.62,base=deckHigh+.0755;
+    mesh(lampPole,'#929e9e',x,base+.255,z,bridge);
+    const arm=mesh(lampArm,'#a2afae',x,base+.506,z,bridge);
+    if(side>0)arm.rotation.y=Math.PI;
+    const tip=x-side*.15;
+    mesh(lampShell,'#9caba9',tip,base+.565,z,bridge).scale.set(.029,.009,.014);
+    mesh(lampShell,'#dbdecd',tip,base+.560,z,bridge).scale.set(.026,.006,.011);
+    roadLightPositions.push(tip,base+.552,z);
+  }
   const roadLightMaterial=new THREE.PointsMaterial({color:'#ffdf9e',size:2,sizeAttenuation:false,transparent:true,opacity:0,depthWrite:false,toneMapped:false});
   bridge.add(new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(roadLightPositions,3)),roadLightMaterial));
   // Bents carry the city approach between the anchorage and the shore.
@@ -383,13 +399,18 @@ export function createLandscape() {
   buildApproachBlocks(mesh,root);
   buildApproachBillboards(mesh,root,font);
   // Carry the viaduct from its west-span anchorage to the rising tunnel cut.
+  const leadLength=10.1,leadMiddle=bridgeEnd+leadLength/2;
   for(const deck of [deckLow,deckHigh]){
-    box(1.4,.15,10.2,0,deck,bridgeEnd+5,'#91a1a0',bridge);
-    for(const side of [-1,1])box(.065,.19,10.2,side*.69,deck+.12,bridgeEnd+5,'#a9b4a8',bridge);
+    // Butt the lead-in to the span. Recess the upper concrete beneath the wearing surface.
+    const westbound=deck===deckHigh;
+    box(1.4,westbound?.126:.15,leadLength,0,deck-(westbound?.012:0),leadMiddle,'#91a1a0',bridge);
+    if(!westbound)for(const side of [-1,1])box(.065,.19,leadLength,side*.69,deck+.12,leadMiddle,'#a9b4a8',bridge);
   }
+  box(1.135,.023,leadLength,0,deckHigh+.064,leadMiddle,'#728383',bridge);
+  addUpperParapet(bridge,mesh,bridgeEnd,bridgeEnd+leadLength,deckHigh+.0755);
+  addBridgeMarkings(bridge,mesh,bridgeEnd,bridgeEnd+leadLength,deckHigh+.0755,true);
   for(const side of [-1,1])box(.19,2,1.05,side*.81,deckHigh-.60,bridgeEnd+8.6,'#a79e89',bridge);
   box(1.83,.22,1.15,0,deckHigh+.46,bridgeEnd+8.6,'#b9b09c',bridge);
-  for(let z=0;z<bridgeEnd;z+=6){pole(new THREE.Vector3(-.63,deckHigh,z),new THREE.Vector3(-.63,deckHigh+.6,z),.012,dark,bridge);box(.22,.03,.08,-.56,deckHigh+.6,z,cream,bridge);}
   const vehiclePaint=streetVehicleMaterial();
   const bridgeTraffic=createBridgeTraffic(vehiclePaint),cars=bridgeTraffic.cars;
   bridge.add(bridgeTraffic.batch);
@@ -614,6 +635,22 @@ export function createLandscape() {
     staticMeshes.push(o);
   });
   const architectureMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02,side:THREE.FrontSide});
+  // A few depth units separate thin paint from pavement even at grazing angles.
+  const roadPaintMaterial=architectureMaterial.clone();
+  roadPaintMaterial.polygonOffset=true;roadPaintMaterial.polygonOffsetUnits=-3;
+  // Flat markings share three draws. Their index ranges still cull by distance
+  // through installOrderedArchitecture, including from the driver's seat.
+  const paintRegions=new Map<string,typeof staticMeshes>();
+  for(const m of staticMeshes){
+    const region=m.geometry.userData.roadPaint;
+    if(!region)continue;
+    const parts=paintRegions.get(region);
+    if(parts)parts.push(m);else paintRegions.set(region,[m]);
+  }
+  const paintChunks=Array.from(paintRegions,([region,parts])=>{
+    const chunk=bakeRigidChunk(region+' paint',parts,roadPaintMaterial);
+    chunk.castShadow=false;installOrderedArchitecture(chunk,1300);return chunk;
+  });
   const walkMaterial=architectureMaterial.clone();applyWalkPanelJoints(walkMaterial);
   const facadeMaterial=architectureMaterial.clone();
   applyDowntownGlazing(facadeMaterial,nightInk);
@@ -621,8 +658,10 @@ export function createLandscape() {
   const canopyMaterial=createCanopyMaterial(architectureMaterial,leafSun);
   const treeBatches=bakeTreeBatches(staticMeshes,canopyMaterial);
   const treeDraw=createTreeDraw(treeBatches,canopyMaterial);if(treeDraw)root.add(treeDraw);
-  const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint')),architectureMaterial),
-    ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()),
+  const architectureChunks=[...bakeBlocks(staticMeshes.filter(m=>!m.userData.plantAnchor&&!m.geometry.userData.roadPaint&&!m.geometry.hasAttribute('facadeGrid')&&!m.geometry.hasAttribute('walkPanel')&&!m.geometry.hasAttribute('billboardPrint')),architectureMaterial),
+    ...paintChunks,
+    // All billboard faces share one atlas; the entire set is only 26 triangles.
+    bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('walkPanel')),walkMaterial),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
   for(const chunk of architectureChunks)installOrderedArchitecture(chunk);

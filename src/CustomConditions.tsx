@@ -1,9 +1,33 @@
-import {useEffect,useId,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState,type RefObject} from 'react';
 import {sanFranciscoTime,timeMinutes,timeText,weatherLabels,type Conditions,type Weather} from './conditions.ts';
 
-export default function CustomConditions({value,change}:{value:Conditions;change:(value:Conditions)=>void}){
+const rideNames={bridge:'Bay Bridge drive',streetcar:'F-line streetcar'} as const;
+export type Ride={mode:keyof typeof rideNames;paused:boolean};
+type Props={
+  value:Conditions;change:(value:Conditions)=>void;
+  ride:Ride|null;startRide:(mode:Ride['mode'])=>void;toggleRide:()=>void;endRide:()=>void;
+  customButton:RefObject<HTMLButtonElement|null>;
+};
+
+export default function CustomConditions({value,change,ride,startRide,toggleRide,endRide,customButton}:Props){
   const [open,setOpen]=useState(false),[liveTime,setLiveTime]=useState(sanFranciscoTime);
-  const anchor=useRef<HTMLDivElement>(null),button=useRef<HTMLButtonElement>(null),liveSwitch=useRef<HTMLInputElement>(null),panel=useId();
+  const anchor=useRef<HTMLDivElement>(null),pause=useRef<HTMLButtonElement>(null),liveSwitch=useRef<HTMLInputElement>(null),panel=useId();
+  const mode=ride?.mode;
+  useEffect(()=>{
+    if(mode)pause.current?.focus({preventScroll:true});
+  },[mode]);
+  useEffect(()=>{
+    if(!open&&!mode)return;
+    function escape(event:KeyboardEvent){
+      if(event.key!=='Escape'||event.isComposing)return;
+      event.preventDefault();event.stopPropagation();
+      if(event.repeat)return;
+      if(open){setOpen(false);customButton.current?.focus({preventScroll:true});}
+      else endRide();
+    }
+    document.addEventListener('keydown',escape,true);
+    return()=>document.removeEventListener('keydown',escape,true);
+  },[open,mode,endRide,customButton]);
   const live=value.minutes===undefined,custom=!live||value.weather!==undefined;
   useEffect(()=>{
     if(!open)return;
@@ -18,12 +42,16 @@ export default function CustomConditions({value,change}:{value:Conditions;change
     const timer=window.setInterval(()=>setLiveTime(sanFranciscoTime()),1000);
     return()=>window.clearInterval(timer);
   },[open,live]);
-  return <div className="standalone-custom" ref={anchor} onKeyDown={e=>{
-    if(open&&e.key==='Escape'){e.preventDefault();e.stopPropagation();setOpen(false);button.current?.focus();}
-  }} onBlur={e=>{
+  return <div className="standalone-custom" ref={anchor} onBlur={e=>{
     if(e.relatedTarget&&!e.currentTarget.contains(e.relatedTarget))setOpen(false);
   }}>
-    <button type="button" ref={button} className="standalone-custom-trigger" aria-expanded={open} aria-controls={panel}
+    {ride&&<div className="standalone-ride-toolbar" role="group" aria-label={rideNames[ride.mode]+' controls'}>
+      <button ref={pause} type="button" onClick={toggleRide} aria-label={ride.paused?'Resume ride':'Pause ride'}>
+        {ride.paused?'Resume':'Pause'}
+      </button>
+      <button type="button" onClick={endRide} aria-label="Return to waterfront">Return</button>
+    </div>}
+    <button type="button" ref={customButton} className="standalone-custom-trigger" aria-expanded={open} aria-controls={panel}
       data-custom={custom} onClick={()=>{setLiveTime(sanFranciscoTime());setOpen(!open);}}>
       <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
         <path d="M2 6h4m4 0h8M2 14h8m4 0h4"/><circle cx="8" cy="6" r="2"/><circle cx="12" cy="14" r="2"/>
@@ -31,6 +59,19 @@ export default function CustomConditions({value,change}:{value:Conditions;change
       Custom
     </button>
     <div id={panel} className="standalone-custom-panel" hidden={!open} role="group" aria-label="Custom conditions">
+      <div className="standalone-custom-view">
+        <label htmlFor={panel+'-view'}>View</label>
+        <select id={panel+'-view'} value={mode??'waterfront'} onChange={e=>{
+          const selection=e.target.value;
+          setOpen(false);
+          if(selection==='bridge'||selection==='streetcar')startRide(selection);
+          else endRide();
+        }}>
+          <option value="waterfront">Waterfront</option>
+          <option value="bridge">{rideNames.bridge}</option>
+          <option value="streetcar">{rideNames.streetcar}</option>
+        </select>
+      </div>
       <div className="standalone-custom-time">
         <label htmlFor={panel+'-time'}>San Francisco time</label>
         <label className="standalone-custom-live">
