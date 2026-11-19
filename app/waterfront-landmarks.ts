@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {center,footprintGeometry} from './sf-map.ts';
@@ -17,7 +18,7 @@ export function waterfrontLandmark(b:Building,font:Font){
     if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.85}));
     const m=new THREE.Mesh(g,materials.get(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
   }
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent=root)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,parent);
+  const box=staticBoxes(mesh,root);
   function text(s:string,size:number,x:number,y:number,z:number,parent:THREE.Group,c=glass){
     const geo=new TextGeometry(s,{font,size,depth:.006,curveSegments:2});geo.computeBoundingBox();geo.translate(-geo.boundingBox!.max.x/2,0,0);return mesh(geo,c,x,y,z,parent);
   }

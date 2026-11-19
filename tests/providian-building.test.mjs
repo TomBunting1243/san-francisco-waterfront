@@ -21,7 +21,7 @@ test('Pacific Gateway resolves the two mapped parts once and keeps the measured 
   for(const w of windows)assert.ok(w.w>0&&w.h>0&&[w.x,w.y,w.z,w.ry].every(Number.isFinite));
 });
 
-test('a baked opening-facing bay retains a real precast return, recessed glass and floor spandrel',()=>{
+test('a baked Mission-facing bay retains a real precast return, recessed glass and floor spandrel',()=>{
   const root=new THREE.Group(),lights=[];
   addProvidianBuilding(sfMap.buildings.find(b=>b.id===616813259),root,lights);
   root.updateMatrixWorld(true);
@@ -44,16 +44,14 @@ test('a baked opening-facing bay retains a real precast return, recessed glass a
   assert.ok(block.geometry.index.count/3<7500);
 });
 
-test('upper Mission-facing shaft glazing is on screen and has a clear architectural sightline at opening',async()=>{
-  const {openingCamera}=await import('../app/camera.ts');
+test('upper Mission-facing shaft glazing is on screen and has a clear architectural sightline from the fixed waterfront viewpoint',async()=>{
   const {createLandscape}=await import('../app/landscape.ts');
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const root=new THREE.Group(),slots=[];
   addProvidianBuilding(sfMap.buildings.find(b=>b.id===616813259),root,slots);
-  const lens=openingCamera.desktop,yaw=openingCamera.yaw,target=new THREE.Vector3(...openingCamera.target);
-  const eye=new THREE.Vector3(Math.sin(yaw)*lens.distance,lens.elevation,Math.cos(yaw)*lens.distance).add(target);
+  const eye=new THREE.Vector3(49.180768,10.9,16.889407),target=new THREE.Vector3(0,2.4,0);
   const camera=new THREE.PerspectiveCamera(20,1440/940,.35,1800);
-  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(lens.focalLength);camera.updateMatrixWorld(true);
+  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(40);camera.updateMatrixWorld(true);
   const chunks=world.architectureChunks.map(mesh=>({mesh,box:new THREE.Box3().setFromObject(mesh)}));
   const facing=slots.filter(w=>Math.sin(w.ry)>.9&&w.y>5.4&&w.y<7.3);
   const ray=new THREE.Raycaster();

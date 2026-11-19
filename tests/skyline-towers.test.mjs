@@ -42,7 +42,7 @@ test('Transamerica retains the 853-foot summit, quartz spire, two service fins a
   assert.equal(truss.children.length,72);
   const center=bounds(root).getCenter(new THREE.Vector3());
   const ray=new THREE.Raycaster(new THREE.Vector3(center.x,8,5),new THREE.Vector3(0,0,-1));
-  assert.ok(ray.intersectObject(root,true).length>0,'Pyramid faces the opening waterfront camera');
+  assert.ok(ray.intersectObject(root,true).length>0,'Pyramid faces the downtown-facing waterfront camera');
 });
 
 test('the perforated lantern presents continuous metal coverage as the camera moves, with filtered panels and night imagery',()=>{

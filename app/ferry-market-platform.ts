@@ -20,6 +20,7 @@ const platforms=[
   {id:17283,dir:-1,entry:-.836,low:-1.270,ramp:-2.702,high:-3.327,end:-3.479,roof:[-1.23,-3.56],lip:.058},
 ] as const;
 type Site=typeof platforms[number];
+const canopyDepth=.248;
 const curb=.067,grade=.031,highFloor=streetcarTrack.railTop+34*.0254*.06;
 const clamp=(v:number)=>THREE.MathUtils.clamp(v,0,1);
 function ground(s:Site,x:number){
@@ -27,6 +28,46 @@ function ground(s:Site,x:number){
   return grade+(curb-grade)*entry+(highFloor-curb)*ramp;
 }
 export function ferryMarketBoardingHeight(x:number){return ground(platforms[0],x);}
+
+// The ortho locates foliage well, but a crown can hide its tree well. Keep
+// the two planting rows beside the measured metal roofs. High branches may
+// overhang, while the trunk, boarders and lower branches clear the soffit.
+export function fitStationTree(tree:THREE.Group){
+  const {x,z}=tree.position;
+  if(Math.abs(x)>4.2||z> -2.8||z< -4.6)return;
+  const bounds=new THREE.Box3().setFromObject(tree,true);
+  for(const s of platforms){
+    const lo=Math.min(...s.roof),hi=Math.max(...s.roof);
+    if(bounds.max.x<lo-.015||bounds.min.x>hi+.015)continue;
+    const rail=trackCenterlines[s.dir===1?0:1];
+    const signedRear=(u:number)=>s.dir*trackAt(u,rail).z+s.lip+canopyDepth;
+    const rear=Math.max(signedRear(lo),signedRear(hi));
+    if(s.dir*z<rear-.17||Math.min(s.dir*bounds.min.z,s.dir*bounds.max.z)>rear+.10)continue;
+    tree.position.z=s.dir*Math.max(s.dir*z,rear+.093);
+    tree.updateMatrixWorld(true);
+    const world=new THREE.Vector3(),inverse=new THREE.Matrix4();
+    tree.traverse(part=>{
+      if(!(part instanceof THREE.Mesh))return;
+      const g=part.geometry,pos=g.getAttribute('position');
+      inverse.copy(part.matrixWorld).invert();
+      for(let i=0;i<pos.count;i++){
+        world.fromBufferAttribute(pos,i).applyMatrix4(part.matrixWorld);
+        const reach=s.dir*(tree.position.z-world.z);
+        if(reach<=0)continue;
+        // This sloping clearance plane also holds between vertices.
+        const room=s.dir*tree.position.z-rear-.018+(world.y-.350)*.17;
+        const knee=room*.55;
+        if(reach<=knee)continue;
+        const spread=room-knee;
+        world.z=tree.position.z-s.dir*(knee+spread*(1-Math.exp(-(reach-knee)/spread)));
+        world.applyMatrix4(inverse);pos.setXYZ(i,world.x,world.y,world.z);
+      }
+      g.computeVertexNormals();g.computeBoundingBox();g.computeBoundingSphere();
+    });
+    tree.userData.stationClearance=s.id;
+    break;
+  }
+}
 
 const metal='#87938e',rail='#4b5755',stone='#a49b8c';
 function shelter(s:Site){
@@ -64,7 +105,7 @@ function shelter(s:Site){
   // The raised accessible landing has its own short warning strip. Ordinary
   // boarding and the plaza end stay open across their full walking width.
   top(s.high,end,lip+.002,lip+.027,head+.00032,head+.00032,'#b5a065');
-  const lowLevel=curb,span=s.roof[1]-s.roof[0],bays=8,depth=.248;
+  const lowLevel=curb,span=s.roof[1]-s.roof[0],bays=8,depth=canopyDepth;
   const roofY=(f:number)=>lowLevel+.273-.091*Math.pow(f,2.65);
   const shell=(u:number,f:number,drop=0):FacadePoint=>{
     // Roof ends are softly rounded in plan, evident at each open approach.

@@ -4,7 +4,6 @@ import * as THREE from 'three';
 import {sfMap} from '../app/sf-map.ts';
 import {bakeRigidChunk} from '../app/city-blocks.ts';
 import {addPgeBuilding} from '../app/pge-building.ts';
-import {openingCamera} from '../app/camera.ts';
 
 const tower=sfMap.buildings.find(b=>b.id===260291405),link=sfMap.buildings.find(b=>b.id===260291408);
 function model(){
@@ -45,12 +44,11 @@ test('the service connection shares its tower edge and has a 21.4 m surveyed roo
   assert.ok(Math.abs(roof('77 Beale parapet roof')-8.668)<.0001);
   assert.ok(Math.abs(roof('77 Beale penthouse')-8.945)<.0001);
 });
-test('the opening camera reaches the registered upper Main Street bays between neighboring buildings',async()=>{
-  const {block,windows}=model(),lens=openingCamera.desktop;
-  const target=new THREE.Vector3(...openingCamera.target);
-  const eye=new THREE.Vector3(Math.sin(openingCamera.yaw)*lens.distance,lens.elevation,Math.cos(openingCamera.yaw)*lens.distance).add(target);
+test('the fixed waterfront viewpoint reaches the registered upper Main Street bays between neighboring buildings',async()=>{
+  const {block,windows}=model();
+  const eye=new THREE.Vector3(49.180768,10.9,16.889407),target=new THREE.Vector3(0,2.4,0);
   const camera=new THREE.PerspectiveCamera(20,1440/940,.35,1800);
-  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(lens.focalLength);camera.updateMatrixWorld();
+  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(40);camera.updateMatrixWorld();
   const {createLandscape}=await import('../app/landscape.ts');
   const city=createLandscape();city.root.updateMatrixWorld(true);
   assert.ok(city.root.getObjectByName('77 Beale PG&E tower'));

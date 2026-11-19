@@ -8,7 +8,7 @@ import {sfMap} from '../app/sf-map.ts';
 import {surveyedHeight} from '../app/survey-blocks.ts';
 import {bakeRigidChunk} from '../app/city-blocks.ts';
 import {createLandscape} from '../app/landscape.ts';
-import {boundWaterfrontFocus,openingCamera,orbitOffset} from '../app/camera.ts';
+import {boundWaterfrontFocus} from '../app/camera.ts';
 
 const lot=sfMap.buildings.find(b=>b.id===193054137);
 const [a,b]=lot.p.slice(2,4),width=Math.hypot(b[0]-a[0],b[1]-a[1]),yaw=Math.atan2(a[1]-b[1],b[0]-a[0]);
@@ -52,11 +52,11 @@ test('Angler has real display openings, a revolving door and separately lit scon
   assert.ok(mesh.geometry.index.count/3<4800);
 });
 
-test('the highest-zoom public waterfront orbit sees all three Angler bays through the assembled scene',()=>{
+test('the fixed waterfront observation at 800 mm sees all three Angler bays through the assembled scene',()=>{
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const focus=new THREE.Vector3(-16.673,2.4,.082);
   assert.deepEqual(boundWaterfrontFocus(focus.x,focus.z),{x:focus.x,z:focus.z});
-  const eye=new THREE.Vector3();orbitOffset(openingCamera.desktop,.145,.33,eye);eye.add(focus);
+  const eye=new THREE.Vector3(-9.962795,27.291597,46.034492);
   const camera=new THREE.PerspectiveCamera(50,1440/900,.35,800);camera.setFocalLength(20*40);
   camera.position.copy(eye);camera.lookAt(focus);camera.updateMatrixWorld(true);
   const meshBoxes=[];

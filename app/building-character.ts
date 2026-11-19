@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {railwayHotel} from './railway-museum.ts';
@@ -38,7 +39,7 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
   const [cx,cz]=center(b.p),base=b.minH||0,cream='#e7dcc4',dark='#426369',trim='#bdac8f';
   const peers=neighbors.filter(n=>n.id!==b.id&&n.h>base&&n.p.some(p=>Math.hypot(p[0]-cx,p[1]-cz)<12));
   function mesh(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent=root){if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.83}));const m=new THREE.Mesh(g,materials.get(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent=root)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,parent);
+  const box=staticBoxes(mesh,root);
   function text(s:string,size:number,x:number,y:number,z:number,parent:THREE.Group,c=dark){const geo=new TextGeometry(s,{font,size,depth:.004,curveSegments:2});geo.computeBoundingBox();geo.translate(-geo.boundingBox!.max.x/2,0,0);return mesh(geo,c,x,y,z,parent);}
   function exposed(parent:THREE.Group,x:number,y:number){const p=parent.localToWorld(new THREE.Vector3(x,y,.10));return !peers.some(n=>y>=(n.minH||0)-.015&&y<n.h+.015&&insideBuilding(p.x,p.z,n.p));}
   function pane(x:number,y:number,w:number,h:number,parent:THREE.Group){if(!exposed(parent,x,y))return;box(w+.045,h+.045,.035,x,y,.043,dark,parent);const p=parent.localToWorld(new THREE.Vector3(x,y,.067));windows.push({x:p.x,y:p.y,z:p.z,ry:parent.rotation.y,w,h});for(const dx of [-w/2-.012,w/2+.012])box(.015,h+.035,.055,x+dx,y,.060,trim,parent);box(w+.045,.018,.085,x,y-h/2-.016,.070,trim,parent);box(.008,h,.020,x,y,.082,'#7c9690',parent);box(w,.008,.020,x,y+.025,.083,'#7c9690',parent);}

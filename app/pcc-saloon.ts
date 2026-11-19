@@ -5,8 +5,10 @@ import {pccTreads} from './pcc-entrance.ts';
 // Car 1051's interior photographed by Elizabeth K. Joseph, September 2011:
 // https://www.flickr.com/photos/pleia2/6161168575/
 // This is an original drawing in metres. Individual fittings and riders are interpreted.
+export const pccCabLeft=-.90,pccCabRight=1.506;
+export const pccCabFront=pccCabDoorZ-2*pccFrontLeafWidth;
 export function addPccSaloon(g:CabGeometry){
-  const left=-.90,right=1.50,front=-.70,back=13.49,center=(left+right)/2;
+  const left=pccCabLeft,right=pccCabRight,front=pccCabFront,back=13.49,center=(left+right)/2;
   const floor=-1.19,upholstery='#49645a',chrome='#b5beb6',cream='#c9c6a7';
   function band(a:CabPoint[],b:CabPoint[],tint:string,light:number){
     for(let i=0;i<a.length;i++){
@@ -63,12 +65,17 @@ export function addPccSaloon(g:CabGeometry){
   // The cab and both exits share the model's side elevation. Each tread
   // replaces the cabin floor across its own well.
   const wellCenters=[pccCabDoorZ,pccCabDoorZ+pccExitSpacing];
-  const half=2*pccFrontLeafWidth,lip=1.506,inside=lip-.84;
+  const half=2*pccFrontLeafWidth,lip=right,inside=lip-.84;
   const sideSpans=[[front,wellCenters[0]-half],[wellCenters[0]+half,wellCenters[1]-half],[wellCenters[1]+half,back]];
   for(const [a,b] of sideSpans)if(b>a)g.level(floor,left,right,a,b,'#53564a',.44);
   for(const z of wellCenters){
     const start=z-half,end=z+half;
     g.level(floor,left,inside,start,end,'#53564a',.44);
+    // Fixed lintel and jambs meet the head and hinges of the moving leaves.
+    g.side(right,.38-2.15+2.08,.555,start,end,'#c3c2a4',.66);
+    for(const [a,b] of [[start-.035,start],[end,end+.035]]){
+      g.side(right,floor,.555,Math.max(front,a),b,'#a9ab95',.66);
+    }
     for(const side of [start,end])g.cross(side,inside,lip,.38-2.15,floor,'#72816b',.58);
     for(const [k,h] of pccTreads.entries()){
       const edge=lip-.21*k,y=h-2.15;
@@ -85,12 +92,19 @@ export function addPccSaloon(g:CabGeometry){
     }
   };
   // Transverse ribs follow the formed roof between the clerestory and center spine.
-  const arch=[[-1.2,.586],[-1.15,.75],[-.95,.87],[-.55,.953],[0,.979],[.55,.953],[.95,.87],[1.15,.75],[1.2,.586]];
+  const arch=[[left-center,.586],[-1.15,.75],[-.95,.87],[-.55,.953],[0,.979],[.55,.953],[.95,.87],[1.15,.75],[right-center,.586]];
   for(let j=1;j<arch.length;j++){
     const [[a,y],[b,h]]=arch.slice(j-1,j+1);
     const roof=(lo:number,hi:number,inset=0,tint=cream)=>g.panel([center+a,y-inset,lo],[center+b,h-inset,lo],
       [center+b,h-inset,hi],[center+a,y-inset,hi],tint,.88);
     roof(front,back);
+    // Both end panels terminate on the same arch vertices as the roof.
+    const brow=(u:number,h:number):CabPoint=>{
+      const crown=Math.min(1,(h-.586)/.16);
+      return [center+u,.53+.17*crown,front-.22*(1-Math.abs(u)/((right-left)/2))];
+    };
+    g.panel([center+a,y,front],[center+b,h,front],brow(b,h),brow(a,y),'#c9c6a7');
+    g.panel([center+a,y,back],[center+b,h,back],[center+b,.46,back],[center+a,.46,back],'#b6b39a',.66);
     for(let i=0;i<8;i++)roof(.77+i*1.72,.80+i*1.72,.007,'#aaa98f');
   }
   for(let i=0;i<8;i++)for(const x of [center-.73,center+.73])globe(x,.896,1.14+1.60*i,.116);
@@ -134,7 +148,9 @@ export function addPccSaloon(g:CabGeometry){
     }
   }
   g.cross(back,left,right,floor,-.47,'#80947f',.66);
-  g.cross(back,left,right,.46,.71,'#b6b39a',.66);
+  for(const [a,b] of [[left,left+.065],[right-.065,right]]){
+    g.cross(back,a,b,-.47,.46,'#b6b39a',.66);
+  }
   g.cross(back,.27,.315,-.47,.46,'#afa98e',.66);
 
   // A few seated silhouettes, drawn in the same paper colors as the figures on the street.

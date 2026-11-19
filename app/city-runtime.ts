@@ -11,7 +11,7 @@ export const minZoom=.75, maxZoom=20;
 export const clampZoom=(zoom:number)=>Math.max(minZoom,Math.min(maxZoom,zoom));
 /** A slow dwell activates edge orbit; controls and the title are outside its vertical band. */
 export function edgeOrbit(x:number,y:number){if(y<.22||y>.78)return 0;return x<.035?x/.035-1:x>.965?(x-.965)/.035:0;}
-export function createQualityMonitor(initial=2){
+export function createQualityMonitor(maximum=2,initial=maximum){
   let level=initial,total=0,frames=0,cooldown=0;
   return {sample(ms:number,now:number,idle=false){
     if(ms<1||ms>1000)return level;
@@ -21,7 +21,7 @@ export function createQualityMonitor(initial=2){
     const average=total/frames;
     if(frames>=120||(frames>=24&&average>55)){
       if(now>cooldown){
-        const next=average>27?Math.max(0,level-1):average<18&&!idle?Math.min(initial,level+1):level;
+        const next=average>27?Math.max(0,level-1):average<18&&!idle?Math.min(maximum,level+1):level;
         if(next!==level){level=next;cooldown=now+12000;}
       }
       total=0;frames=0;
@@ -37,4 +37,10 @@ export function drawingPixelRatio(width:number,height:number,dpr:number,economy:
   const budget=economy?1_600_000:vignette?2_500_000:8_500_000;
   const scale=degradation===0?1:degradation===1?.80:.65;
   return Math.min(dpr,Math.max(1,dpr*scale),economy?1:3,Math.sqrt(budget*scale*scale/Math.max(1,width*height)));
+}
+
+// A small touch viewport alone says nothing about GPU speed. Use advertised
+// device constraints for the first frame, then continue sampling rendered frames.
+export function compactDevice(touch:boolean,cores:number,memoryGB?:number){
+  return touch&&((cores>0&&cores<=4)||(memoryGB!==undefined&&memoryGB>0&&memoryGB<=4));
 }

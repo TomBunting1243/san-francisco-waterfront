@@ -44,17 +44,15 @@ test('the Folger factory and its lower warehouse occupy their adjacent parcels a
   assert.ok(factoryRoof-lowerRoof>.34&&raisedRoof<factoryRoof&&raisedRoof>lowerRoof+.18);
 });
 
-test('an upper Howard Street bay has a clear line of sight from the normal Ferry orbit',async()=>{
+test('an upper Howard Street bay has a clear line of sight from the elevated waterfront viewpoint',async()=>{
   const {createLandscape}=await import('../app/landscape.ts');
-  const {openingCamera,openingLens,orbitOffset}=await import('../app/camera.ts');
   const world=createLandscape();world.root.updateMatrixWorld(true);
   const face=world.root.getObjectByName('Nine Howard Street bays');
   const target=face.localToWorld(new THREE.Vector3(.72,1.158,.003));
   // This elevation clears the surveyed roof of Rincon Center II on Spear.
-  const lens=openingLens(1440,940),yaw=1.325,home=new THREE.Vector3(...openingCamera.target);
-  const eye=new THREE.Vector3();orbitOffset(lens,yaw,-.065,eye);eye.add(home);
+  const eye=new THREE.Vector3(50.866087,7.504430,12.760722),home=new THREE.Vector3(0,2.4,0);
   const camera=new THREE.PerspectiveCamera(20,1440/940,.35,1800);
-  camera.position.copy(eye);camera.setFocalLength(lens.focalLength*4.5);camera.lookAt(home);camera.updateMatrixWorld();
+  camera.position.copy(eye);camera.setFocalLength(40*4.5);camera.lookAt(home);camera.updateMatrixWorld();
   const screen=target.clone().project(camera);
   assert.ok(Math.abs(screen.x)<.94&&Math.abs(screen.y)<.94&&screen.z<1);
   const delta=target.clone().sub(eye),ray=new THREE.Raycaster(eye,delta.clone().normalize(),0,delta.length()+.06);

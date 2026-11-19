@@ -13,10 +13,9 @@ export function ferryMarketSchedule(at:Date){
   const parts=Object.fromEntries(pacific.formatToParts(at).map(p=>[p.type,p.value]));
   const minute=+parts.hour*60 + +parts.minute + +parts.second/60;
   const saturday=parts.weekday==='Sat';
-  const marketDay=saturday||parts.weekday==='Tue'||parts.weekday==='Thu';
   const closure=publishedClosures.has([parts.year,parts.month,parts.day].join('-'));
-  const farmers=marketDay&&!closure?progress(minute,saturday?480:600,840):0;
-  return {front:farmers,rear:saturday?farmers:0,artist:progress(minute,540,960)};
+  // The street-front stalls are a permanent feature of this imagined waterfront.
+  return {front:1,rear:saturday&&!closure?progress(minute,480,840):0,artist:progress(minute,540,960)};
 }
 
 type Site={x:number;z:number;floor:number;section:'front'|'rear'|'artist'};
@@ -34,7 +33,7 @@ const coats=['#566b77','#ae8268','#667969','#6f737f'];
 const range=(v:number,start:number,end:number)=>clamp((v-start)/(end-start));
 
 export function createFerryMarket(){
-  const root=new THREE.Group();root.name='Scheduled Ferry Plaza farmers market and Market Street artist';
+  const root=new THREE.Group();root.name='Ferry Plaza farmers market and Market Street artists';
   const paint=new THREE.MeshStandardMaterial({roughness:.92});
   const pyramid=new THREE.ConeGeometry(Math.SQRT1_2,1,4,1,false,Math.PI/4);
   function batch(name:string,geometry:THREE.BufferGeometry,capacity:number){
@@ -49,7 +48,7 @@ export function createFerryMarket(){
   let lastSample=NaN,lastState='',revision=0;
   function update(epoch:number,still=false){
     // Quiet scenes hold a tableau; periodic time checks still catch trading
-    // boundaries. No per-frame Intl, matrix uploads or draws on closed nights.
+    // boundaries. Stable schedules reuse the same instance buffers.
     const quantum=still?300000:1000,sample=Math.floor(epoch/quantum)*quantum;
     if(sample===lastSample)return revision;
     lastSample=sample;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
 import {treeWell} from './tree-wells.ts';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {createGatewayClub,gatewayClubGround} from './gateway-club.ts';
@@ -23,15 +24,36 @@ export const gardenAreas:Area[]=[...waterfrontLandscape.areas.filter(a=>['park',
 const ecAreas=gardenAreas.filter(a=>a.kind==='podium');
 const plantedAreas=gardenAreas.filter(a=>a.kind!=='podium'&&a.id!==32946402);
 
+// Sampled paths and planting beds query thousands of points against the same
+// static buildings. Index every cell touched by each footprint's bounds.
+function gardenObstructions(buildings:Building[]){
+  const cells=new Map<string,Building[]>(),cell=(v:number)=>Math.floor(v/3);
+  for(const b of buildings){
+    let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    for(const [x,z] of b.p){
+      minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+      minZ=Math.min(minZ,z);maxZ=Math.max(maxZ,z);
+    }
+    for(let ix=cell(minX);ix<=cell(maxX);ix++)for(let iz=cell(minZ);iz<=cell(maxZ);iz++){
+      const key=ix+','+iz,nearby=cells.get(key);
+      if(nearby)nearby.push(b);else cells.set(key,[b]);
+    }
+  }
+  return (x:number,z:number,y:number)=>{
+    const nearby=cells.get(cell(x)+','+cell(z));
+    return nearby?.some(b=>b.h>y+.08&&(b.minH||0)<y+.08&&insideBuilding(x,z,b.p))??false;
+  };
+}
+
 /** Mapped lawns and paths, with lidar crown dimensions where survey returns resolve an individual tree. */
 export function waterfrontGardens(buildings:Building[],font?:Font){
   const root=new THREE.Group();root.name='Referenced waterfront parks and gardens';
   const materials=new Map<string,THREE.MeshStandardMaterial>(),treeAnchors:{id:number;x:number;y:number;z:number}[]=[],pathSegments:{x:number;z:number;area:number}[]=[];
   const mat=(c:string)=>{if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.95}));return materials.get(c)!;};
   const mesh=(g:THREE.BufferGeometry,c:string,x=0,y=0,z=0,parent:THREE.Object3D=root)=>{const m=new THREE.Mesh(g,mat(c));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m;};
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent:THREE.Object3D=root)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,parent);
+  const box=staticBoxes(mesh,root);
   const height=(area:Area)=>area.kind==='commercial'?.46:.12;
-  const solidAt=(x:number,z:number,y:number)=>buildings.some(b=>b.h>y+.08&&(b.minH||0)<y+.08&&insideBuilding(x,z,b.p));
+  const solidAt=gardenObstructions(buildings);
   const areaAt=(p:number[])=>plantedAreas.find(a=>contains(p,a));
   function strip(a:number[],b:number[],w:number,y:number,color:string){const len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.001)return;const m=box(w,.022,len,(a[0]+b[0])/2,y,(a[1]+b[1])/2,color);m.rotation.y=Math.atan2(b[0]-a[0],b[1]-a[1]);return m;}
   function tree(x:number,z:number,y:number,id:number,species='',heightTag:string|null=null,site:'street'|'garden'|'rincon'='garden'){
@@ -99,9 +121,11 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
   for(const record of plazaTreeRecords.values()){
     if(!record.supplemental)continue;
     const [x,z]=record.p,y=harryBridgesGround(x,z)??treePavingHeight(record);
-    if(!solidAt(x,z,y)&&addSurveyedTree(mesh,root,record,x,y,z,false,'Platanus x hispanica')){
-      treeAnchors.push({id:record.id,x,y,z});
-      treeWell(mesh,record.id,x,y,z,0,true);
+    const tree=!solidAt(x,z,y)&&addSurveyedTree(mesh,root,record,x,y,z,false,'Platanus x hispanica');
+    if(tree){
+      const wellZ=tree.position.z;
+      treeAnchors.push({id:record.id,x,y,z:wellZ});
+      treeWell(mesh,record.id,x,y,wellZ,0,true);
     }
   }
   // OSM records the eastern Sue Bierman trees, but not its dense western grove,

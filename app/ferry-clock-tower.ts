@@ -50,7 +50,7 @@ export function ferryClockTower(font:Font){
     s.lineTo(wide*.58,length*.65);s.lineTo(wide*.34,length*.49);s.lineTo(wide*.55,.022);s.lineTo(wide*.43,-.014);s.closePath();
     return mesh(new THREE.ExtrudeGeometry(s,{depth:.002,bevelEnabled:false}),iron,0,dialY,z,g);
   }
-  square(wall*2,.97,2.50,stone);
+  square(wall*2,.90,2.50,stone);
   // Broken-out head mouldings and shadow lines around the smaller pierced stories.
   for(const [w,lo,hi,c] of [
     [.666,2.332,2.346,shade],[.684,2.346,2.359,light],[.673,2.359,2.371,stone],

@@ -2,14 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createLandscape} from '../app/landscape.ts';
-import {openingCamera,orbitOffset} from '../app/camera.ts';
 import data from '../public/data/promenade-crossings.json' with {type:'json'};
 
 test('the baked Howard Street crossing clears the asphalt and gutter depth at the 20× waterfront review pose',t=>{
   const {architectureChunks}=createLandscape();
   const target=new THREE.Vector3(-24,2.4,.8),camera=new THREE.PerspectiveCamera(20,16/9,.35,1800);
-  orbitOffset(openingCamera.desktop,0,.72,camera.position);
-  camera.position.add(target);camera.lookAt(target);camera.setFocalLength(800);camera.updateMatrixWorld(true);
+  camera.position.set(-24,43.078352,34.289128);
+  camera.lookAt(target);camera.setFocalLength(800);camera.updateMatrixWorld(true);
   const downward=new THREE.Vector3(0,-1,0),ray=new THREE.Raycaster();
   const pigment=h=>new THREE.Color().fromBufferAttribute(h.object.geometry.getAttribute('color'),h.face.a).getHexString();
   // Restrict raycasting to batches whose actual bounds meet this one junction.

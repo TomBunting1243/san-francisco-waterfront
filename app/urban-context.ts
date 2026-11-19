@@ -241,11 +241,12 @@ function neighborhoodMaterial(){
 type Cell={data:Tile;box:THREE.Box3;priority:number};
 type UrbanContext=THREE.LOD & {
   prepareRideView:(camera:THREE.Camera,budgetMs:number)=>boolean;
+  prepareOrbitView:(camera:THREE.Camera,budgetMs:number)=>boolean;
   endRideView:()=>void;
 };
 
-/** The normal waterfront builds the visible survey on its first frame. During
- * a ride the same tiles are assembled in slices, publishing only complete meshes. */
+/** Orbit and ride views assemble visible survey tiles in bounded slices.
+ * A tile enters the scene only after its geometry is complete. */
 export function createUrbanContext():UrbanContext{
   const root=new THREE.LOD() as UrbanContext;root.name='San Francisco municipal neighborhood survey';
   const material=neighborhoodMaterial(),frustum=new THREE.Frustum();
@@ -300,6 +301,7 @@ export function createUrbanContext():UrbanContext{
     if(!pending.size)surface=undefined;
     return !current&&next===queue.length;
   }
+  root.prepareOrbitView=(camera,budgetMs)=>advance(camera,performance.now()+budgetMs);
   root.prepareRideView=(camera,budgetMs)=>{
     rideCamera=camera;boarding=true;
     const ready=advance(camera,performance.now()+Math.max(0,budgetMs));

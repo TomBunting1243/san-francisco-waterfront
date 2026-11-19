@@ -36,12 +36,12 @@ function gradeAt(stations:number[][],z:number){
   return lerp(y0,y1,smoothstep(-z,from,to));
 }
 
-function axis(knots:Knot[],grade:Grade,branch=false){
+function axis(knots:Knot[],grade:Grade,branch=false,firstHeading?:number){
   const length=knots.at(-1)!.s;
   const stations=knots.map((k,i)=>{
     const p=knots[Math.max(i-1,0)],q=knots[Math.min(i+1,knots.length-1)];
     const dx=q.x-p.x,dz=q.z-p.z,heading=-Math.atan2(dz,dx);
-    return {...k,heading};
+    return {...k,heading:i===0&&firstHeading!==undefined?firstHeading:heading};
   });
   function sample(s:number) {
     s=THREE.MathUtils.clamp(s,0,length);
@@ -65,6 +65,21 @@ const eastGrade=[[22.65,bridgeLayout.lowerDeck+.058],[36,3.48],[55,2.94],[85,2.0
 const main=[axis(measured(data.west.points),(_,z)=>gradeAt(westGrade,z)),axis(measured(data.east.points),(_,z)=>gradeAt(eastGrade,z))];
 const exits=new Set(['Harrison Street exit','Fremont Street exit','Fifth Street exit','Fourth Street exit','Seventh Street exit','Ninth Street exit']);
 const westConnect=new Set(['Harrison Street exit','Fremont Street exit','Fifth Street exit','Fifth Street entrance','Ninth Street exit']);
+// The OSM Fremont ramp and the five-lane mainline share a graph node
+// (ways 8921938 / 1343738800). It is a topology node at road center, not
+// the center of an exit lane. Register the two-lane ramp between lanes 4/5.
+const fremontRoad=data.ramps.find(r=>r.name==='Fremont Street exit')!;
+const rampNode=fremontRoad.points[0];
+export const fremontFork=main[0].knots.find(k=>k.x===rampNode[0]&&k.z===rampNode[1])!.s;
+function fremontKnots(points:number[][]){
+  const m=main[0].sample(fremontFork),end=points[2],next=points[3];
+  const d=Math.hypot(next[0]-end[0],next[1]-end[1]);
+  const start=new THREE.Vector2(m.x+Math.sin(m.heading)*1.5*laneWidth,m.z+Math.cos(m.heading)*1.5*laneWidth);
+  const finish=new THREE.Vector2(end[0],end[1]);
+  const curve=new THREE.CubicBezierCurve(start,start.clone().add(new THREE.Vector2(Math.cos(m.heading),-Math.sin(m.heading)).multiplyScalar(1.63)),
+    finish.clone().add(new THREE.Vector2(end[0]-next[0],end[1]-next[1]).multiplyScalar(1.65/d)),finish);
+  return measured([...curve.getPoints(12).map(p=>[p.x,p.y,2]),...points.slice(3)]);
+}
 const ramps=data.ramps.map(road=>{
   const highwayStart=exits.has(road.name);
   const [,sz]=road.points[highwayStart?0:road.points.length-1];
@@ -72,18 +87,53 @@ const ramps=data.ramps.map(road=>{
   const mainGrade=westConnect.has(road.name)?westGrade:eastGrade;
   const y0=gradeAt(mainGrade,sz)-.026;
   const y1=approachGround(tx,tz)+.09;
-  const knots=measured(road.points),length=knots.at(-1)!.s;
-  const ramp=axis(knots,s=>{
+  const fremont=road===fremontRoad;
+  const knots=fremont?fremontKnots(road.points):measured(road.points),length=knots.at(-1)!.s;
+  const ramp=axis(knots,(s,z)=>{
     const t=highwayStart?s/length:1-s/length;
     // Leave enough height for the two loop ramps to cross their own feeder roads.
-    return lerp(y0,y1,smoothstep(t,.04,.91));
-  },true);
+    const roadY=lerp(y0,y1,smoothstep(t,.04,.91));
+    return fremont?lerp(gradeAt(westGrade,z),roadY,smoothstep(s,3.8,7.0)):roadY;
+  },true,fremont?main[0].sample(fremontFork).heading:undefined);
   return {ramp,joinDistance:highwayStart?0:length};
 });
+
+const fremont=ramps[data.ramps.indexOf(fremontRoad)].ramp;
+export function westboundExitPose(distance:number){
+  const onRamp=distance>=fremontFork;
+  const at=onRamp?fremont.sample(distance-fremontFork):main[0].sample(distance);
+  const offset=onRamp ? .5*laneWidth:2*laneWidth;
+  return {x:at.x+Math.sin(at.heading)*offset,y:at.y,z:at.z+Math.cos(at.heading)*offset,heading:at.heading};
+}
 
 function section(at:ReturnType<typeof main[number]['sample']>,offset:number,height:number) {
   return [at.x+Math.sin(at.heading)*offset,at.y+height,at.z+Math.cos(at.heading)*offset];
 }
+// Register ramp cross-sections to the piecewise-linear outer edge of the
+// actual mainline triangles (including the mesh chunk boundary at s=12).
+const mainEdgeRows=[...new Set([...intervals(main[0].length,main[0].knots),12])].sort((a,b)=>a-b)
+  .filter(s=>s>fremontFork-2&&s<fremontFork+7).map(s=>{
+    const at=main[0].sample(s);return {s,p:section(at,at.width,0)};
+  });
+function mouthSlice(s:number){
+  const at=fremont.sample(s),cos=Math.cos(at.heading),sin=Math.sin(at.heading);
+  const along=(p:number[])=>cos*(p[0]-at.x)-sin*(p[2]-at.z);
+  const j=mainEdgeRows.findIndex(row=>along(row.p)>=0);
+  const a=mainEdgeRows[j-1],b=mainEdgeRows[j],u=-along(a.p)/(along(b.p)-along(a.p));
+  const inner=a.p.map((n,k)=>lerp(n,b.p[k],u));
+  return {inner,outer:section(at,at.width,0),main:lerp(a.s,b.s,u),
+    overlap:at.width+sin*(inner[0]-at.x)+cos*(inner[2]-at.z)};
+}
+function bisect(hi:number,before:(s:number)=>boolean){
+  let lo=0;
+  for(let i=0;i<22;i++){
+    const s=(lo+hi)/2;
+    if(before(s))lo=s;else hi=s;
+  }
+  return (lo+hi)/2;
+}
+const goreRamp=bisect(5,s=>mouthSlice(s).overlap>0);
+const gore={ramp:goreRamp,main:mouthSlice(goreRamp).main};
 function intervals(length:number,knots:Knot[]) {
   return [...new Set([...knots.map(k=>k.s),...Array.from({length:Math.ceil(length/.8)},(_,i)=>i*.8)])].sort((a,b)=>a-b);
 }
@@ -101,6 +151,23 @@ function slabGeometry(axis:typeof main[number],from:number,to:number,offsetA:num
   const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
   geometry.computeVertexNormals();
   return geometry;
+}
+
+// One asphalt surface between the two carriageways. OSM uses one shared
+// node at the split; drawing both full-width ribbons there would stack two
+// slightly different decks. Cut the ramp to the actual main-deck edge.
+function fremontMouthGeometry(){
+  const cuts=new Set([0,gore.ramp,...intervals(fremont.length,fremont.knots).filter(s=>s<gore.ramp)]);
+  for(const row of mainEdgeRows)if(row.s>fremontFork&&row.s<gore.main)
+    cuts.add(bisect(gore.ramp,s=>mouthSlice(s).main<row.s));
+  const bounds=[...cuts].sort((a,b)=>a-b).map(mouthSlice),positions:number[]=[];
+  for(let i=1;i<bounds.length;i++){
+    const a=bounds[i-1],b=bounds[i];
+    positions.push(...a.outer,...b.outer,...b.inner,...a.outer,...b.inner,...a.inner);
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.computeVertexNormals();return geometry;
 }
 
 // Use the same two planes per road section as slabGeometry. A dash starting in
@@ -175,23 +242,40 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
     for(let from=0;from<axis.length;from+=12){
       const to=Math.min(from+12,axis.length);
       const add=(geo:THREE.BufferGeometry,color:string)=>mesh(geo,color,0,0,0,group);
-      add(slabGeometry(axis,from,to,right,left,0,0),roadPaint);
+      if(axis===fremont&&from===0){
+        add(fremontMouthGeometry(),roadPaint);
+        add(slabGeometry(axis,gore.ramp,to,right,left,0,0),roadPaint);
+      }else add(slabGeometry(axis,from,to,right,left,0,0),roadPaint);
       add(slabGeometry(axis,from,to,left,right,-.142,-.142),beamPaint);
       add(slabGeometry(axis,from,to,right,right,-.142,0),concrete);
       add(slabGeometry(axis,from,to,left,left,0,-.142),concrete);
       for(const side of [-1,1]){
         const inner=(w:number)=>side*(w-.047),outer=(w:number)=>side*w;
-        const start=bridgeFoot&&from===0?.14:from;
+        let start=bridgeFoot&&from===0?.14:from;
+        // Leave the physically common paved mouth open. Its outer barrier is
+        // carried by the exit; the mainline and ramp inner rails start at the gore.
+        if(axis===fremont&&side===-1)start=Math.max(start,gore.ramp);
+        if(westbound&&side===1&&from<gore.main&&to>fremontFork){
+          if(from<fremontFork){
+            add(slabGeometry(axis,start,fremontFork,outer,outer,-.072,.103),concrete);
+            add(slabGeometry(axis,start,fremontFork,inner,inner,.103,0),concrete);
+            add(slabGeometry(axis,start,fremontFork,outer,inner,.103,.103),concrete);
+            add(marking(from,fremontFork,w=>w-.059,.011),'#d8d8c3');
+          }
+          start=Math.max(start,gore.main);
+        }
+        if(start>=to)continue;
         add(slabGeometry(axis,start,to,side>0?inner:outer,side>0?outer:inner,-.072,-.072),beamPaint);
         add(slabGeometry(axis,start,to,outer,outer,side>0?-.072:.103,side>0?.103:-.072),concrete);
         add(slabGeometry(axis,start,to,inner,inner,side>0?.103:0,side>0?0:.103),concrete);
         add(slabGeometry(axis,start,to,side>0?outer:inner,side>0?inner:outer,.103,.103),concrete);
         const edge=(w:number)=>side*(w-.059);
-        add(marking(from,to,edge,.011),side===(westbound?-1:1)?'#c4ab72':'#d8d8c3');
+        add(marking(start,to,edge,.011),side===(westbound?-1:1)?'#c4ab72':'#d8d8c3');
       }
     }
     for(let s=bridgeFoot?.115:1.4;s<axis.length-.6;s+=.86){
       const p=axis.sample(s);
+      if(axis===fremont&&s<gore.ramp)continue;
       const lanes=Math.round(p.lanes);
       for(let lane=1;lane<lanes;lane++){
         const x=(lane-lanes/2)*laneWidth;

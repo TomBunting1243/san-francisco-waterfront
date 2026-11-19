@@ -52,6 +52,25 @@ export function bakeBlocks(meshes: PaintedMesh[], material: THREE.MeshStandardMa
   return Array.from(coalesceSparseTiles(blocks),([key,parts])=>bakeRigidChunk('City block '+key,parts,material));
 }
 
+// The output always has tightly packed world-space Float32 positions. Three's
+// generic bounds helpers otherwise read this same large buffer three times.
+function boundPackedGeometry(geometry:THREE.BufferGeometry,xyz:Float32Array){
+  const bounds=new THREE.Box3(),sphere=new THREE.Sphere();
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for(let i=0;i<xyz.length;i+=3){
+    const x=xyz[i],y=xyz[i+1],z=xyz[i+2];
+    minX=Math.min(minX,x);minY=Math.min(minY,y);minZ=Math.min(minZ,z);
+    maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);maxZ=Math.max(maxZ,z);
+  }
+  bounds.min.set(minX,minY,minZ);bounds.max.set(maxX,maxY,maxZ);
+  const center=bounds.getCenter(sphere.center);let distanceSquared=0;
+  for(let i=0;i<xyz.length;i+=3){
+    const x=xyz[i]-center.x,y=xyz[i+1]-center.y,z=xyz[i+2]-center.z;
+    distanceSquared=Math.max(distanceSquared,x*x+y*y+z*z);
+  }
+  sphere.radius=Math.sqrt(distanceSquared);geometry.boundingBox=bounds;geometry.boundingSphere=sphere;
+}
+
 export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.MeshStandardMaterial){
   const point=new THREE.Vector3(),normal=new THREE.Vector3(),normalMatrix=new THREE.Matrix3();
   let vertices = 0, faces = 0;
@@ -88,21 +107,36 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
     }
     const red = Math.round(255*r), green = Math.round(255*g), blue = Math.round(255*b);
     normalMatrix.getNormalMatrix(mesh.matrixWorld);
-    for (let i = 0; i < pos.count; i++) {
-      const j = (vertex+i)*3;
-      point.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
-      positions[j] = point.x; positions[j+1] = point.y; positions[j+2] = point.z;
-      normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
-      normals[j] = Math.round(normal.x*32767); normals[j+1] = Math.round(normal.y*32767); normals[j+2] = Math.round(normal.z*32767);
-      if (paint) {
-        colors[j] = Math.round(255*r*paint.getX(i));
-        colors[j+1] = Math.round(255*g*paint.getY(i));
-        colors[j+2] = Math.round(255*b*paint.getZ(i));
-      } else {
-        colors[j] = red; colors[j+1] = green; colors[j+2] = blue;
+    // Most sources are ordinary BufferAttributes. Keep Three's accessor
+    // semantics for interleaved, normalized and half-float source formats.
+    const xyz=pos instanceof THREE.BufferAttribute&&pos.itemSize===3&&!pos.normalized&&pos.array instanceof Float32Array?pos.array:null;
+    const directions=n instanceof THREE.BufferAttribute&&n.itemSize===3&&!n.normalized&&n.array instanceof Float32Array?n.array:null;
+    const packedNormals=n instanceof THREE.BufferAttribute&&n.itemSize===3&&n.normalized&&n.array instanceof Int16Array?n.array:null;
+    const channels=paint instanceof THREE.BufferAttribute&&paint.itemSize===3&&paint.normalized&&paint.array instanceof Uint8Array?paint.array:null;
+    const e=mesh.matrixWorld.elements,m=normalMatrix.elements,affine=e[3]===0&&e[7]===0&&e[11]===0&&e[15]===1;
+    for(let i=0;i<pos.count;i++){
+      const k=3*i,j=vertex*3+k;
+      if(xyz&&affine){
+        const x=xyz[k],y=xyz[k+1],z=xyz[k+2];
+        point.set(e[0]*x+e[4]*y+e[8]*z+e[12],e[1]*x+e[5]*y+e[9]*z+e[13],e[2]*x+e[6]*y+e[10]*z+e[14]);
+      }else point.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
+      positions[j]=point.x;positions[j+1]=point.y;positions[j+2]=point.z;
+      if(directions||packedNormals){
+        let x,y,z;
+        if(directions){x=directions[k];y=directions[k+1];z=directions[k+2];}
+        else {
+          x=Math.max(-1,packedNormals![k]/32767);y=Math.max(-1,packedNormals![k+1]/32767);z=Math.max(-1,packedNormals![k+2]/32767);
+        }
+        normal.set(m[0]*x+m[3]*y+m[6]*z,m[1]*x+m[4]*y+m[7]*z,m[2]*x+m[5]*y+m[8]*z).normalize();
+      }else normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
+      normals[j]=Math.round(normal.x*32767);normals[j+1]=Math.round(normal.y*32767);normals[j+2]=Math.round(normal.z*32767);
+      if(channels){
+        colors[j]=Math.round(255*r*(channels[k]/255));colors[j+1]=Math.round(255*g*(channels[k+1]/255));colors[j+2]=Math.round(255*b*(channels[k+2]/255));
+      }else if(paint){
+        colors[j]=Math.round(255*r*paint.getX(i));colors[j+1]=Math.round(255*g*paint.getY(i));colors[j+2]=Math.round(255*b*paint.getZ(i));
+      }else{
+        colors[j]=red;colors[j+1]=green;colors[j+2]=blue;
       }
-      // Sample the permanent floodlights once, on the stone they actually
-      // illuminate. Their contribution rides in the existing night-light batch.
       if(signLights&&uplight&&!light){
         const irradiance=uplight(point,normal);
         signLights[j]=Math.min(255,colors[j]*irradiance);
@@ -110,8 +144,12 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
         signLights[j+2]=Math.min(255,colors[j+2]*irradiance*.59);
       }
     }
-    const count = geometry.index?.count ?? pos.count;
-    for (let i = 0; i < count; i++) indices[face++] = vertex + (geometry.index?.getX(i) ?? i);
+    const sourceIndices=geometry.index?.array;
+    if(sourceIndices){
+      for(let i=0;i<sourceIndices.length;i++)indices[face++]=vertex+sourceIndices[i];
+    }else{
+      for(let i=0;i<pos.count;i++)indices[face++]=vertex+i;
+    }
     vertex += pos.count;
   }
   const geo = new THREE.BufferGeometry();
@@ -123,7 +161,7 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   if(walkPanel)geo.setAttribute('walkPanel',new THREE.BufferAttribute(walkPanel,2));
   if(signLights)geo.setAttribute('signLight',new THREE.BufferAttribute(signLights,3,true));
   geo.setIndex(new THREE.BufferAttribute(indices,1));
-  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  boundPackedGeometry(geo,positions);
   registerTidalRuns(geo,parts);
   const chunk = new THREE.Mesh(geo,material);
   chunk.name = name;

@@ -1,4 +1,4 @@
-import {approachPose} from './approach-road.ts';
+import {westboundExitPose} from './approach-road.ts';
 import {bridgeLaneCenters} from './bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
 import {pccDimensions} from './streetcar.ts';
@@ -28,31 +28,15 @@ export function rideDuration(mode:RideMode){
   return mode==='bridge'?(bridgeStart+approachEnd)/bridgeSpeed:museumLegDuration+dwell+firstLeg+dwell+lastLeg;
 }
 
-// OSM 8921938 / 1343738800 mark lane five Fremont/Folsom exit-only.
-// Lane four continues onto the right edge of the four-lane I-80 mainline.
-const throughLane=1;
-const throughOffset=bridgeLaneCenters[3];
-const spanJoint=bridgePoint(throughOffset,0),approachJoint=approachPose(false,0,throughLane);
-
+// Lane five becomes the right lane of the Fremont/Folsom exit.
+const rightLane=bridgeLaneCenters[4];
+const spanJoint=bridgePoint(rightLane,0),approachJoint=westboundExitPose(0);
 function bridgeRoad(station:number):Point{
-  if(station<0){
-    const p=approachPose(false,-station,throughLane);
-    // approachPose places the animated body's wheel reference .01375 below the actual pavement.
-    // The lane count changes five-to-four over a 2 m survey segment. A
-    // driver shifts half a lane over the adjoining carriageway, not in 2 m.
-    const spacing=Math.min(-station/2,.52);
-    let x=p.x*3,z=p.z*3;
-    for(const k of [-2,-1,1,2]){
-      const sample=approachPose(false,-station+k*spacing,throughLane),w=3-Math.abs(k);
-      x+=w*sample.x;z+=w*sample.z;
-    }
-    // Match the painted span tangent at the joint before following the first surveyed chord.
-    const jointWeight=Math.max(0,1+station/2)**2;
-    return {x:x/9+(spanJoint.x-approachJoint.x)*jointWeight,y:p.y+.01375,
-      z:z/9+(spanJoint.z-approachJoint.z)*jointWeight};
-  }
-  // The suspension asphalt and its YBI continuation have the same wearing surface.
-  return {...bridgePoint(throughOffset,station),y:bridgeLayout.upperDeck+.0755};
+  if(station>=0)return {...bridgePoint(rightLane,station),y:bridgeLayout.upperDeck+.0755};
+  const p=westboundExitPose(-station);
+  const jointWeight=Math.max(0,1+station/2)**2;
+  return {x:p.x+(spanJoint.x-approachJoint.x)*jointWeight,y:p.y,
+    z:p.z+(spanJoint.z-approachJoint.z)*jointWeight};
 }
 
 function sedanEye(station:number):Point{

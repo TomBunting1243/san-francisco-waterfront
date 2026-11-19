@@ -25,11 +25,16 @@ test('all observed crowns are rendered on mapped stems at lidar height and sprea
     const tree=gardens.root.getObjectByName('Surveyed tree '+row.id);
     assert.ok(tree,'Missing '+row.id);
     const {x,y,z}=tree.position;
-    assert.ok(Math.hypot(x-row.p[0],z-row.p[1])<.0015);
+    if(tree.userData.stationClearance){
+      assert.ok(Math.abs(x-row.p[0])<.0015&&Math.abs(z-row.p[1])<.19,'small cross-track registration of obscured wells');
+      assert.equal(gardens.treeAnchors.find(t=>t.id===row.id).z,z);
+    }else assert.ok(Math.hypot(x-row.p[0],z-row.p[1])<.0015);
     assert.equal(gardens.treeAnchors.filter(t=>t.id===row.id).length,1);
     const bounds=new THREE.Box3().setFromObject(tree,true),size=bounds.getSize(new THREE.Vector3());
     assert.ok(Math.abs((bounds.max.y-y)/.06-(row.heightM??row.estimatedHeightM))<.02);
-    assert.ok(Math.abs(Math.sqrt(size.x*size.z)/.06-(row.crownM??row.estimatedCrownM))<.02);
+    const diameter=Math.sqrt(size.x*size.z)/.06,surveyWidth=row.crownM??row.estimatedCrownM;
+    if(tree.userData.stationClearance)assert.ok(diameter<=surveyWidth+.02&&diameter>surveyWidth*.64);
+    else assert.ok(Math.abs(diameter-surveyWidth)<.02);
     assert.ok(bounds.min.y<=y+.0001,'Floating trunk '+row.id);
   }
   assert.ok(plazaTreeRecords.get(2069721836).palm);

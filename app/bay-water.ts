@@ -1,5 +1,6 @@
 import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
 import {vessels} from './ferry-service.ts';
+import {ferryEntryX,ferryTowerZ} from './ferry-portico-access.ts';
 import {bridgeLayout} from './bridge-layout.ts';
 import {bayLightPattern} from './bay-lights.ts';
 import {shelterAtVertex,waterSurface,waveAmplitudes} from './water-surface.ts';
@@ -287,7 +288,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
             *(1.-smoothstep(.79,.98,arcadeY))*(.14+.86*columns);
           // Project against the vertical axis of the four-sided tower. These
           // are the modeled clock centre, 22-foot dial and upper lantern tiers.
-          vec2 tower=vec2(-.1185,-1.2465);
+          vec2 tower=vec2(${ferryEntryX},${ferryTowerZ});
           float t=dot(tower-p,mirrorRay.xz)/max(.01,dot(mirrorRay.xz,mirrorRay.xz));
           vec2 miss=p+t*mirrorRay.xz-tower;
           float side=dot(miss,normalize(vec2(-mirrorRay.z,mirrorRay.x)))+crossShift;

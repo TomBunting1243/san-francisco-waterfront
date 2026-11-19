@@ -141,20 +141,48 @@ test('Bay Bridge follows the mapped crossing and has two full suspension spans',
 });
 
 
-test('opening composition keeps the Ferry Building and bridge tower inside desktop and phone frames', async()=>{
-  const {openingCamera: view,openingLens,openingYaw}=await import('../app/camera.ts');
-  const bridge=bridgePoint(0,bridgeLayout.towers[0]);
-  for(const [width,height] of [[1440,950],[1010,1031],[725,1030],[390,844]]){
-    const setup=openingLens(width,height);
-    const camera=new THREE.PerspectiveCamera(20,width/height,1.5,650);
-    camera.setFocalLength(setup.focalLength);camera.zoom=view.zoom;camera.updateProjectionMatrix();
-    const target=new THREE.Vector3(...view.target);
-    camera.position.copy(target).add(new THREE.Vector3(0,setup.elevation,setup.distance).applyAxisAngle(new THREE.Vector3(0,1,0),openingYaw(width,height)));
-    camera.lookAt(target);camera.updateMatrixWorld();
-    for(const point of [new THREE.Vector3(0,4.6,0),new THREE.Vector3(bridge.x,9.8,bridge.z)]){
-      point.project(camera);
-      assert.ok(Math.abs(point.x)<.9&&Math.abs(point.y)<.8,`Landmark cropped at ${width}×${height}`);
-      assert.ok(point.z>-1&&point.z<1);
+test('the plaza opening frames the clock, bay and eastern suspension towers on desktop and phone',async()=>{
+  const {openingLens,openingYaw}=await import('../app/camera.ts');
+  const {harryBridgesGround}=await import('../app/curb-survey.ts');
+  const {waterSurface}=await import('../app/water-surface.ts');
+  const city=createLandscape();
+  city.root.updateMatrixWorld(true);
+  const westDial=city.clockHands.map(h=>h.minute.getWorldPosition(new THREE.Vector3())).sort((a,b)=>a.z-b.z)[0];
+  const flag=city.ferryFlag.getWorldPosition(new THREE.Vector3());
+  const plazaHeight=harryBridgesGround(0,-5);assert.ok(Number.isFinite(plazaHeight));
+  const landmarks=[
+    ['clock',westDial],['flag',flag],['plaza',new THREE.Vector3(0,plazaHeight,-5)],
+    ['bay',new THREE.Vector3(-13,waterSurface.level,50)],
+    ...bridgeLayout.towers.slice(2).map((distance,i)=>{
+      const {x,z}=bridgePoint(0,distance);
+      return ['eastern tower '+i,new THREE.Vector3(x,9.55,z)];
+    }),
+  ];
+  let widescreen;
+  for(const [width,height] of [[1440,950],[1010,1031],[725,1030],[390,844],[1920,1080],[2560,1080],[3200,900]]){
+    const lens=openingLens(width,height),target=new THREE.Vector3(...openingCamera.target);
+    const camera=new THREE.PerspectiveCamera(20,width/height,.35,1800);
+    orbitOffset(lens,openingYaw(width,height),0,camera.position);
+    camera.position.add(target);camera.lookAt(target);
+    camera.setFocalLength(lens.focalLength*openingCamera.zoom);camera.updateMatrixWorld();
+    const screen={};
+    for(const [name,point] of landmarks){
+      const p=screen[name]=point.clone().project(camera);
+      assert.ok(Math.abs(p.x)<.9&&Math.abs(p.y)<.92&&p.z>-1&&p.z<1,`${name} cropped at ${width}×${height}`);
+      const toward=point.clone().sub(camera.position),distance=toward.length();
+      const ray=new THREE.Raycaster(camera.position,toward.normalize(),0,distance-.04);
+      const nearby=city.architectureChunks.filter(m=>ray.ray.intersectsBox(m.geometry.boundingBox));
+      assert.equal(ray.intersectObjects(nearby,false).length,0,`${name} hidden by architecture at ${width}×${height}`);
+    }
+    assert.ok(Math.abs(screen.clock.x)<.12&&screen.clock.y>0,'Clock centered above the plaza');
+    assert.ok(screen.plaza.y<-.2&&screen.bay.y>screen.plaza.y,'Plaza foreground leads into the bay');
+    assert.ok(screen.flag.y>screen.clock.y+.20,'Clock tower has a distinct silhouette');
+    assert.ok(screen['eastern tower 0'].x>screen['eastern tower 1'].x&&screen['eastern tower 1'].x>screen.clock.x+.10*Math.min(1,(16/9)/(width/height)),
+      'Both eastern bridge towers extend into the bay to the right of the clock');
+    if(width/height===16/9)widescreen=screen;
+    if(width/height>16/9){
+      for(const [name,point] of Object.entries(screen))
+        assert.ok(Math.abs(point.y-widescreen[name].y)<1e-6,`Ultrawide crop moved ${name} at ${width}×${height}`);
     }
   }
 });
@@ -292,7 +320,15 @@ test('adaptive quality backs off under sustained load and avoids rapid oscillati
   for(let i=0;i<120;i++)assert.equal(idle.sample(1000/30,1000+i*1000/30,true),2);
   for(let i=0;i<24;i++)level=slow.sample(140,1000+i*140,true);
   assert.equal(level,1,'repeated long frames in the stationary city lower its GPU load');
-  const {drawingPixelRatio}=await import('../app/city-runtime.ts');
+  const {drawingPixelRatio,compactDevice}=await import('../app/city-runtime.ts');
+  assert.equal(compactDevice(true,4,8),true);
+  assert.equal(compactDevice(true,8,4),true);
+  assert.equal(compactDevice(true,8,undefined),false);
+  assert.equal(compactDevice(false,4,4),false);
+  const phoneQuality=createQualityMonitor(1,0);
+  assert.equal(phoneQuality.sample(16,1),0);
+  for(let i=0;i<120;i++)level=phoneQuality.sample(16,(i+1)*16);
+  assert.equal(level,1);
   assert.equal(drawingPixelRatio(390,844,3,false,false,0),3);
   assert.ok(drawingPixelRatio(390,844,3,false,false,1)<2.5);
   assert.equal(drawingPixelRatio(1024,768,1,false,false,1),1);
@@ -534,9 +570,9 @@ test('Ferry Building retains the five-bay portico, 23 east arches and open centr
   const bayRay=new THREE.Raycaster(new THREE.Vector3(1.58,.24,3),new THREE.Vector3(0,0,-1));
   assert.ok(bayRay.intersectObject(east,true)[0].point.z<1.50,'The rear storefront must sit back under the cantilever');
   const coastSign=root.getObjectByName('PORT OF SAN FRANCISCO');
-  assert.ok(coastSign.position.z>1.4&&coastSign.position.y>1.16&&coastSign.getObjectByName('PORT OF').position.x<0);
+  assert.ok(coastSign.position.z>.12&&coastSign.position.z<.31&&coastSign.position.y>1.16&&coastSign.getObjectByName('PORT OF').position.x<0);
   assert.ok(coastSign.getObjectByName('SAN FRANCISCO').position.x>0);
-  assert.ok(towerZ<-1);
+  assert.ok(towerZ> -1.01&&towerZ<-.82);
 });
 
 test('west portico visitors pass under patterned fanlights, alongside the recessed market doors and the main stair',async()=>{

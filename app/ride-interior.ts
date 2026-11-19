@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {mountCabEntrance,setPccFrontDoor,setPccExitDoor} from './pcc-entrance.ts';
 import {pccCarCards} from './pcc-car-cards.ts';
-import {addPccSaloon} from './pcc-saloon.ts';
+import {addPccSaloon,pccCabFront,pccCabLeft,pccCabRight} from './pcc-saloon.ts';
 
 export type RideInteriorMode='sedan'|'tram';
 export type CabPoint=[x:number,y:number,z:number];
@@ -73,6 +73,36 @@ function sedan(){
     const low=(p:CabPoint):CabPoint=>[p[0],p[1]-.24,p[2]+.28];
     g.panel(low(sill[i]),low(sill[i+1]),sill[i+1],sill[i],'#464c49');
   }
+  // A 37 cm three-spoke wheel, tilted toward the cluster, centered on
+  // the left-hand seat. Warm rim highlights follow the upper segments.
+  const wheel=(angle:number,r:number,depth=0):CabPoint=>{
+    const dy=Math.sin(angle)*r;
+    return [-.027+Math.cos(angle)*r,-.419+dy,-.578-.38*dy+depth];
+  };
+  for(let k=0;k<20;k++){
+    const a=k*Math.PI/10,b=(k+1)*Math.PI/10;
+    g.panel(wheel(a,.185),wheel(b,.185),wheel(b,.163),wheel(a,.163),k<10?'#626760':'#454c47');
+    g.panel(wheel(a,.185,-.023),wheel(b,.185,-.023),wheel(b,.185),wheel(a,.185),'#434b46');
+  }
+  for(const angle of [-Math.PI/2,.12,Math.PI-.12])
+    g.strip(wheel(angle,.047),wheel(angle,.169),.036,.021,'#626861');
+  g.panel([-.094,-.446,-.565],[.043,-.446,-.565],[.027,-.389,-.583],[-.079,-.389,-.583],'#71736a');
+  // Instrument binnacle and recessed fascia behind the wheel. The needles
+  // and short index marks are opaque vertex paint in the existing cab mesh.
+  g.cross(-.743,-.224,.177,-.440,-.322,'#424b48');
+  g.panel([-.229,-.322,-.747],[.183,-.322,-.747],[.15,-.304,-.795],[-.19,-.304,-.795],'#656b63');
+  for(const cx of [-.117,.061]){
+    const dial=(angle:number,r:number):CabPoint=>[cx+r*Math.cos(angle),-.389+r*Math.sin(angle),-.741];
+    for(let k=0;k<10;k++){
+      const a=(k*26-27)*Math.PI/180;
+      g.strip(dial(a,.041),dial(a,.050),.005,.004,'#bbbba3');
+    }
+    g.strip([cx,-.389,-.739],[cx+(cx<0?-.018:.019),-.359,-.739],.005,.002,'#cda27c');
+  }
+  for(const [l,r] of [[-.446,-.304],[.344,.538]]){
+    g.cross(-.743,l,r,-.449,-.397,'#383f3d');
+    for(const h of [-.435,-.420,-.405])g.cross(-.741,l+.006,r-.006,h,h+.004,'#777c72');
+  }
   // A-pillars sweep back toward the driver's eye at the headliner.
   for(const [bottom,top] of [
     [[-.53,-.36,-.79],[-.61,.48,-.43]],[[1.18,-.36,-.79],[1.13,.48,-.44]]
@@ -103,13 +133,17 @@ function sedan(){
 
 function pcc(){
   const g=cabGeometry();
-  const xs=[-.69,-.57,.30,1.22,1.54],ds=[-.77,-.89,-1.04,-.90,-.71];
+  const xs=[pccCabLeft,-.69,-.57,.30,1.22,pccCabRight],ds=[pccCabFront,-.77,-.89,-1.04,-.90,pccCabFront];
+  // End the shelf against the front jamb, keeping the entrance stairwell clear.
+  const shelf=(z:number,depth:number)=>Math.min(pccCabFront,z+depth);
   for(let i=0;i<xs.length-1;i++){
     const a=xs[i],b=xs[i+1],za=ds[i],zb=ds[i+1];
-    g.panel([a,-.43,za],[b,-.43,zb],[b,-.454,zb+.023],[a,-.454,za+.023],'#a4aaa0');
-    g.panel([a,-.454,za+.023],[b,-.454,zb+.023],[b,-.487,zb+.030],[a,-.487,za+.030],'#6c756c');
-    g.panel([a,-.487,za+.030],[b,-.487,zb+.030],[b,-.54,zb+.19],[a,-.54,za+.19],'#7b8273');
-    g.panel([a,-.54,za+.19],[b,-.54,zb+.19],[b,-.88,zb+.25],[a,-.88,za+.25],'#556155');
+    g.panel([a,-.43,za],[b,-.43,zb],[b,-.454,shelf(zb,.023)],[a,-.454,shelf(za,.023)],'#a4aaa0');
+    g.panel([a,-.454,shelf(za,.023)],[b,-.454,shelf(zb,.023)],[b,-.487,shelf(zb,.030)],[a,-.487,shelf(za,.030)],'#6c756c');
+    g.panel([a,-.487,shelf(za,.030)],[b,-.487,shelf(zb,.030)],[b,-.54,shelf(zb,.19)],[a,-.54,shelf(za,.19)],'#7b8273');
+    g.panel([a,-.54,shelf(za,.19)],[b,-.54,shelf(zb,.19)],[b,-.88,shelf(zb,.25)],[a,-.88,shelf(za,.25)],'#556155');
+    g.panel([a,-.88,shelf(za,.25)],[b,-.88,shelf(zb,.25)],[b,-1.19,shelf(zb,.25)],[a,-1.19,shelf(za,.25)],'#526051');
+    g.panel([a,-1.19,shelf(za,.25)],[b,-1.19,shelf(zb,.25)],[b,-1.19,pccCabFront],[a,-1.19,pccCabFront],'#53564a');
   }
   // The driver's eye is in the left pane. The central stile stands right of
   // the track centerline in this view, between the two separately angled panes.
@@ -117,6 +151,9 @@ function pcc(){
   g.strip([.30,-.431,-1.036],[.30,.70,-.937],.025,.023,'#d8ccae');
   g.strip([-.576,-.435,-.885],[-.655,.63,-.78],.046,.036,'#bdb69e');
   g.strip([1.22,-.435,-.898],[1.27,.63,-.79],.045,.036,'#bdb69e');
+  for(const [edge,inner] of [[pccCabLeft,pccCabLeft+.045],[pccCabRight,pccCabRight-.045]]){
+    g.panel([edge,-.43,pccCabFront],[inner,-.43,pccCabFront-.020],[inner,.556,pccCabFront-.008],[edge,.53,pccCabFront],'#bdb69e');
+  }
   addPccSaloon(g);
   return g.finish();
 }

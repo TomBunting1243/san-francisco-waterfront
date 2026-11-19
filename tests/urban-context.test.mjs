@@ -45,7 +45,7 @@ test('both motorway carriageways continue at approach grade into the US-101 inte
   }
 });
 
-test('opening orbit uses bounded, frustum-built spatial batches and indexed geometry',()=>{
+test('the downtown-facing waterfront orbit uses bounded, frustum-built spatial batches and indexed geometry',()=>{
   const group=createUrbanContext(),camera=new THREE.PerspectiveCamera(20,1.6,.35,1800);
   assert.ok(mapped.counts.survey>48000&&mapped.counts.osmParts>380);
   assert.equal(group.children.length,0);
@@ -75,6 +75,21 @@ test('the neighborhood LOD reuses tiles when a camera returns and honors a trans
   look(-119,-62);assert.deepEqual(group.children,first);
   look(60,-80);const second=group.children.slice();assert.ok(second.length>first.length);
   look(-119,-62);assert.deepEqual(group.children,second);
+});
+
+test('a streamed orbit yields mid-tile and eventually matches the completed survey',()=>{
+  const streamed=createUrbanContext(),complete=createUrbanContext();
+  const camera=new THREE.PerspectiveCamera(43,1.2,.1,62);
+  camera.position.set(-119,24,-62);camera.up.set(0,0,-1);
+  camera.lookAt(-119,0,-62);camera.updateMatrixWorld();
+  complete.update(camera);
+  assert.ok(complete.children.length>1);
+  assert.equal(streamed.prepareOrbitView(camera,0),false);
+  assert.ok(streamed.children.length<complete.children.length);
+  for(let i=0;!streamed.prepareOrbitView(camera,1);i++)assert.ok(i<1000);
+  const sizes=root=>root.children.map(mesh=>mesh.geometry.index.count).sort((a,b)=>a-b);
+  assert.deepEqual(sizes(streamed),sizes(complete));
+  assert.ok(streamed.prepareOrbitView(camera,0));
 });
 
 test('boarding slices reuse the same urban tiles without renderer updates draining the queue',()=>{

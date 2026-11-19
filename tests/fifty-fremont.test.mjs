@@ -3,7 +3,6 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {sfMap} from '../app/sf-map.ts';
 import {bakeRigidChunk} from '../app/city-blocks.ts';
-import {openingCamera} from '../app/camera.ts';
 import {addFiftyFremont} from '../app/fifty-fremont.ts';
 
 function model(){
@@ -54,16 +53,15 @@ test('two observed office grids narrow above 115 m and retain the dark mechanica
   assert.ok(tone(33,2.48/6,15)>win.r&&tone(33,2.48/6,15)<pier.r);
   assert.ok(block.geometry.index.count/3<9500);
 });
-test('opening desktop camera sees the upper bays and the 183 m screen steps above its shoulders',async()=>{
+test('the fixed waterfront viewpoint sees the upper bays and the 183 m screen steps above its shoulders',async()=>{
   const {root,windows,block}=model();
   const upper=root.getObjectByName('50 Fremont architectural roof'),ledge=root.getObjectByName('50 Fremont shoulder roof');
   const top=new THREE.Box3().setFromObject(upper),shoulder=new THREE.Box3().setFromObject(ledge);
   assert.ok(Math.abs(top.max.y-10.98)<.001&&Math.abs(shoulder.max.y-10.395)<.001);
   assert.ok(top.min.x>shoulder.min.x+.19&&top.max.z<shoulder.max.z-.18);
-  const eye=new THREE.Vector3(Math.sin(openingCamera.yaw)*52,8.5,Math.cos(openingCamera.yaw)*52);
-  const target=new THREE.Vector3(...openingCamera.target);eye.add(target);
+  const eye=new THREE.Vector3(49.180768,10.9,16.889407),target=new THREE.Vector3(0,2.4,0);
   const camera=new THREE.PerspectiveCamera(20,1440/940,.35,1800);
-  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(openingCamera.desktop.focalLength);camera.updateMatrixWorld();
+  camera.position.copy(eye);camera.lookAt(target);camera.setFocalLength(40);camera.updateMatrixWorld();
   const {createLandscape}=await import('../app/landscape.ts');
   const world=createLandscape();world.root.updateMatrixWorld(true);
   assert.ok(world.root.getObjectByName('50 Fremont Center'),'Custom tower is registered');

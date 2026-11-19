@@ -138,3 +138,34 @@ test('center exit and front entrance fold independently in the baked car and fro
   }
   cab.dispose();
 });
+
+test('driver eye sees a continuous PCC body around the clear panes and working entrances',()=>{
+  const cab=createRideInteriors();cab.show('tram');cab.root.updateMatrixWorld(true);
+  const saloon=cab.root.children[0],eye=new THREE.Vector3();
+  const sight=(x,y,z)=>new THREE.Raycaster(eye,new THREE.Vector3(x,y,z).normalize()).intersectObject(saloon,true)[0];
+  const closed=(x,y,z)=>assert.ok(sight(x,y,z),'daylight at '+[x,y,z]);
+  for(const x of [-.86,-.71,-.33,.10,.52,1.10,1.46]){
+    closed(x,-1.17,-.80);closed(x,-.96,-.82);
+    closed(x,.95,-.88);
+    closed(x,.80,13.49);
+  }
+  for(const x of [-.68,-.18,.56,1.17]){
+    assert.equal(sight(x,.12,-.98),undefined,'windshield');
+  }
+  assert.equal(sight(.10,.09,13.49),undefined,'rear glass');
+  assert.equal(sight(-.90,.07,.68),undefined,'side glass');
+  closed(-.90,-.81,0);closed(.10,-1.19,.25);closed(.30,.97,4);
+  for(const [i,z] of [pccCabDoorZ,pccCabDoorZ+pccExitSpacing].entries()){
+    const setDoor=i?cab.setExitDoor:cab.setFrontDoor;
+    for(const opening of [0,.5,1]){
+      setDoor(opening);
+      for(const y of [.33,.37,.47])closed(1.506,y,z+.104);
+      // The rear waist panels sit behind the passenger seats from this angle.
+      const hit=sight(1.506,i?.05:-.68,z+.14);
+      if(opening===0)assert.equal(hit?.object.name,'PCC four folding entrance leaves');
+      else assert.equal(hit,undefined,'open doorway from the seat');
+    }
+    setDoor(0);
+  }
+  cab.dispose();
+});

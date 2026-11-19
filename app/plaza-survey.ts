@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import survey from '../public/data/plaza-survey.json' with {type:'json'};
+import {fitStationTree} from './ferry-market-platform.ts';
 import {bayReliefGround} from './bay-relief.ts';
 import {waterfrontTree,waterfrontPalm} from './waterfront-trees.ts';
 
@@ -35,8 +36,9 @@ export function addSurveyedTree(mesh:MeshFactory,root:THREE.Group,record:Canopy,
   }
   tree.scale.set(scale,h/bounds.max.y,scale);
   tree.position.set(x,y,z);
+  if(record.supplemental)fitStationTree(tree);
   root.add(tree);
-  return true;
+  return tree;
 }
 
 /** OSM survey locations and back/arm/material tags. Seat depth and height are nominal. */

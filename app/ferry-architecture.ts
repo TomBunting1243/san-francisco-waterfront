@@ -1,5 +1,5 @@
 import {ferryGlazing} from './ferry-portico-glazing.ts';
-import {ferryEntryX,ferryHallFloor,ferryTreads} from './ferry-portico-access.ts';
+import {ferryEntryX,ferryHallFloor,ferryTowerZ,ferryTreads} from './ferry-portico-access.ts';
 import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
 import {createMarketPaving} from './market-paving.ts';
 import {createFerryBikeRacks} from './ferry-bike-racks.ts';
@@ -279,48 +279,128 @@ export function ferryHall(font:Font) {
     }
   }
 
-  // Three parallel gables articulate the end elevations rather than the former single hip.
+  // Page & Turnbull, roof plan and end elevations, pp. 29 and 21:
+  // https://www.sfport.com/media/9505/download#page=29
+  // 2023 USGS 1.5 m DSM profiles across the nave place the three crests
+  // around z=-.18, +.66 and +1.40; the clock returns span z=-1.315..-.505.
+  const towerZ=ferryTowerZ,shaft=.324;
+  const roofWest=streetZ+.018,roofEast=bayZ+.057,firstEave=-.66;
   const roofs=[
-    {start:streetZ-.077,end:streetZ+.965,eave:.951,rise:.227},
-    {start:streetZ+.965,end:streetZ+1.94,eave:.902,rise:.167},
-    {start:streetZ+1.94,end:bayZ+.061,eave:.902,rise:.122},
+    {start:firstEave,ridge:-.180,end:.305,low:.952,high:1.151,tone:'#717973'},
+    {start:.305,ridge:.665,end:1.145,low:.882,high:1.047,tone:'#757d77'},
+    {start:1.145,ridge:1.403,end:roofEast,low:.882,high:.967,tone:'#768078'},
   ];
-  for(const [i,{start,end,eave,rise}] of roofs.entries()){
-    const z=(start+end)/2,leg=(end-start)/2,pitch=Math.atan2(rise,leg),slant=Math.hypot(rise,leg);
-    const tone=['#6e7672','#757c76','#747e76'][i];
-    for(const side of [-1,1]){
-      const panel=box(width+.13,.023,slant,centerX,eave+rise/2,z+side*leg/2,tone);
-      panel.rotation.x=side*pitch;panel.name='Ferry Hall gable roof plane';
-      for(let x=left+.09;x<right;x+=.193){
-        const seam=box(.005,.004,slant-.024,x,eave+rise/2+.014,z+side*leg/2,'#7c837a');
-        seam.rotation.x=side*pitch;
+  const roofPoints:number[]=[],roofColors:number[]=[],roofIndices:number[]=[];
+  const pigment=new THREE.Color();
+  // Each patch meets its neighbour edge-to-edge. The ridge cap, seam paint,
+  // glazing and flashings are part of the skin, with no superposed planes.
+  function strip(a:number,b:number,z0:number,y0:number,z1:number,y1:number,tone:string,underside=false){
+    if(b-a<.00001)return;
+    const i=roofPoints.length/3;
+    roofPoints.push(a,y0,z0,a,y1,z1,b,y1,z1,b,y0,z0);
+    pigment.set(tone);
+    for(let j=0;j<4;j++)roofColors.push(pigment.r,pigment.g,pigment.b);
+    if(underside)roofIndices.push(i,i+2,i+1,i,i+3,i+2);
+    else roofIndices.push(i,i+1,i+2,i,i+2,i+3);
+  }
+  const shaftL=towerX-shaft,shaftR=towerX+shaft,shaftW=towerZ-shaft,shaftE=towerZ+shaft;
+  function cutStrip(a:number,b:number,z0:number,y0:number,z1:number,y1:number,color:string,underside=false){
+    const cuts=[z0,...[shaftW,shaftE].filter(z=>z>z0&&z<z1),z1];
+    for(let k=1;k<cuts.length;k++){
+      const s=cuts[k-1],t=cuts[k],mid=(s+t)/2;
+      const lo=z1===z0?y0:THREE.MathUtils.lerp(y0,y1,(s-z0)/(z1-z0));
+      const hi=z1===z0?y1:THREE.MathUtils.lerp(y0,y1,(t-z0)/(z1-z0));
+      if(mid>shaftW&&mid<shaftE){
+        strip(a,Math.min(b,shaftL),s,lo,t,hi,color,underside);
+        strip(Math.max(a,shaftR),b,s,lo,t,hi,color,underside);
+      }else strip(a,b,s,lo,t,hi,color,underside);
+    }
+  }
+  const westDeck=.924,entryDeck=.998,roofL=left-.024,roofR=right+.024;
+  const entryL=towerX-porticoWidth/2,entryR=towerX+porticoWidth/2;
+  cutStrip(entryL,entryR,porticoZ+.005,entryDeck,roofWest,entryDeck,'#92918a');
+  cutStrip(entryL,entryR,porticoZ+.005,.976,roofWest,.976,'#aca99a',true);
+  cutStrip(entryL,entryR,roofWest,entryDeck,roofWest,westDeck,'#888b82');
+  cutStrip(roofL,roofR,roofWest,westDeck,firstEave,westDeck,'#848982');
+  cutStrip(roofL,roofR,firstEave,westDeck,firstEave,roofs[0].low,'#7c8078');
+  for(const x of [left,right]){
+    // The roof membrane is the only top face. A solid masonry box with
+    // the same cap would put two materials at identical depth.
+    const wall=new THREE.PlaneGeometry(firstEave-roofWest,westDeck-.098);
+    wall.rotateY(x===left?-Math.PI/2:Math.PI/2);
+    mesh(wall,ashlar,x,(westDeck+.098)/2,(firstEave+roofWest)/2);
+  }
+  // On sheet 29 the three skylights alternate with the four monitor runs
+  // on the next ridge. Normalize the longitudinal stations to the hall.
+  const skylights=[[.130,.262],[.434,.566],[.738,.870]];
+  const monitors=[[0,.132],[.262,.435],[.565,.738],[.868,1]];
+  const span=roofR-roofL;
+  for(const [i,{start,end,ridge,low,high,tone}] of roofs.entries()){
+    const ranges=i===0?skylights:i===1?monitors:[];
+    const xs=new Set<number>([roofL,roofR]);
+    for(let x=roofL+.115;x<roofR-.008;x+=.193){xs.add(x);xs.add(x+.006);}
+    for(const pair of ranges)for(const f of pair)xs.add(roofL+span*f);
+    const cuts=[...xs].sort((a,b)=>a-b);
+    for(let k=1;k<cuts.length;k++){
+      const a=cuts[k-1],b=cuts[k],f=((a+b)/2-roofL)/span;
+      const raised=ranges.some(([l,r])=>f>l&&f<r);
+      const cap=raised?(i===0?.097:.102):.016;
+      const y0=high-(high-low)*cap/(ridge-start),y1=high-(high-low)*cap/(end-ridge);
+      const seam=b-a<.0061;
+      const sheet=seam?'#858b81':tone;
+      cutStrip(a,b,start,low,ridge-cap,y0,sheet);
+      cutStrip(a,b,ridge+cap,y1,end,low,sheet);
+      if(raised){
+        const curb=high+(i===0?.036:.066),top=curb+(i===0?.035:.021);
+        strip(a,b,ridge-cap,y0,ridge-cap,curb,'#798782');
+        strip(a,b,ridge-cap,curb,ridge,top,seam?'#a4ada1':i===0?'#879b97':'#949f96');
+        strip(a,b,ridge,top,ridge+cap,curb,seam?'#a4ada1':i===0?'#839694':'#929b93');
+        strip(a,b,ridge+cap,curb,ridge+cap,y1,'#72827e');
+        for(const edge of [a,b]){
+          if(!ranges.some(pair=>pair.some(v=>Math.abs(roofL+span*v-edge)<.00001)))continue;
+          const base=roofPoints.length/3;
+          roofPoints.push(edge,y0,ridge-cap,edge,curb,ridge-cap,edge,top,ridge,
+            edge,curb,ridge+cap,edge,y1,ridge+cap,edge,high,ridge);
+          pigment.set('#758480');
+          for(let p=0;p<6;p++)roofColors.push(pigment.r,pigment.g,pigment.b);
+          for(const tri of [[0,1,5],[1,2,5],[2,3,5],[3,4,5]]){
+            if(edge===a)tri.reverse();
+            roofIndices.push(...tri.map(n=>base+n));
+          }
+        }
+      }else{
+        strip(a,b,ridge-cap,y0,ridge,high+.006,'#909b92');
+        strip(a,b,ridge,high+.006,ridge+cap,y1,'#909b92');
       }
     }
-    box(width+.103,.017,.055,centerX,eave+rise+.016,z,'#94a095');
+    // The first (Grand Nave) gable has the higher eave. Close its step to
+    // the second gable along the full valley; the two eastern eaves coincide.
+    if(i+1<roofs.length&&low!==roofs[i+1].low)
+      strip(roofL,roofR,end,low,end,roofs[i+1].low,'#81867d');
     for(const x of [left,right]){
-      const endElevation=new THREE.Group();
+      const endElevation=new THREE.Group(),z=(start+end)/2,leg=(end-start)/2;
       endElevation.position.set(x,0,z);endElevation.rotation.y=x===left?-Math.PI/2:Math.PI/2;root.add(endElevation);
-      box(end-start,.805,.048,0,.500,-.023,ashlar,endElevation);
-      const peak=new THREE.Shape();
-      peak.moveTo(-leg,.872);peak.lineTo(leg,.872);peak.lineTo(leg,eave);peak.lineTo(0,eave+rise);peak.lineTo(-leg,eave);peak.closePath();
-      extrude(peak,.055,ashlar,0,0,-.05,endElevation).name='Ferry Hall end gable';
+      box(end-start,.770,.048,0,.483,-.023,ashlar,endElevation);
+      const peak=new THREE.Shape(),center=(x===left?1:-1)*(ridge-z);
+      peak.moveTo(-leg,.868);peak.lineTo(leg,.868);peak.lineTo(leg,low);
+      peak.lineTo(center,high);peak.lineTo(-leg,low);peak.closePath();
+      extrude(peak,.048,ashlar,0,0,-.047,endElevation).name='Ferry Hall end gable';
       sash(endElevation,0,.388,leg*.96,.452,.009,'end');
       storefront(endElevation,0,leg*1.28,.108,.245,.009,'#63786d');
       box(end-start,.023,.065,0,.360,.017,pale,endElevation);
       box(end-start,.021,.065,0,.390,.017,pale,endElevation);
     }
   }
-  const last=roofs.at(-1)!,ridgeZ=(last.start+last.end)/2;
-  const monitorWidth=width*.13;
-  for(const fraction of [-.304,0,.304]){
-    const x=centerX+width*fraction,y=last.eave+last.rise;
-    box(monitorWidth,.054,.147,x,y+.027,ridgeZ,'#687e7c').name='East roof glazing monitor';
-    box(monitorWidth+.047,.016,.170,x,y+.063,ridgeZ,'#9ca49a');
-    for(let n=x-monitorWidth/2+.03;n<x+monitorWidth/2;n+=.105)box(.009,.056,.151,n,y+.025,ridgeZ,'#a7aca0');
-  }
+  const skin=new THREE.BufferGeometry();
+  skin.setAttribute('position',new THREE.Float32BufferAttribute(roofPoints,3));
+  skin.setAttribute('color',new THREE.Float32BufferAttribute(roofColors,3));
+  skin.setIndex(roofIndices);skin.computeVertexNormals();skin.userData.paintVertices=true;
+  const roof=mesh(skin,'#ffffff',0,0,0);roof.material=roof.material.clone();
+  roof.material.vertexColors=true;roof.name='Ferry hall joined roof and portico';
   // The sign is split across two steel racks at either side of the clock tower.
   const waterfrontSign=new THREE.Group();waterfrontSign.name='PORT OF SAN FRANCISCO';
-  waterfrontSign.position.set(centerX,1.23,bayZ-.157);root.add(waterfrontSign);
+  const signZ=.193;
+  waterfrontSign.position.set(centerX,1.23,signZ);root.add(waterfrontSign);
   for(const [label,x,span] of [['PORT OF',-1.34,1.09],['SAN FRANCISCO',1.82,2.04]] as const){
     const words=new TextGeometry(label,{font,size:.151,depth:.012,curveSegments:4});
     words.computeBoundingBox();
@@ -336,14 +416,17 @@ export function ferryHall(font:Font) {
     words.userData.paintVertices=true;
     const sign=mesh(words,'#ffffff',x,.025,.009,waterfrontSign);sign.name=label;
     sign.scale.x=span/w;
-    const supportBase=.952;
-    box(span+.052,.016,.026,x,.013,.003,'#728881',waterfrontSign);
+    const footZ=-.012;
+    const r=roofs[0],slope=(r.low-r.high)/(r.end-r.ridge);
+    const supportBase=r.high+slope*(signZ+footZ-r.ridge);
+    box(span+.052,.016,.026,x,.017,.003,'#728881',waterfrontSign);
     for(let station=-span/2+.026;station<=span/2;station+=.195){
       const h=waterfrontSign.position.y-supportBase+.041;
       box(.012,h,.023,x+station,.041-h/2,-.012,'#718680',waterfrontSign);
-      box(.047,.014,.079,x+station,supportBase-waterfrontSign.position.y,-.021,'#8e9588',waterfrontSign);
+      const shoe=box(.046,.009,.055,x+station,supportBase-waterfrontSign.position.y+.003,footZ,'#8e9588',waterfrontSign);
+      shoe.rotation.x=-Math.atan(slope);shoe.name='Sign rack roof shoe';
     }
-    line([centerX+x-span/2,bayZ-.184],[centerX+x+span/2,bayZ-.184],1.161,.012,.017,'#83938b');
+    line([centerX+x-span/2,signZ-.017],[centerX+x+span/2,signZ-.017],1.161,.012,.017,'#83938b');
   }
   // HLB's restoration lights the west entry pedestals, paired columns, arches
   // and entablature. The recessed glazed openings retain their darker centers.
@@ -359,7 +442,7 @@ export function ferryHall(font:Font) {
     return height*incidence*(column?.96:west?.65:.40);
   }
   for(const side of [street,bay])side.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=o.name==='Recessed west glazing and shop interiors'?()=>.078:hallUplight;});
-  return {root,towerX,towerZ:(porticoZ+streetZ)/2+.24};
+  return {root,towerX,towerZ};
 }
 
 export function ferryPublicRealm() {

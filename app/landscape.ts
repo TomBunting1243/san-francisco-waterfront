@@ -15,7 +15,6 @@ import {createFerryFlag} from './ferry-flag.ts';
 export {updateFerryFlag,ferryFlagFlutterRate} from './ferry-flag.ts';
 export {setFerryClockTime} from './ferry-clock-tower.ts';
 import {downtownBuilding,applyDowntownGlazing,bindFacadeClock,createFacadeClock} from './downtown-buildings.ts';
-import {createUrbanContext} from './urban-context.ts';
 import {addSurveyShore,seawallAt} from './survey-shore.ts';
 import {bayReliefBankHeight,createBayRelief} from './bay-relief.ts';
 import {createSalesforceTower,createTransamericaPyramid} from './skyline-towers.ts';
@@ -121,7 +120,7 @@ import fontData from './harbor-font.json' with { type: 'json' };
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** San Francisco waterfront footprints with selectively detailed landmark models. */
-export function createLandscape() {
+export function* landscapeStages() {
   const root = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number; tide?:boolean }[] = [];
@@ -216,6 +215,7 @@ export function createLandscape() {
       if(timber)for(const side of [-1,1])pole(new THREE.Vector3(cx+side*width*.36,-.018,z),new THREE.Vector3(cx-side*width*.36,waterSurface.level-.16,z),.021,'#877354');
     }
   }
+  yield 2;
   const hillsWing:typeof mappedBuildings[number]={glass:false,measured:false,id:-157,name:'Hills Bros Coffee',h:1.46,minH:0,p:[[-44.35,-5.58],[-37.85,-6.55],[-38.29,-9.48],[-44.79,-8.51],[-44.35,-5.58]]};
   const detailedBuildings=refineMaritimeLandings(refineReferenceMassing(refineNeighborhoodMassing([...mappedBuildings.filter(b=>![1487160485,1487160486,1487160487].includes(b.id)),hillsWing])));
   const neighborhood=neighborhoodDetail(detailedBuildings);root.add(neighborhood.root);windowPositions.push(...neighborhood.windows);
@@ -367,6 +367,7 @@ export function createLandscape() {
   addBridgeAnchorages(bridge,mesh,deckLow,deckHigh);
   // Cable profile: 1,160 ft side spans and 2,310 ft main spans, twice.
   const cableLightPositions:number[]=[];
+  yield 3;
   const cableSpans=[[15.64,36.85,4.85,9.55],[36.85,79.097,9.55,9.55],[79.097,100.31,9.55,4.85],[100.31,121.524,4.85,9.55],[121.524,163.771,9.55,9.55],[163.771,bridgeEnd,9.55,4.85]];
   for(const x of [-.75,.75])for(const [from,to,ya,yb] of cableSpans){
     const points:THREE.Vector3[]=[];
@@ -534,6 +535,7 @@ export function createLandscape() {
   residentPositions.push({x:-9.83,z:1.51,y:southPlazaTop+.009});
   for(const [x,z] of [[-9.67,1.48],[-9.18,.61],[-8.21,.23],[-7.57,1.25]])residentPositions.push({x,z,y:southPlazaTop});
 
+  yield 4;
   const terminal=buildFerryTerminal(mesh,root);
   for(const entry of ferryConnections)root.add(ferryPortal(entry,font));
   mesh(walkSurface(routes.ferry,routeWidth.ferry,.016),'#bdb8a6',0,0,0).name='Ferry landing promenade';
@@ -637,6 +639,7 @@ export function createLandscape() {
   const fireboat=createFireboat();root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
+  yield 5;
   const architectureMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02,side:THREE.FrontSide});
   prepareFerryTerminalTide(terminal);
   const tidalPanes=windowPositions.flatMap((p,i)=>p.tide?[{i,y:p.y}]:[]);
@@ -682,6 +685,7 @@ export function createLandscape() {
     bakeRigidChunk('Waterfront poster faces',staticMeshes.filter(m=>m.geometry.hasAttribute('billboardPrint')),billboardPrintMaterial()),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('walkPanel')),walkMaterial),
     ...bakeBlocks(staticMeshes.filter(m=>m.geometry.hasAttribute('facadeGrid')),facadeMaterial)];
+  yield 6;
   const updateTidalChunks=createTideUpdater(architectureChunks);
   for(const chunk of architectureChunks)installOrderedArchitecture(chunk);
   const illuminatedArchitecture=architectureMaterial.clone();
@@ -870,7 +874,7 @@ export function createLandscape() {
   for(const [name,x,y,z,w,h,d] of [['waterfront',0,2.2,0,16,4.7,3],['bridge',bridgePoint(0,36.85).x,4.8,bridgePoint(0,36.85).z,2.8,10,2.8],['pyramid',26.75,7.8,-40.4,3,16,3]] as const){
     const target=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),hitMaterial);target.position.set(x,y,z);target.userData.landmark=name;root.add(target);hitTargets.push(target);
   }
-  const relief=createBayRelief(),urbanContext=createUrbanContext();root.add(relief.root,urbanContext);
+  const relief=createBayRelief();root.add(relief.root);
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);
   ferries.forEach((boat,i)=>{
@@ -879,11 +883,24 @@ export function createLandscape() {
     boardingBrows.update(i,pose);
   });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), urbanContext, seatStart, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
-  cityTemplate=result;
+  const result={ root, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), seatStart, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   return result;
 }
 
+
+// Offline geometry checks and the small portfolio vignettes use the same builder.
+export function createLandscape() {
+  const stages=landscapeStages();
+  let step=stages.next();
+  while(!step.done)step=stages.next();
+  cityTemplate=step.value;
+  return step.value;
+}
+
+export function rememberLandscape(world:ReturnType<typeof createLandscape>){
+  cityTemplate=world;
+  return world;
+}
 
 // The page owns one city template. Vignettes reuse its geometry, never reconstruct it.
 let cityTemplate:ReturnType<typeof createLandscape>|undefined;

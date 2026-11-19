@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
+import {facadeExposure} from './facade-exposure.ts';
 import {center} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
 
@@ -22,12 +24,11 @@ export function neighborhoodDetail(buildings:Building[]){
   root.name='Golden Gateway Commons and Center';
   const material=(color:string)=>{if(!materials.has(color))materials.set(color,new THREE.MeshStandardMaterial({color,roughness:.9}));return materials.get(color)!;};
   const mesh=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent:THREE.Object3D=root)=>{const m=new THREE.Mesh(g,material(c));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m;};
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent:THREE.Object3D=root)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,parent);
+  const box=staticBoxes(mesh,root);
   const brick='#9b6555',cap='#88776a',metal='#3a4d4c';
   for(const b of buildings.filter(hasNeighborhoodDetail)){
     const base=b.minH||0,commons=isCommons(b),[cx,cz]=center(b.p);
     const peers=buildings.filter(n=>n.id!==b.id&&n.p.some(p=>Math.hypot(p[0]-cx,p[1]-cz)<12));
-    const clear=(x:number,y:number,z:number)=>!peers.some(n=>y>=(n.minH||0)-.005&&y<n.h+.01&&insideBuilding(x,z,n.p));
     const raw=b.p.slice(0,b.p[0][0]===b.p.at(-1)![0]&&b.p[0][1]===b.p.at(-1)![1]?-1:undefined);
     const points=raw.filter((p,i)=>{const a=raw[(i+raw.length-1)%raw.length],q=raw[(i+1)%raw.length];const ux=p[0]-a[0],uz=p[1]-a[1],vx=q[0]-p[0],vz=q[1]-p[1];return Math.abs(ux*vz-uz*vx)>.003*Math.hypot(ux,uz)*Math.hypot(vx,vz);});
     const faces=[];
@@ -36,7 +37,7 @@ export function neighborhoodDetail(buildings:Building[]){
       let nx=(q[1]-a[1])/len,nz=-(q[0]-a[0])/len;const mx=(a[0]+q[0])/2,mz=(a[1]+q[1])/2;
       if(insideBuilding(mx+nx*.012,mz+nz*.012,b.p)){nx=-nx;nz=-nz;}
       const face=new THREE.Group();face.position.set(mx,0,mz);face.rotation.y=Math.atan2(nx,nz);root.add(face);face.updateWorldMatrix(true,false);
-      const exposed=(x:number,y:number)=>[.035,.065,.12].every(depth=>{const p=face.localToWorld(new THREE.Vector3(x,y,depth));return !insideBuilding(p.x,p.z,b.p)&&clear(p.x,y,p.z);});
+      const exposed=facadeExposure(face,b.p,peers,[.035,.065,.12],(n,y)=>y>=(n.minH||0)-.005&&y<n.h+.01);
       faces.push({face,len,nx,nz,exposed});
       const band=(y:number,h:number,d:number,c:string)=>{const count=Math.ceil(len/.17);let start=-1;for(let i=0;i<=count;i++){const open=i<count&&exposed(-len/2+(i+.5)*len/count,y);if(open&&start<0)start=i;if(!open&&start>=0){box((i-start)*len/count,h,d,-len/2+(start+i)*len/count/2,y,.037,c,face);start=-1;}}};
       band(b.h+.01,.025,.10,commons?cap:'#d7d5c3');

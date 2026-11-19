@@ -1,22 +1,26 @@
-/** The opening frame is composed around the Ferry Building and first bridge tower. */
+/** From the plaza, the clock lines up with the bay and the eastern suspension towers. */
 export const openingCamera = {
-  yaw: 1.24,
+  yaw: 3.145,
   zoom: 1,
-  target: [0, 2.4, 0] as const,
-  desktop: { focalLength: 40, elevation: 8.5, distance: 52 },
-  portrait: { focalLength: 44, elevation: 8.5, distance: 52 },
-  mobile: { focalLength: 36, elevation: 7.2, distance: 46 },
+  target: [0, .83, 0] as const,
+  desktop: { focalLength: 21.5, elevation: 1.13, distance: 9.6 },
+  portrait: { focalLength: 19.5, elevation: 1.13, distance: 9.6 },
+  mobile: { focalLength: 18, elevation: 1.13, distance: 9.6 },
 };
 
 export function openingLens(width: number, height: number) {
-  return width < 650 ? openingCamera.mobile
+  const lens = width < 650 ? openingCamera.mobile
     : width < 950 && height > width * 1.2 ? openingCamera.portrait
     : openingCamera.desktop;
+  // A wider window reveals more of the waterfront on either side. Keep the
+  // vertical angle wide enough for both the flag and the paving below it.
+  const aspect = width / Math.max(1, height);
+  return aspect > 16 / 9 ? { ...lens, focalLength: lens.focalLength * (16 / 9) / aspect } : lens;
 }
 
 export function openingYaw(width: number, height: number) {
-  if(width<650)return 1.49;
-  return width < 950 && height > width * 1.2 ? 1.4 : openingCamera.yaw;
+  if(width<650)return 3.10;
+  return width < 950 && height > width * 1.2 ? 3.125 : openingCamera.yaw;
 }
 
 /** Rotate about the visitor's focus with a fixed radius and the chosen pitch. */

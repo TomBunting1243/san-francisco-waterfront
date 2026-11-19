@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
-import {bakeBlocks,freezeBakedArchitecture} from '../app/city-blocks.ts';
+import {bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from '../app/city-blocks.ts';
 
 test('baking preserves native material vertex paint while unpainted materials keep their own tint',()=>{
   const panel=new THREE.PlaneGeometry(1,1);
@@ -104,4 +104,41 @@ test('baked references skip per-frame matrix work while attached scenery, live r
   ray.ray.origin.x+=2;assert.equal(ray.intersectObject(chunk)[0].distance,before);
   empty.visible=true;marker.position.x++;outer.updateMatrixWorld(true);
   assert.deepEqual(marker.matrixWorld.elements.slice(12,15),[10,4,4]);
+});
+
+test('packed rigid batches preserve Three transforms, pigment and precise bounds across mixed vertex layouts',()=>{
+  const geometry=new THREE.BoxGeometry(1.37,.49,2.23),interleaved=new THREE.BufferGeometry();
+  const data=new THREE.InterleavedBuffer(new Float32Array([.4,.9,.1,1,0,0, -.3,.6,.7,0,1,0, -.9,.06,.4,0,0,1]),6);
+  interleaved.setAttribute('position',new THREE.InterleavedBufferAttribute(data,3,0));
+  interleaved.setAttribute('normal',new THREE.InterleavedBufferAttribute(data,3,3));
+  const packed=geometry.clone(),bytes=new Uint8Array(3*packed.attributes.position.count);
+  const normals=new Int16Array(bytes.length);
+  for(let i=0;i<bytes.length;i++){bytes[i]=(i*97+13)%256;normals[i]=Math.round(32767*Math.sin(i+.72));}
+  normals[0]=-32768;
+  packed.setAttribute('normal',new THREE.Int16BufferAttribute(normals,3,true));
+  packed.setAttribute('color',new THREE.Uint8BufferAttribute(bytes,3,true));
+  const paint=new THREE.MeshStandardMaterial({color:0xa1cc6e,vertexColors:true});
+  const sources=[geometry,interleaved,packed].map((g,i)=>{
+    const m=new THREE.Mesh(g,paint);m.scale.set(3,.24,1.7);m.position.set(i-.43,2,-.77);
+    m.rotation.set(.37,i*.44,-.22);m.updateMatrixWorld(true);return m;
+  });
+  const batch=bakeRigidChunk('Comparison',sources,paint).geometry;
+  const positions=[],directions=[],pigments=[],indices=[];
+  for(const m of sources){
+    const {position,normal,color}=m.geometry.attributes,n=new THREE.Matrix3().getNormalMatrix(m.matrixWorld);
+    const offset=positions.length/3;
+    for(let i=0;i<position.count;i++){
+      positions.push(...new THREE.Vector3().fromBufferAttribute(position,i).applyMatrix4(m.matrixWorld).toArray());
+      directions.push(...new THREE.Vector3().fromBufferAttribute(normal,i).applyNormalMatrix(n).toArray().map(v=>Math.round(v*32767)));
+      for(const [k,component] of paint.color.toArray().entries())pigments.push(Math.round(255*component*(color?color.getComponent(i,k):1)));
+    }
+    for(let i=0;i<(m.geometry.index?.count??position.count);i++)indices.push(offset+(m.geometry.index?.getX(i)??i));
+  }
+  assert.deepEqual(batch.index.array,Uint16Array.from(indices));
+  assert.deepEqual(batch.attributes.position.array,Float32Array.from(positions));
+  assert.deepEqual(batch.attributes.normal.array,Int16Array.from(directions));
+  assert.deepEqual(batch.attributes.color.array,Uint8Array.from(pigments));
+  const box=batch.boundingBox.clone(),sphere=batch.boundingSphere.clone();
+  batch.computeBoundingBox();batch.computeBoundingSphere();
+  assert.ok(batch.boundingBox.equals(box));assert.ok(batch.boundingSphere.equals(sphere));
 });

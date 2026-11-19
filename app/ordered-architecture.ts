@@ -9,9 +9,23 @@ export function installOrderedArchitecture(mesh:THREE.Mesh,minimum=40000,facesPe
   const defaults=THREE.Object3D.prototype;
   if(mesh.onBeforeRender!==defaults.onBeforeRender||mesh.onAfterRender!==defaults.onAfterRender||mesh.onBeforeShadow!==defaults.onBeforeShadow||mesh.onAfterShadow!==defaults.onAfterShadow)return;
   const leaves:Node[]=[],p=new THREE.Vector3();
+  const xyz=position instanceof THREE.BufferAttribute&&position.itemSize===3&&!position.normalized&&position.array instanceof Float32Array?position.array:null;
+  const indices=index.array;
   for(let first=0;first<index.count;first+=3*facesPerLeaf){
     const end=Math.min(index.count,first+3*facesPerLeaf),bounds=new THREE.Box3();
-    for(let j=first;j<end;j++)bounds.expandByPoint(p.fromBufferAttribute(position,index.getX(j)));
+    if(xyz){
+      // The city baker emits packed xyz. Compute the same indexed bounds
+      // without virtual attribute reads or vector writes for every corner.
+      let x0=Infinity,y0=Infinity,z0=Infinity,x1=-Infinity,y1=-Infinity,z1=-Infinity;
+      for(let j=first;j<end;j++){
+        const i=indices[j]*3,x=xyz[i],y=xyz[i+1],z=xyz[i+2];
+        x0=Math.min(x0,x);y0=Math.min(y0,y);z0=Math.min(z0,z);
+        x1=Math.max(x1,x);y1=Math.max(y1,y);z1=Math.max(z1,z);
+      }
+      bounds.min.set(x0,y0,z0);bounds.max.set(x1,y1,z1);
+    }else{
+      for(let j=first;j<end;j++)bounds.expandByPoint(p.fromBufferAttribute(position,index.getX(j)));
+    }
     if(g.userData.tideBoundsMargin){bounds.min.y-=g.userData.tideBoundsMargin;bounds.max.y+=g.userData.tideBoundsMargin;}
     leaves.push({bounds,start:first,end});
   }

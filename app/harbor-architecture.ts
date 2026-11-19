@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
 import type { Font } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { center, footprintGeometry, mappedBuildings, sfMap } from './sf-map.ts';
@@ -67,9 +68,7 @@ function model(name:string, font:Font) {
     parent.add(m);
     return m;
   }
-  function box(w:number,h:number,d:number,x:number,y:number,z:number,color:string,parent=root) {
-    return mesh(new THREE.BoxGeometry(w,h,d),color,x,y,z,parent);
-  }
+  const box=staticBoxes(mesh,root);
   function beam(a:THREE.Vector3,b:THREE.Vector3,width:number,color:string,parent=root) {
     const v=b.clone().sub(a);
     const m=box(width,width,v.length(),(a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2,color,parent);

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
+import {facadeExposure} from './facade-exposure.ts';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {center} from './sf-map.ts';
@@ -75,17 +77,16 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
   root.name=`Reference architecture: ${b.name||b.id}`;
   const mat=(c:string)=>{if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.87}));return materials.get(c)!;};
   const mesh=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent:THREE.Object3D=root)=>{const m=new THREE.Mesh(g,mat(c));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m;};
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,parent:THREE.Object3D=root)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,parent);
+  const box=staticBoxes(mesh,root);
   const text=(s:string,size:number,x:number,y:number,z:number,parent:THREE.Object3D)=>{const g=new TextGeometry(s,{font,size,depth:.004,curveSegments:2});g.computeBoundingBox();g.translate(-g.boundingBox!.max.x/2,0,0);return mesh(g,'#526665',x,y,z,parent);};
   const cream='#dedbca',dark='#475f60',peers=buildings.filter(n=>n.id!==b.id&&n.p.some(p=>Math.hypot(p[0]-cx,p[1]-cz)<18));
-  const clear=(x:number,y:number,z:number)=>!peers.some(n=>n.h>y+.005&&y>(n.minH||0)-.005&&insideBuilding(x,z,n.p));
   const raw=b.p.slice(0,-1),points=raw.filter((p,i)=>{const a=raw[(i+raw.length-1)%raw.length],q=raw[(i+1)%raw.length];return Math.abs((p[0]-a[0])*(q[1]-p[1])-(p[1]-a[1])*(q[0]-p[0]))>.006*Math.hypot(p[0]-a[0],p[1]-a[1])*Math.hypot(q[0]-p[0],q[1]-p[1]);});
   const faces=[];
   for(let e=0;e<points.length;e++){
     const a=points[e],q=points[(e+1)%points.length],len=Math.hypot(q[0]-a[0],q[1]-a[1]);if(len<.10)continue;
     let nx=(q[1]-a[1])/len,nz=-(q[0]-a[0])/len;const mx=(a[0]+q[0])/2,mz=(a[1]+q[1])/2;if(insideBuilding(mx+nx*.01,mz+nz*.01,b.p)){nx=-nx;nz=-nz;}
     const face=new THREE.Group();face.position.set(mx,0,mz);face.rotation.y=Math.atan2(nx,nz);root.add(face);face.updateWorldMatrix(true,false);
-    const exposed=(x:number,y:number)=>[.03,.08].every(depth=>{const p=face.localToWorld(new THREE.Vector3(x,y,depth));return !insideBuilding(p.x,p.z,b.p)&&clear(p.x,y,p.z);});
+    const exposed=facadeExposure(face,b.p,peers,[.03,.08],(n,y)=>n.h>y+.005&&y>(n.minH||0)-.005);
     const pane=(x:number,y:number,w:number,h:number)=>{if(![-w/2,0,w/2].every(dx=>exposed(x+dx,y)))return;box(w+.014,h+.014,.023,x,y,.026,dark,face);const p=face.localToWorld(new THREE.Vector3(x,y,.044));windows.push({x:p.x,y:p.y,z:p.z,ry:face.rotation.y,w,h});};
     const band=(y:number,h:number,d:number,c:string)=>{const n=Math.ceil(len/.17);let start=-1;for(let i=0;i<=n;i++){const open=i<n&&exposed(-len/2+(i+.5)*len/n,y);if(open&&start<0)start=i;if(!open&&start>=0){box((i-start)*len/n,h,d,-len/2+(start+i)*len/n/2,y,.039,c,face);start=-1;}}};
     faces.push({face,len,nx,nz,pane,band,exposed});

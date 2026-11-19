@@ -1,6 +1,39 @@
 import * as THREE from 'three';
 import {KernelSize, ShaderPass, TiltShiftEffect} from 'postprocessing';
 
+// The broad square cornices end at the second colonnade. The narrower
+// lantern, mast and flying flag fit within the upper section.
+export function towerPrintFocus(clockCenter:THREE.Vector3){
+  const sections=[[.38,.90,3.075],[.215,3.075,235*.3048*.06+.025]];
+  const corners=sections.map(([radius,low,high])=>{
+    const points:THREE.Vector3[]=[];
+    for(const x of [-radius,radius])for(const z of [-radius,radius])for(const y of [low,high]){
+      points.push(new THREE.Vector3(clockCenter.x+x,y,clockCenter.z+z));
+    }
+    return points;
+  });
+  const bounds=sections.map(()=>new THREE.Vector4());
+  const clip=new THREE.Matrix4(),point=new THREE.Vector4();
+  function update(camera:THREE.PerspectiveCamera){
+    clip.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+    for(let i=0;i<corners.length;i++){
+      const rect=bounds[i];
+      rect.set(Infinity,Infinity,-Infinity,-Infinity);
+      let inFrontOfNearPlane=false;
+      for(const corner of corners[i]){
+        point.set(corner.x,corner.y,corner.z,1).applyMatrix4(clip);
+        if(point.w>=camera.near)inFrontOfNearPlane=true;
+        const scale=.5/Math.max(camera.near,point.w);
+        const u=point.x*scale+.5,v=point.y*scale+.5;
+        rect.x=Math.min(rect.x,u);rect.y=Math.min(rect.y,v);
+        rect.z=Math.max(rect.z,u);rect.w=Math.max(rect.w,v);
+      }
+      if(!inFrontOfNearPlane)rect.set(-2,-2,-2,-2);
+    }
+  }
+  return {bounds,update};
+}
+
 // Resolve the city once into an antialiased color buffer. Both the actual
 // camera image and its half-size tilt-shift wash feed the same final draw.
 export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE.Vector3){
@@ -11,16 +44,18 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
   source.texture.name='Waterfront on paper';
   const tilt=new TiltShiftEffect({resolutionScale:.5,focusArea:.32,feather:.14,kernelSize:KernelSize.SMALL});
   tilt.initialize(renderer,false,THREE.UnsignedByteType);
+  const tower=towerPrintFocus(clockCenter);
   const uniforms={
     inputBuffer:{value:source.texture}, wash:{value:tilt.uniforms.get('map')!.value as THREE.Texture},
     paperTexel:{value:new THREE.Vector2()},focusRow:{value:.50},strength:{value:1},
-    bounce:{value:new THREE.Color()},clockUV:{value:new THREE.Vector2(-2,-2)},aspect:{value:1},
+    bounce:{value:new THREE.Color()},towerBounds:{value:tower.bounds},aspect:{value:1},
   };
   const material=new THREE.ShaderMaterial({depthTest:false,depthWrite:false,toneMapped:false,uniforms,
     vertexShader:'varying vec2 paperUV; void main(){paperUV=uv;gl_Position=vec4(position.xy,0.,1.);}',
     fragmentShader:`
       uniform sampler2D inputBuffer,wash;
-      uniform vec2 paperTexel,clockUV;
+      uniform vec2 paperTexel;
+      uniform vec4 towerBounds[2];
       uniform vec3 bounce;
       uniform float focusRow,strength,aspect;
       varying vec2 paperUV;
@@ -33,12 +68,18 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
         float avg=dot(mean,luma), variance=dot(lights,lights)*.25-avg*avg;
         if(variance<best){best=variance;pigment=mean;}
       }
+      float outsideTower(vec2 uv,vec4 rect){
+        vec2 edge=max(max(rect.xy-uv,uv-rect.zw),0.);
+        return length(edge*vec2(aspect,1.));
+      }
       void main(){
         vec2 uv=paperUV;
         vec3 color=texture2D(inputBuffer,uv).rgb;
         float mask=smoothstep(.09,.42,abs(uv.y-focusRow))*strength;
-        // Keep the clock legible even when it breaks the line of roofs.
-        mask*=smoothstep(.032,.075,length((uv-clockUV)*vec2(aspect,1.)));
+        if(mask>.004){
+          float edge=min(outsideTower(uv,towerBounds[0]),outsideTower(uv,towerBounds[1]));
+          mask*=smoothstep(paperTexel.y,paperTexel.y+.012,edge);
+        }
         if(mask>.004){
           vec2 d=paperTexel;
           vec3 mid=texture2D(wash,uv).rgb;
@@ -63,12 +104,13 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
       }
     `});
   const grade=new ShaderPass(material,'inputBuffer');grade.renderToScreen=true;
-  const clock=new THREE.Vector3(),focus=new THREE.Vector3(),dimensions=new THREE.Vector2();
+  const focus=new THREE.Vector3(),dimensions=new THREE.Vector2();
   return {
-    resize(){
+    resize(quality=2,compact=false){
       renderer.getDrawingBufferSize(dimensions);
-      source.samples=Math.min(renderer.capabilities.maxSamples,renderer.getPixelRatio()>=1.45?2:4);
-      source.setSize(dimensions.x,dimensions.y);tilt.setSize(dimensions.x,dimensions.y);
+      const samples=Math.min(renderer.capabilities.maxSamples,compact||quality===0?2:renderer.getPixelRatio()>=1.45?2:4);
+      if(source.samples!==samples){source.dispose();source.samples=samples;}
+      source.setSize(dimensions.x,dimensions.y);if(quality>0)tilt.setSize(dimensions.x,dimensions.y);
       uniforms.paperTexel.value.set(2/dimensions.x,2/dimensions.y);
       uniforms.aspect.value=dimensions.x/dimensions.y;
     },
@@ -76,10 +118,9 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
       target:THREE.Vector3,bounceColor:THREE.Color){
       focus.copy(target);focus.y=.45;focus.project(camera);
       const row=THREE.MathUtils.clamp(focus.y*.5+.5,.30,.72);
-      clock.copy(clockCenter).project(camera);
-      uniforms.clockUV.value.set(clock.x*.5+.5,clock.y*.5+.5);
       uniforms.focusRow.value=row;
       uniforms.strength.value=riding||quality===0?0:1-THREE.MathUtils.smoothstep(zoom,1.3,3.3);
+      if(uniforms.strength.value>.004)tower.update(camera);
       uniforms.bounce.value.copy(bounceColor).convertLinearToSRGB();
       renderer.setRenderTarget(source);renderer.render(scene,camera);
       if(uniforms.strength.value>.004){tilt.offset=(row-.5)*2;tilt.update(renderer,source,0);}

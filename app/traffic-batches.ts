@@ -36,9 +36,9 @@ export function createBridgeTraffic(material:THREE.MeshStandardMaterial){
   const poses=new THREE.Group(),models=Array.from({length:12},(_,i)=>createStreetVehicle(i,material,true));
   // Local -Z is San Francisco. The inner (left) lane is fastest on each deck.
   // Equal speed within a lane preserves its headways, including through the loop.
-  const westSpeeds=[1.34,1.22,.98,1.10,.84],eastSpeeds=[.88,.99,1.08,1.19,1.29];
+  const westSpeeds=[1.34,1.22,.98,.84,1.10],eastSpeeds=[.88,.99,1.08,1.19,1.29];
   const phases=[.19,.58,.37,.85,.07];
-  // Phase the through lane around the driver’s YBI launch and wrap point.
+  // Phase the outer exit lane around the driver’s YBI launch and wrap point.
   const fleet:{car:THREE.Group;phase:number;speed:number;length:number}[]=[];
   for(const westbound of [true,false]){
     const count=westbound?14:6;
@@ -52,8 +52,11 @@ export function createBridgeTraffic(material:THREE.MeshStandardMaterial){
         car.position.set(x,westbound?bridgeLayout.upperDeck+.063:bridgeLayout.lowerDeck+.044,0);
         car.rotation.y=westbound?Math.PI/2:-Math.PI/2;
         poses.add(car);
-        const stagger=.09*Math.sin(row*2.4+lane);
-        fleet.push({car,phase:(row+(westbound&&lane===3?.42:phases[lane])+stagger)*spacing,speed,length});
+        // At launch the driver is .95 short of the wrap. Exactly bisect
+        // two outer-lane vehicles; all three then travel at 1.10.
+        const phase=westbound&&lane===4?(row+.5)*spacing-.95:
+          (row+phases[lane]+.09*Math.sin(row*2.4+lane))*spacing;
+        fleet.push({car,phase,speed,length});
       }
     }
   }

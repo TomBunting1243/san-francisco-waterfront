@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {createRideInteriors} from '../app/ride-interior.ts';
+import {pccCabFront} from '../app/pcc-saloon.ts';
 
 test('cab foregrounds clear the eye near plane and leave the center view through both lenses open',t=>{
   const {root,show,dispose}=createRideInteriors();
@@ -12,7 +13,7 @@ test('cab foregrounds clear the eye near plane and leave the center view through
     for(const mode of ['sedan','tram']){
       show(mode);
       const mesh=root.children.find(m=>m.visible),position=mesh.geometry.getAttribute('position');
-      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?145:6000));
+      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?305:6000));
       for(let i=0;i<position.count;i++)assert.ok(Math.hypot(position.getX(i),position.getY(i),position.getZ(i))>camera.near);
       let covered=0,left=0,right=0,bottom=0;
       for(let row=0;row<48;row++)for(let col=0;col<48;col++){
@@ -111,7 +112,7 @@ test('saloon lighting reaches the passenger compartment while the driving glass 
   const [car,tram]=root.children,glow=tram.geometry.getAttribute('cabLight'),position=tram.geometry.getAttribute('position');
   let front=0,litSides=0,globes=0;
   for(let i=0;i<glow.count;i++){
-    if(position.getZ(i)<-.70*.06&&position.getY(i)>-.40*.06&&position.getX(i)<.66*.06)front+=glow.getX(i);
+    if(position.getZ(i)<pccCabFront*.06-1e-7&&position.getY(i)>-.40*.06&&position.getX(i)<.66*.06)front+=glow.getX(i);
     if(glow.getX(i)>2){globes++;assert.ok(position.getY(i)>.80*.06);}
     if(Math.abs(position.getX(i))>.8*.06&&glow.getX(i)>.4)litSides++;
   }
@@ -161,4 +162,24 @@ test('boarding builds only the selected vehicle and binds PCC printing to an alr
   fallback.root.children[0].material.onBeforeCompile(shader,{});
   assert.equal(shader.uniforms.cardsPrinted.value,false);assert.equal(shader.uniforms.carCards.value,null);
   fallback.dispose();
+});
+
+test('sedan wheel and instruments read through the open spokes with no separate cockpit draw',()=>{
+  const {root,show,dispose}=createRideInteriors();show('sedan');
+  const mesh=root.children[0];
+  function sight(x,y,z){
+    return new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(mesh,false)[0];
+  }
+  // Top and right rim sit ahead of the dial binnacle, with a visible opening.
+  const rim=sight(-.027,-.244,-.6445),right=sight(.149,-.419,-.578);
+  for(const hit of [rim,right])assert.ok(hit&&hit.point.z>-.67*.06&&hit.point.z<-.56*.06);
+  const gauge=sight(-.117,-.387,-.743);
+  assert.ok(gauge&&gauge.point.z<-.70*.06);
+  const vent=sight(.445,-.418,-.741);
+  assert.ok(vent&&vent.point.z<-.72*.06);
+  assert.ok(!sight(0,.05,-1));
+  const draws=[];mesh.traverse(o=>{if(o.isMesh)draws.push(o);});
+  assert.equal(draws.length,2,'combined body and original wiper');
+  assert.ok(mesh.geometry.index.count/3<=260);
+  dispose();
 });

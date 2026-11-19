@@ -58,3 +58,73 @@ test('Both square colonnades and both round lanterns have open sightlines throug
   for(const y of [2.534,2.875,3.266,3.50])assert.ok(ray(.012,y).length>0,'Missing dividing cornice at '+y);
   near(new THREE.Box3().setFromObject(root,true).max.y,235*foot);
 });
+
+test('the baked Ferry roof closes the portico, fits the clock shaft and carries both sign racks',async()=>{
+  const {createLandscape}=await import('../app/landscape.ts');
+  const world=createLandscape(),hall=ferryHall(font);
+  const parts=world.architectureChunks,skin=hall.root.getObjectByName('Ferry hall joined roof and portico');
+  hall.root.updateMatrixWorld(true);
+  const down=new THREE.Vector3(0,-1,0),up=new THREE.Vector3(0,1,0);
+  const vertical=(x,z,start=1.4)=>new THREE.Raycaster(new THREE.Vector3(x,start,z),down,0,.58).intersectObjects(parts,false);
+  const skinAt=(x,z)=>new THREE.Raycaster(new THREE.Vector3(x,1.4,z),down,0,.55).intersectObject(skin);
+  // The assembled portico used to expose the floor at .103 and contained
+  // no weather skin. Both shoulders now meet the shaft on all four sides.
+  for(const dx of [-1,-.68,.68,1])near(vertical(hall.towerX+dx,-1.52)[0].point.y,.998);
+  const soffit=new THREE.Raycaster(new THREE.Vector3(hall.towerX+.67,.855,-1.52),up,0,.15).intersectObjects(parts,false)[0];
+  near(soffit.point.y,.976);
+  for(const [dx,dz] of [[-.33,0],[.33,0],[0,-.33],[0,.33]]){
+    const x=hall.towerX+dx,z=hall.towerZ+dz;
+    const hits=skinAt(x,z);assert.equal(hits.length,1);
+    near(vertical(x,z,1.07)[0].point.y,hits[0].point.y);
+    assert.equal(skinAt(hall.towerX+dx*.94,hall.towerZ+dz*.94).length,0);
+  }
+  const torso=new THREE.Vector3(hall.towerX,1.08,hall.towerZ);
+  for(const dir of [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]]){
+    const origin=torso.clone().addScaledVector(new THREE.Vector3(...dir),.38);
+    const hit=new THREE.Raycaster(origin,new THREE.Vector3(...dir).negate(),0,.08).intersectObjects(parts,false)[0];
+    assert.ok(hit&&Math.abs(hit.distance-.056)<.002,'solid clock shaft above roof');
+  }
+  // The two grades at the nave valley are joined by a flashing face.
+  const flashing=new THREE.Raycaster(new THREE.Vector3(-2.12,.921,.359),new THREE.Vector3(0,0,-1),0,.10)
+    .intersectObjects(parts,false)[0];
+  near(flashing.point.z,.305);
+  for(const z of [-.183,-.177,.302,.308,.662,.668,1.143,1.147,1.400,1.406]){
+    const hits=vertical(-2.125,z).filter(h=>h.point.y>.88);
+    assert.equal(hits.length,1,'one exposed roof surface at '+z);
+  }
+  const shoes=hall.root.getObjectsByProperty('name','Sign rack roof shoe');
+  assert.ok(shoes.length>12);
+  for(const shoe of shoes){
+    const p=shoe.getWorldPosition(new THREE.Vector3());
+    const roofHit=skinAt(p.x,p.z)[0];assert.ok(roofHit);
+    near(p.y-roofHit.point.y,.003);
+    const from=roofHit.point.clone().addScaledVector(up,.06);
+    const hits=new THREE.Raycaster(from,down,0,.07).intersectObjects(parts,false);
+    assert.ok(hits.some(h=>Math.abs(h.point.y-roofHit.point.y)<.00002));
+  }
+});
+
+test('print focus follows the actual projecting clock, cornices, lantern and flag across opening and orbit views',async()=>{
+  const {towerPrintFocus}=await import('../app/harbor-print.ts');
+  const hall=ferryHall(font),{root}=ferryClockTower(font);
+  root.position.set(hall.towerX,0,hall.towerZ);root.updateMatrixWorld(true);
+  const tower=towerPrintFocus(new THREE.Vector3(hall.towerX,2.035,hall.towerZ));
+  const target=new THREE.Vector3(0,.83,0),point=new THREE.Vector3();
+  const protectedAt=(u,v)=>tower.bounds.some(r=>u>=r.x&&v>=r.y&&u<=r.z&&v<=r.w);
+  for(const [aspect,yaw,lens] of [[1.6,3.145,21.5],[390/844,3.10,18],[1.6,2.42,21.5]]){
+    const camera=new THREE.PerspectiveCamera(20,aspect,.35,1800);
+    camera.setFocalLength(lens);camera.position.set(9.6*Math.sin(yaw),1.13,9.6*Math.cos(yaw)).add(target);
+    camera.lookAt(target);camera.updateMatrixWorld();tower.update(camera);
+    root.traverse(part=>{
+      if(!part.isMesh)return;
+      const pos=part.geometry.attributes.position;
+      for(let i=0;i<pos.count;i++){
+        point.fromBufferAttribute(pos,i).applyMatrix4(part.matrixWorld).project(camera);
+        assert.ok(protectedAt(point.x*.5+.5,point.y*.5+.5),'unprotected tower vertex on '+part.name);
+      }
+    });
+    assert.ok(!protectedAt(.17,.88)&&!protectedAt(.81,.73),'unrelated skyline remains eligible for the wash');
+    camera.rotateY(Math.PI);camera.updateMatrixWorld();tower.update(camera);
+    assert.ok(tower.bounds.every(r=>r.z<0),'a tower behind the viewer creates no focus rectangle on screen');
+  }
+});

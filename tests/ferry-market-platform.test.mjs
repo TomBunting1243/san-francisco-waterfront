@@ -61,3 +61,57 @@ test('the assembled Wharf-bound exit meets the actual track bed and leaves the p
     }
   }
 });
+
+test('both Ferry Terminal roofs clear the plaza trees and their wells stand on the adjacent paving',async()=>{
+  const {waterfrontGardens}=await import('../app/waterfront-gardens.ts');
+  const {sfMap}=await import('../app/sf-map.ts');
+  const {addSurveyCurbs}=await import('../app/curb-survey.ts');
+  const gardens=waterfrontGardens(sfMap.buildings),paving=[];
+  addSurveyCurbs(geometry=>{
+    const mesh=new T.Mesh(geometry);paving.push(mesh);return mesh;
+  });
+  gardens.root.updateMatrixWorld(true);
+  const triangle=new T.Triangle(),point=new T.Vector3();
+  for(const station of platforms.children){
+    // Bound the full curved sheet, ribs, and clear space between their heights.
+    // Testing triangles catches limbs whose endpoints straddle the roof.
+    const roof=new T.Box3(),deck=new T.Box3();
+    const vertices=station.geometry.attributes.position;
+    for(let i=0;i<vertices.count;i++){
+      point.fromBufferAttribute(vertices,i);
+      if(point.y>.24)roof.expandByPoint(point);
+      if(point.y<.12)deck.expandByPoint(point);
+    }
+    roof.expandByScalar(.006);
+    const nearby=gardens.treeAnchors.filter(({x,z})=>
+      x>roof.min.x-.60&&x<roof.max.x+.60&&z>roof.min.z-.55&&z<roof.max.z+.55
+    );
+    assert.ok(nearby.length>=2,station.name+' has adjacent trees');
+    for(const {id} of nearby){
+      const tree=gardens.root.getObjectByName('Surveyed tree '+id);
+      assert.ok(tree);
+      for(const part of tree.children){
+        const {position}=part.geometry.attributes,index=part.geometry.index;
+        for(let i=0;i<index.count;i+=3){
+          triangle.a.fromBufferAttribute(position,index.getX(i)).applyMatrix4(part.matrixWorld);
+          triangle.b.fromBufferAttribute(position,index.getX(i+1)).applyMatrix4(part.matrixWorld);
+          triangle.c.fromBufferAttribute(position,index.getX(i+2)).applyMatrix4(part.matrixWorld);
+          assert.ok(!roof.intersectsTriangle(triangle),'tree '+id+' enters roof band at '+station.name);
+          assert.ok(!deck.intersectsTriangle(triangle),'tree '+id+' enters boarding deck at '+station.name);
+        }
+      }
+      const well=gardens.root.children.find(part=>part.userData.treeSite===id);
+      assert.ok(well,'tree well '+id);
+      const box=new T.Box3().setFromObject(well,true);
+      assert.ok(!box.intersectsBox(deck),'well inside boarding deck '+id);
+      const trunkBase=new T.Box3().setFromObject(tree,true).min.y;
+      const center=box.getCenter(new T.Vector3());
+      assert.ok(Math.hypot(center.x-tree.position.x,center.z-tree.position.z)<.00001,'well centered on trunk '+id);
+      for(const [x,z] of [[center.x,center.z],[box.min.x,box.min.z],[box.min.x,box.max.z],[box.max.x,box.min.z],[box.max.x,box.max.z]]){
+        const support=below(paving,x,z,box.max.y+.006);
+        assert.ok(Math.abs(support-trunkBase)<.001,'trunk meets paving at '+id);
+        assert.ok(Math.abs(box.max.y-support-.0009)<.001,'cutout rim sits directly on paving at '+id);
+      }
+    }
+  }
+});

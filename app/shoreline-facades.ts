@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {staticBoxes} from './static-boxes.ts';
 import {center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
 
@@ -36,7 +37,7 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
     if(!mat){mat=new THREE.MeshStandardMaterial({color:c,roughness:.88});mats.set(c,mat);}
     const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g.add(m);return m;
   }
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,c:string,g:THREE.Group)=>mesh(new THREE.BoxGeometry(w,h,d),c,x,y,z,g);
+  const box=staticBoxes(mesh,root);
   const extrusion=(shape:THREE.Shape,d:number)=>new THREE.ExtrudeGeometry(shape,{depth:d,bevelEnabled:false,curveSegments:12});
   const closed=b.p[0][0]===b.p.at(-1)![0]&&b.p[0][1]===b.p.at(-1)![1];
   const ring=closed?b.p.slice(0,-1):b.p;

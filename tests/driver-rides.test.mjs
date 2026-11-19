@@ -4,7 +4,7 @@ import * as T from 'three';
 import {driverPose,rideDuration,museumLegDuration} from '../app/driver-rides.ts';
 import {addBridgeDeck,roadPaintLift} from '../app/bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from '../app/bridge-layout.ts';
-import {approachPose,buildApproachRoad} from '../app/approach-road.ts';
+import {westboundExitPose,fremontFork,buildApproachRoad} from '../app/approach-road.ts';
 import {bayReliefGround} from '../app/bay-relief.ts';
 import {museumDoorStation} from '../app/streetcar-ride-path.ts';
 import {pccDimensions} from '../app/streetcar.ts';
@@ -14,11 +14,12 @@ const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 test('the westbound driver clears YBI and stays at seated eye height over both constructed road surfaces',()=>{
   const road=new T.Group(),bridge=new T.Group(),material=new T.MeshBasicMaterial();
   bridge.position.set(bridgeLayout.origin[0],0,bridgeLayout.origin[1]);bridge.rotation.y=bridgeLayout.angle;road.add(bridge);
-  const meshes=[],approachPaint=[];
+  const meshes=[],parapets=[],approachPaint=[];
   const make=(g,color,x,y,z,parent)=>{
     const m=new T.Mesh(g,material);m.position.set(x,y,z);parent.add(m);
     if(parent.name==='Mapped I-80 west approach and SoMa ramps'&&g.userData.roadPaint)approachPaint.push(m);
     if(color==='#728383'||color==='#738587')meshes.push(m);
+    if(color==='#a6aba1')parapets.push(m);
     return m;
   };
   addBridgeDeck(bridge,make,bridgeLayout.length,bridgeLayout.lowerDeck,bridgeLayout.upperDeck);
@@ -47,15 +48,32 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
   for(const station of [...bridgeLayout.towers,bridgeLayout.anchor,15.64,1,-1,-12,-26,-32]){
     const p=driverPose('bridge',(start.station-station)/1.10);
     near(p.station,station);
-    const center=station>=0?bridgePoint(.216,station):approachPose(false,-station,1);
+    const center=station>=0?bridgePoint(.432,station):westboundExitPose(-station);
     near(Math.hypot(p.eye.x-center.x,p.eye.z-center.z),.38*.06,station<0?.003:.000001);
     const dx=p.look.x-p.eye.x,dz=p.look.z-p.eye.z;
     near(((center.x-p.eye.x)*-dz+(center.z-p.eye.z)*dx)/Math.hypot(dx,dz),.38*.06,.003);
     const hit=new T.Raycaster(new T.Vector3(p.eye.x,p.eye.y,p.eye.z),down,0,.2).intersectObjects(meshes,false)[0];
     assert.ok(hit,'the westbound tire contact must be on real asphalt at '+station);
     near(p.eye.y-hit.point.y,1.18*.06,.001);
-    assert.ok(p.look.z<p.eye.z-2.4);
+    assert.ok(Math.hypot(dx,dz)>2.48&&Math.hypot(dx,dz)<2.72);
   }
+  // Sample a 1.8 m wide car through the two-lane ramp mouth. Test the
+  // actual poured road and parapet meshes, including both sides of the gore.
+  for(let distance=fremontFork-1;distance<32;distance+=.083){
+    const center=westboundExitPose(distance);
+    const right=new T.Vector3(Math.sin(center.heading),0,Math.cos(center.heading));
+    for(const offset of [-.054,0,.054]){
+      const top=new T.Vector3(center.x,center.y+.135,center.z).addScaledVector(right,offset);
+      const ray=new T.Raycaster(top,down,0,.16);
+      const asphalt=ray.intersectObjects(meshes,false)[0];
+      assert.ok(asphalt&&Math.abs(asphalt.point.y-center.y)<.0035,'Fremont pavement at '+[distance,offset,center.y,asphalt?.point.y]);
+      assert.ok(!ray.intersectObjects(parapets,false).some(h=>h.point.y>center.y+.015),
+        'clear of both concrete gore noses at '+distance);
+    }
+  }
+  // Beyond the fork the driver follows the Fremont exit to its broad right
+  // curve; the mainline here continues several hundred metres further south.
+  assert.ok(end.eye.x> -46&&end.eye.z> -47&&end.look.x>end.eye.x+2.45);
   near(end.station,-32);assert.ok(end.eye.y<start.eye.y-.95);
   const streams=[];
   road.traverse(node=>{if(node.isInstancedMesh&&node.name==='Skyway traffic')streams.push(node);});
