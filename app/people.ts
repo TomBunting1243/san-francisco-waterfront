@@ -48,7 +48,7 @@ function contactMaterial(){
 }
 
 /** Painted miniature pedestrians with view-facing contours and world-space foot contact. */
-export function createPeople(count=22){
+export function createPeople(count=22,seatedCount=0){
   const group=new THREE.Group();
   const paper=new THREE.MeshStandardMaterial({color:'#ffffff',vertexColors:true,roughness:1,side:THREE.DoubleSide});
   function batch(name:string,geometry:THREE.BufferGeometry,n=count,material:THREE.Material=paper){
@@ -58,7 +58,7 @@ export function createPeople(count=22){
   const legs=batch('Contour trousers',cutout([
     [-.018,.50],[.024,.50],[.022,.24],[.016,.03],[.014,-.19],[.012,-.48],
     [-.011,-.50],[-.018,-.30],[-.020,-.01],[-.023,.20],
-  ],2),count*2);
+  ],2),(count+seatedCount)*2);
   const shoes=batch('Shoes',cutout([
     [-.029,.008],[-.021,.017],[.008,.012],[.034,.001],[.037,-.008],
     [.029,-.017],[-.026,-.017],[-.031,-.009],
@@ -114,7 +114,9 @@ export function createPeople(count=22){
     ] as const)mesh.setColorAt(i,new THREE.Color(color));
     for(const side of [0,1]){
       const index=i*2+side;
-      legs.setColorAt(index,new THREE.Color(person.trousers).multiplyScalar(side?1:.82));
+      const trouserInk=new THREE.Color(person.trousers).multiplyScalar(side?1:.82);
+      legs.setColorAt(index,trouserInk);
+      if(i>=count-seatedCount)legs.setColorAt((i+seatedCount)*2+side,trouserInk);
       sleeves.setColorAt(index,new THREE.Color(person.coat).multiplyScalar(side?1:.84));
       shoes.setColorAt(index,new THREE.Color(person.ink).multiplyScalar(side?.94:.79));
     }
@@ -123,23 +125,25 @@ export function createPeople(count=22){
   const transform=new THREE.Object3D();
   const orientation=new THREE.Quaternion(), twist=new THREE.Quaternion(), forwardAxis=new THREE.Vector3(0,0,1);
   const up=new THREE.Vector3(0,1,0), right=new THREE.Vector3(), toward=new THREE.Vector3();
-  const hip=new THREE.Vector3(), foot=new THREE.Vector3(), midpoint=new THREE.Vector3(), offset=new THREE.Vector3();
+  const knee=new THREE.Vector3(),hip=new THREE.Vector3(), foot=new THREE.Vector3(), midpoint=new THREE.Vector3(), offset=new THREE.Vector3();
   const viewer=new THREE.Vector2(Infinity,Infinity);
   function setViewer(x:number,z:number){viewer.set(x,z);}
-  function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample){
+  function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample,seat?:{amount:number;height:number;footReach:number;pace:number}){
     const cadence=5.55+(i%4)*.23, phase=t*cadence+i*2.1, sway=Math.sin(phase);
     const style=i%cast.length, person=cast[style], adultHeight=1.65+(i%4)*.085;
     const size=adultHeight*metresToScene/modelHeight;
     const stanceDuration=(1-swingFraction)*2*Math.PI/cadence;
     const stride=pedSpeed(direction)*stanceDuration/(2*size);
-    const base=ground===0?.072:ground, bob=standing?sway*.003:Math.abs(sway)*.011;
+    const base=ground===0?.072:ground,rest=seat?.amount??0;
+    const seatDrop=seat?rest*(seat.height/size+.013-.228):0;
+    const bob=seatDrop+(1-rest)*(standing?sway*.003:Math.abs(sway)*.011);
     const viewYaw=Number.isFinite(viewer.x)?Math.atan2(viewer.x-x,viewer.y-z):0;
     const lateral=Math.cos(viewYaw+bearing);
     const yaw=viewYaw+(lateral<0?Math.PI:0);
     const paperWidth=.70+Math.abs(lateral)*.30;
     right.set(Math.cos(yaw),0,-Math.sin(yaw));toward.set(Math.sin(viewYaw),0,Math.cos(viewYaw));
     orientation.setFromAxisAngle(up,yaw);
-    const lean=standing?.025:.075+sway*.022;
+    const lean=(standing?.025:.075+sway*.022)+rest*.075;
     // Stacking offsets are measured towards the viewer, so both sides have the same readable layering.
     function place(m:THREE.InstancedMesh,index:number,px:number,py:number,pz:number,w:number,h:number,angle:number){
       transform.position.set(px,py,pz);
@@ -160,7 +164,7 @@ export function createPeople(count=22){
     const hemLength=person.cut==='trench'?1.18:person.cut==='skirt'?.93:.85;
     // The short team jackets have a narrow waistband. The longer coats end in a swept-out hem.
     pose(hems,i,long?-.008:-.004,bodyY-(long?.106:.090),.010,
-      person.cut==='skirt'?1.18:long?1.04:.76,long?hemLength:.32,-lean+sway*.12);
+      person.cut==='skirt'?1.18:long?1.04:.76,long?hemLength:.32,-lean+sway*.12*(1-rest));
     pose(lapels,i,.005,.417+bob,.019,.89,style%2===0?1.02:.72,-lean);
     pose(heads,i,.019,.482+bob,.014,style===3?1.08:1,.96,-lean);
     pose(cheeks,i,.016,.483+bob,.020,style===3?.89:1,.92,-lean);
@@ -168,30 +172,41 @@ export function createPeople(count=22){
     pose(hats,i,.012,.500+bob,.023,hasHat?(style===4?1.06:.94):style===3?.43:0,hasHat?.77:style===3?.83:0,style===3?.69:-lean);
     const hasBag=style===0||style===2||style===5;
     const bagX=style===0?-.074:-.089, bagY=(style===0?.302:.237)+bob;
-    pose(bags,i,bagX,bagY,.022,hasBag?(style===0?.73:.92):0,hasBag?1:0,.12-sway*.15);
+    pose(bags,i,bagX,bagY,.022,hasBag?(style===0?.73:.92):0,hasBag?1:0,.12-sway*.15*(1-rest));
     if(hasBag)reach(straps,i,-.020,.405+bob,bagX+.012,bagY+.039,.024,.91);
     else pose(straps,i,0,.34+bob,.023,0,0);
 
+    function legSegment(index:number,top:THREE.Vector3,bottom:THREE.Vector3,side:number){
+      offset.subVectors(top,bottom);
+      const dx=offset.dot(right),dy=offset.y;
+      midpoint.copy(top).lerp(bottom,.5);
+      place(legs,index,midpoint.x,midpoint.y,midpoint.z,paperWidth*(side?.98:.88),Math.hypot(dx,dy)/size,-Math.atan2(dx,dy));
+    }
     const pathX=Math.cos(bearing),pathZ=Math.sin(bearing);
     for(let side=0;side<2;side++){
       const sign=side?1:-1,index=i*2+side;
       const step=((phase/(2*Math.PI)+side*.5)%1+1)%1, swing=step<swingFraction;
       const u=swing?step/swingFraction:(step-swingFraction)/(1-swingFraction);
-      const lift=standing||!swing?0:Math.sin(Math.PI*u)*.049;
+      const lift=standing||!swing?0:Math.sin(Math.PI*u)*.049*(seat?.pace??1);
       // The planted foot moves backward relative to the advancing hips at a constant speed.
-      const footZ=standing?sign*.014:stride*(swing?-1+2*(u*u*(3-2*u)):1-2*u);
+      const strideOffset=stride*(swing?-1+2*(u*u*(3-2*u)):1-2*u);
+      const footZ=standing?sign*.014:seat?THREE.MathUtils.lerp(sign*.014,strideOffset,seat.pace):strideOffset;
       const ankleY=.020+lift;
-      const advance=(footZ+.012)*size, spread=sign*.045*size;
+      const advance=(footZ+.012)*size+(seat?.footReach??0), spread=sign*.045*size;
       const anchor=routeSample?.(advance/pedSpeed(direction));
       if(anchor){
         // The ground anchor stays fixed during stance, including when the body rounds a bend.
         foot.set(anchor.x+Math.sin(anchor.heading)*spread,base+size*ankleY,anchor.z-Math.cos(anchor.heading)*spread);
       }else foot.set(x+pathX*advance+pathZ*spread,base+size*ankleY,z+pathZ*advance-pathX*spread);
       hip.set(x+size*(pathX*.003+pathZ*sign*.022),base+size*(.228+bob),z+size*(pathZ*.003-pathX*sign*.022));
-      offset.subVectors(hip,foot);
-      const dx=offset.dot(right),dy=offset.y;
-      midpoint.copy(hip).lerp(foot,.50);
-      place(legs,index,midpoint.x,midpoint.y,midpoint.z,paperWidth*(side?.98:.88),Math.hypot(dx,dy)/size,-Math.atan2(dx,dy));
+      if(seat){
+        knee.copy(hip).lerp(foot,.49);
+        // At full rest the thigh is almost level and the shin extends to the planted shoe.
+        knee.x+=pathX*.072*size*rest;knee.z+=pathZ*.072*size*rest;
+        knee.y=THREE.MathUtils.lerp(knee.y,base+seat.height+.012*size,rest);
+        legSegment((i+seatedCount)*2+side,hip,knee,side);
+        legSegment(index,knee,foot,side);
+      }else legSegment(index,hip,foot,side);
       place(shoes,index,foot.x,foot.y,foot.z,paperWidth,1,swing&&!standing?-Math.sin(2*Math.PI*u)*.105:0);
       const shadowScale=1-lift*8;
       transform.position.set(foot.x,base+contactSurfaceOffset,foot.z);
@@ -200,8 +215,8 @@ export function createPeople(count=22){
       transform.updateMatrix();contacts.setMatrixAt(index,transform.matrix);
 
       const gesturing=side===1?wave:0, pocket=style===3||style===4;
-      const shoulderX=sign*.036, wristX=shoulderX+sign*(pocket?.002:.022)+(standing?0:-footZ*.53)+gesturing*.121;
-      const wristY=shoulder-(pocket?.083:.125)+gesturing*(.19+.016*Math.sin(t*7));
+      const shoulderX=sign*.036, wristX=shoulderX+sign*(pocket?.002:.022)+(standing?0:-footZ*.53)+gesturing*.121+rest*.055;
+      const wristY=shoulder-(pocket?.083:.125)+rest*.012+gesturing*(.19+.016*Math.sin(t*7));
       reach(sleeves,index,shoulderX,shoulder,wristX,wristY,side?.024:-.024,side?.96:.9);
       if(side===1)pose(hands,i,wristX*paperWidth,wristY-.005+gesturing*.020,.026,gesturing*.90,gesturing*.90,-.24);
     }

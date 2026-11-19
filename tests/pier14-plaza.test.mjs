@@ -39,3 +39,54 @@ test('eight pairs and five swivel chairs fit the mapped pier with a continuous t
  for(let z=.4;z<11.6;z+=.08)assert.ok(!down(m,-17.29,z).length);
  assert.ok(m.geometry.index.count/3<3350);
 });
+
+test('visitors can reach their seats, set both feet down and look out from the same pier',async()=>{
+  const {pier14Visitors,pier14Visit,updatePier14Visitors}=await import('../app/pier14-visitors.ts');
+  const {createPeople}=await import('../app/people.ts');
+  const start=2,people=createPeople(start+pier14Visitors.length,pier14Visitors.length);
+  const empty=createPeople(2),count=start+pier14Visitors.length;
+  assert.equal(people.group.children.length,empty.group.children.length,'seated limbs share the existing instanced draws');
+  const legs=people.group.getObjectByName('Contour trousers'),shoes=people.group.getObjectByName('Shoes');
+  const shadows=people.group.getObjectByName('Foot contact shadows');
+  assert.equal(legs.count,2*(count+pier14Visitors.length));
+  const plaza=createPier14Plaza(),m=new T.Matrix4();
+  const position=(obj,i)=>{obj.getMatrixAt(i,m);return new T.Vector3().setFromMatrixPosition(m);};
+  const pier=sf.piers.find(p=>p.name==='Pier 14').p;
+  function onPier(x,z){
+    let inside=false;
+    for(let i=1;i<pier.length;i++){
+      const [a,b]=pier.slice(i-1,i+1);
+      if((a[1]>z)!==(b[1]>z)&&x<a[0]+(b[0]-a[0])*(z-a[1])/(b[1]-a[1]))inside=!inside;
+    }
+    return inside;
+  }
+  for(const [index,site] of pier14Visitors.entries()){
+    const phases=new Set();let prev=pier14Visit(site,0);
+    for(let frame=1;frame<2200;frame++){
+      const now=frame/20,p=pier14Visit(site,now);
+      assert.ok(Math.hypot(p.x-prev.x,p.z-prev.z)<.0042,'continuous walking or settling at human speed');
+      prev=p;
+      if(frame%8)continue;
+      phases.add(p.seated===1?'sit':p.seated>0?'settle':p.pace>0?'walk':'stand');
+      if(site.pier)assert.ok(onPier(p.x,p.z),'inside the pier footprint');
+      else{
+        assert.ok(down(plaza,p.x,p.z).some(h=>Math.abs(h-p.y)<.001),'paving beneath the visitor');
+        assert.ok(Math.hypot(p.x+15.1954,p.z+.807)>.24,'clear of the sculpture');
+      }
+      if(p.seated!==1)continue;
+      people.setViewer(site.x+3,site.z-2);
+      updatePier14Visitors(people,start,pier14Visitors,now);
+      const i=start+index,head=position(people.heads,i);
+      assert.ok(head.y-p.y>.066&&head.y-p.y<.091,'seated head has a plausible height');
+      for(const side of [0,1]){
+        const foot=position(shoes,2*i+side),shadow=position(shadows,2*i+side);
+        const reach=(foot.x-site.x)*Math.cos(site.facing)+(foot.z-site.z)*Math.sin(site.facing);
+        assert.ok(reach>.036&&reach<.056,'shoes clear the front edge of the stone or chair');
+        assert.ok(Math.abs(shadow.y-p.y)<.001&&Math.abs(foot.y-p.y)<.006);
+        const thigh=position(legs,2*(i+pier14Visitors.length)+side);
+        assert.ok(Math.abs(thigh.y-p.y-site.seatHeight)<.005,'thigh meets the cap');
+      }
+    }
+    assert.deepEqual([...phases].sort(),['settle','sit','stand','walk']);
+  }
+});

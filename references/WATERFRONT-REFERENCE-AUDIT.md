@@ -318,3 +318,13 @@ Embarcadero Center West has five stepped roof sections. The gables rise toward a
 ### 425 Market Street
 
 Folded aluminum spandrels shade the tower’s narrow glazed bays. The roof survey places the main deck at 151.75 m above local grade. The parapet rises to 154.55 m and the highest equipment to about 160 m. Five large cooling fans line the roof. The adjoining public garden has two granite paving colors, tree wells and seating. Furniture below the canopy and small equipment brackets follow photographic estimates. [Building manager](https://www.425marketstreet.info/main.cfm?pid=aboutprop&sid=introduction) · [SPUR’s public-space field guide, page 6](https://www.spur.org/sites/default/files/2013-10/popos-guide.pdf#page=6) · [City aerial](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167777/405236)
+
+### The Metropolitan and BayCrest
+
+The two First Street Metropolitan towers stand on a common three-story podium. The tower at 355 First reaches 81 m, with setbacks at 37, 65 and 76.6 m. At 333 First the stepped shoulders reach a 67.4 m crown. Curved glazing wraps the corners, between pale precast walls and projecting balconies. The survey, engineering inventory and architect’s field photographs establish the heights and form. Window pitch, balcony grouping and small rooftop details are reconstructed. [USGS engineering inventory, PDF p. 387](https://pubs.usgs.gov/sir/2017/5013/sir20175013_iq.pdf#page=387) · [Heller Manus photographs](https://www.hellermanus.com/the-metropolitan)
+
+At BayCrest, the two main residential wings reach 28.5 and 34.1 m above a common local ground reference. Choosing a shared datum preserves the difference between the adjacent roof levels on the sloping parcel. Open courtyards interrupt the block. The additional penthouses are traced from the surface survey, while fine window and equipment details are estimated. [City hearing packet and orthophoto](https://sfgov.legistar.com/View.ashx?GUID=EE92D5F0-36E2-426F-92E8-2C2572F0287B&ID=6400673&M=F)
+
+### People at Pier 14
+
+Two visitors use the concrete seats on the Mission Street art apron, and another pauses in one of the pier’s steel swivel chairs. Their seat and shoe positions follow the same geometry as the furniture. Routes and timing are illustrative. [Installation photographs](https://www.bigartloop.org/corpus) · [Pier designer’s photographs](https://www.romacollaborative.com/pier-14)

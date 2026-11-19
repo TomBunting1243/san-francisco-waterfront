@@ -198,7 +198,7 @@ test('ferry hulls and wakes share the waterfront mist bank and one weather-drive
     assert.match(shader.fragmentShader,/mix\(gl_FragColor.rgb,bayHorizon,distanceMist\)/);
     assert.doesNotMatch(shader.fragmentShader,/#include <fog_fragment>|float edgeHaze/);
   }
-  assert.equal(world.walkerHeads.count,world.walkerCount+world.residentPositions.length);
+  assert.equal(world.walkerHeads.count,world.walkerCount+world.residentPositions.length+world.pier14Visitors.length);
   const matrix=new THREE.Matrix4(),position=new THREE.Vector3();
   world.residentPositions.forEach((anchor,i)=>{
     world.walkerHeads.getMatrixAt(i+world.walkerCount,matrix);position.setFromMatrixPosition(matrix);

@@ -11,6 +11,7 @@ import { streetcarPose } from './streets';
 import {updateTreeBatches} from './tree-batches';
 import { openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { starfieldData } from './sky';
+import {updatePier14Visitors} from './pier14-visitors';
 import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,createQualityMonitor,drawingPixelRatio} from './city-runtime';
 
@@ -515,6 +516,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             world.people.update(i,p.x,p.z,elapsed,1,p.y,hoveredPerson===i?1:0,false,p.heading,poseAt);
           }
           world.residentPositions.forEach((p,i)=>world.people.update(world.walkerCount+i,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===world.walkerCount+i?1:(i%7===0&&elapsed%18<3?.7:0),true));
+          updatePier14Visitors(world.people,world.walkerCount+world.residentPositions.length,world.pier14Visitors,elapsed,hoveredPerson);
           world.people.flush();
         }
         if(motionChanged){
