@@ -12,7 +12,7 @@ test('cab foregrounds clear the eye near plane and leave the center view through
     for(const mode of ['sedan','tram']){
       show(mode);
       const mesh=root.children.find(m=>m.visible),position=mesh.geometry.getAttribute('position');
-      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?145:365));
+      assert.ok(mesh.geometry.index.count/3<(mode==='sedan'?145:6000));
       for(let i=0;i<position.count;i++)assert.ok(Math.hypot(position.getX(i),position.getY(i),position.getZ(i))>camera.near);
       let covered=0,left=0,right=0,bottom=0;
       for(let row=0;row<48;row++)for(let col=0;col<48;col++){
@@ -37,9 +37,10 @@ test('only the selected cab draws; shared GPU resources release once on teardown
   const {root,show,dispose}=createRideInteriors();
   const scene=new T.Scene();scene.add(root);
   assert.equal(root.visible,false);
-  const [car,tram]=root.children;assert.equal(car.material,tram.material);
-  show('sedan');assert.deepEqual([root.visible,car.visible,tram.visible],[true,true,false]);
-  show('tram');assert.deepEqual([root.visible,car.visible,tram.visible],[true,false,true]);
+  assert.equal(root.children.length,0);
+  show('sedan');const [car]=root.children;assert.equal(root.children.length,1);
+  show('tram');const tram=root.children[1];assert.equal(car.material,tram.material);
+  assert.deepEqual([root.visible,car.visible,tram.visible],[true,false,true]);
   show(null);assert.equal(root.visible,false);
   let releases=0;
   for(const resource of [car.geometry,tram.geometry,car.getObjectByName('Windshield wiper').geometry,tram.getObjectByName('Windshield wiper').geometry,car.material])resource.addEventListener('dispose',()=>releases++);
@@ -52,7 +53,7 @@ test('each wiper turns on a sill-mounted spindle, freezes on pause and finishes 
   for(const mode of ['sedan','tram']){
     show(mode);root.updateMatrixWorld(true);
     const cab=root.children.find(m=>m.visible),wiper=cab.getObjectByName('Windshield wiper');
-    const hidden=root.children.find(m=>!m.visible).getObjectByName('Windshield wiper');
+    const hidden=root.children.find(m=>!m.visible)?.getObjectByName('Windshield wiper');
     const meshes=[];root.traverseVisible(o=>{if(o.isMesh)meshes.push(o)});
     assert.equal(meshes.length,2);
     const pivot=wiper.getWorldPosition(new T.Vector3());
@@ -66,7 +67,7 @@ test('each wiper turns on a sill-mounted spindle, freezes on pause and finishes 
     const moving=wiper.rotation.z;assert.ok(moving<-.25&&moving>-1.22);
     updateRain(1,.8,true);updateRain(0,.6,true);assert.equal(wiper.rotation.z,moving);
     root.updateMatrixWorld(true);assert.ok(wiper.getWorldPosition(new T.Vector3()).distanceTo(pivot)<1e-9);
-    assert.equal(hidden.rotation.z,0);
+    if(hidden)assert.equal(hidden.rotation.z,0);
     for(let i=0;i<35;i++)updateRain(0,.06,false);
     assert.equal(Math.abs(wiper.rotation.z),0);updateRain(0,1,false);assert.equal(Math.abs(wiper.rotation.z),0);
     show(null);updateRain(1,.7,false);assert.equal(Math.abs(wiper.rotation.z),0);
@@ -97,4 +98,62 @@ test('both cabs surround the seat and preserve exterior sightlines through both 
     }
   }
   dispose();
+});
+
+test('saloon lighting reaches the passenger compartment while the driving glass and sedan remain clear',()=>{
+  const {root,show,setNight,dispose}=createRideInteriors();
+  show('sedan');show('tram');
+  const [car,tram]=root.children,glow=tram.geometry.getAttribute('cabLight'),position=tram.geometry.getAttribute('position');
+  let front=0,litSides=0,globes=0;
+  for(let i=0;i<glow.count;i++){
+    if(position.getZ(i)<-.70*.06)front+=glow.getX(i);
+    if(glow.getX(i)>2){globes++;assert.ok(position.getY(i)>.80*.06);}
+    if(Math.abs(position.getX(i))>.8*.06&&glow.getX(i)>.4)litSides++;
+  }
+  assert.equal(front,0);assert.ok(globes>=500&&litSides>1000);
+  assert.ok(car.geometry.getAttribute('cabLight').array.every(n=>n===0));
+  const shader={uniforms:{},vertexShader:'#include <begin_vertex>',fragmentShader:'#include <emissivemap_fragment>'};
+  tram.material.onBeforeCompile(shader,{});setNight(.82);assert.equal(shader.uniforms.interiorNight.value,.82);
+  dispose();
+});
+
+test('boarding builds only the selected vehicle and binds PCC printing to an already compiled sedan program',t=>{
+  let canvases=0,canPrint=true;
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'document');
+  const pen={};
+  for(const op of ['arc','beginPath','fill','fillRect','fillText','lineTo','moveTo','restore','save','stroke','translate'])pen[op]=()=>{};
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement(tag){
+    assert.equal(tag,'canvas');canvases++;return {getContext:()=>canPrint?pen:null};
+  }}});
+  t.after(()=>{if(previous)Object.defineProperty(globalThis,'document',previous);else delete globalThis.document;});
+  for(const modes of [[],['sedan'],['tram'],['sedan','tram'],['tram','sedan']]){
+    const {show,root,dispose}=createRideInteriors(),built=new Set(),resources=new Set();
+    let program,material,releases=0;
+    const initial=canvases;
+    show(null);assert.equal(root.children.length,0);
+    for(const mode of [...modes,...modes]){
+      show(mode);built.add(mode);
+      const cab=root.children.find(o=>o.visible);
+      if(!program){
+        material=cab.material;program={...T.ShaderLib.standard,uniforms:{}};
+        material.onBeforeCompile(program,{});resources.add(material);
+      }
+      assert.equal(cab.material,material);assert.equal(root.children.length,built.size);
+      resources.add(cab.geometry);resources.add(cab.getObjectByName('Windshield wiper').geometry);
+      assert.equal(canvases-initial,Number(built.has('tram')));
+      assert.equal(program.uniforms.cardsPrinted.value,built.has('tram'));
+      if(built.has('tram'))resources.add(program.uniforms.carCards.value);
+      else assert.equal(program.uniforms.carCards.value,null);
+    }
+    for(const r of resources)r.addEventListener('dispose',()=>releases++);
+    dispose();dispose();show('tram');
+    assert.equal(releases,resources.size);assert.equal(root.children.length,0);
+    assert.equal(canvases-initial,Number(built.has('tram')));
+  }
+  canPrint=false;
+  const fallback=createRideInteriors();fallback.show('tram');
+  const shader={...T.ShaderLib.standard,uniforms:{}};
+  fallback.root.children[0].material.onBeforeCompile(shader,{});
+  assert.equal(shader.uniforms.cardsPrinted.value,false);assert.equal(shader.uniforms.carCards.value,null);
+  fallback.dispose();
 });

@@ -322,7 +322,7 @@ export function createLandscape() {
       }
     }
   });
-  const salesforce=createSalesforceTower(mappedBuildings.find(b=>b.name==='Salesforce Tower')!);
+  const salesforce=createSalesforceTower(mappedBuildings.find(b=>b.name==='Salesforce Tower')!,nightInk,artClock);
   const transamerica=createTransamericaPyramid(mappedBuildings.find(b=>b.name==='Transamerica Pyramid')!);
   root.add(salesforce,transamerica.root);windowPositions.push(...transamerica.windows);
   const hall=ferryHall(font), ferryBuilding=hall.root;
@@ -580,7 +580,7 @@ export function createLandscape() {
   for(let i=0;i<walkerCount;i++){
     const poseAt=(offset:number)=>waterfrontWalker(offset,i);
     const p=poseAt(0);
-    people.update(i,p.x,p.z,0,1,p.y,0,false,p.heading,poseAt);
+    people.update(i,p.x,p.z,0,1,p.y,0,p.standing,p.heading,poseAt);
   }
   residentPositions.forEach((p,i)=>people.update(walkerCount+i,p.x,p.z,0,i%2?1:-1,p.y,0,true));
   updatePier14Visitors(people,seatStart,pier14Visitors,0);
@@ -627,7 +627,7 @@ export function createLandscape() {
   const fireboat=createFireboat();root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
-  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -872,7 +872,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   for(let i=0;i<walkerCount;i++){
     const poseAt=(offset:number)=>waterfrontWalker(offset,i,variant);
     const p=poseAt(0);
-    people.update(i,p.x,p.z,0,1,p.y,0,false,p.heading,poseAt);
+    people.update(i,p.x,p.z,0,1,p.y,0,p.standing,p.heading,poseAt);
   }
   residents.forEach((p,i)=>people.update(walkerCount+i,p.x,p.z,0,i%2?1:-1,p.y,0,true));
   updatePier14Visitors(people,seatStart,visitors,0);people.flush();

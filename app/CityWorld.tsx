@@ -549,6 +549,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         duskAmount=THREE.MathUtils.lerp(duskAmount,lighting.night,lightEase);
         world.setFacadeClock(lighting.hours,lighting.minutes,duskAmount);
         if(mode)streetIllumination.setCabLamp(lampPosition,lampAim,2.1*Math.max(duskAmount,Math.min(.36,fog*.4+rain*.22)));
+        interiors?.setNight(duskAmount);
         interiors?.updateRain(snowfall?0:rain,dt,still||reducedMotion.current);
         const directSun=nightPrint?0:directSunVisibility(lighting.altitude,cloud,fog);
         sun.shadow.intensity=directSun;
@@ -631,7 +632,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             const region=streetView?variant:undefined;
             const poseAt=(offset:number)=>waterfrontWalker(elapsed+offset,i,region);
             const p=poseAt(0);
-            world.people.update(i,p.x,p.z,elapsed,1,p.y,hoveredPerson===i?1:0,false,p.heading,poseAt);
+            world.people.update(i,p.x,p.z,elapsed,1,p.y,hoveredPerson===i?1:0,p.standing,p.heading,poseAt);
           }
           world.residentPositions.forEach((p,i)=>world.people.update(world.walkerCount+i,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===world.walkerCount+i?1:(i%7===0&&elapsed%18<3?.7:0),true));
           updatePier14Visitors(world.people,world.walkerCount+world.residentPositions.length,world.pier14Visitors,elapsed,hoveredPerson);

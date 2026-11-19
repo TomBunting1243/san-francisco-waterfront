@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import {streetPose} from './streets.ts';
+import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
 import {streetVehicleNose} from './street-vehicles.ts';
 import {harborDatum} from './water-surface.ts';
@@ -82,14 +83,14 @@ export const cyclingPace=.355;
 function along(line:THREE.CatmullRomCurve3,time:number,speed:number,progress:number){
   const u=((progress+time*speed/line.getLength())%1+1)%1;
   const p=line.getPointAt(u),d=line.getTangentAt(u);
-  return {x:p.x,y:p.y,z:p.z,heading:Math.atan2(d.z,d.x)};
+  return {x:p.x,y:p.y,z:p.z,heading:Math.atan2(d.z,d.x),standing:false};
 }
 
 // Two offset lanes joined by half-round turns let people stroll back from
 // the end of a pier or an approach without a teleport or an about-face.
-function outAndBack(axis:THREE.CatmullRomCurve3,offset:number){
+function outAndBack(axis:THREE.CatmullRomCurve3,offset:number,spacing=.25){
   const nodes:THREE.Vector3[]=[];
-  const n=Math.ceil(axis.getLength()/.25);
+  const n=Math.ceil(axis.getLength()/spacing);
   function point(t:number,side:number,forward=0){
     const p=axis.getPointAt(t),d=axis.getTangentAt(t);
     return p.add(new THREE.Vector3((side*d.z+forward*d.x)*offset,0,(-side*d.x+forward*d.z)*offset));
@@ -114,13 +115,36 @@ function approachWalk(axis:THREE.CatmullRomCurve3){
   return outAndBack(new THREE.CatmullRomCurve3(nodes),.044);
 }
 const rinconEntryWalk=approachWalk(rinconApproach),rinconExitWalk=approachWalk(rinconExit);
+// The public opening is on the street. Inside it the walkway turns
+// south to the waiting-room door. Continuing straight would reach the slip.
+const pierPassage=outAndBack(curve([
+  [15.18,-1.991],[15.70,-1.993],[16.30,-1.995],[16.42,-1.990],
+  [16.487,-1.944],[16.515,-1.86],[16.515,-1.55],[16.515,-1.25],
+  [16.49,-1.13],[16.42,-1.075],[16.30,-1.062],[15.88,-1.062],[15.42,-1.062],
+],.06,false),.039,.065);
+const passageHalf=pierPassage.getLength()/2,slowTime=.85,lookTime=4.2;
+const passageLeg=passageHalf/pedestrianPace+slowTime,passagePeriod=passageLeg*2+lookTime;
+function passageVisitor(time:number,index:number){
+  const phase=THREE.MathUtils.euclideanModulo(time+passagePeriod*(index===0?.37:.84),passagePeriod);
+  const standing=phase>=passageLeg&&phase<passageLeg+lookTime;
+  const returning=phase>=passageLeg+lookTime;
+  const legTime=returning?phase-passageLeg-lookTime:Math.min(phase,passageLeg);
+  let distance=pedestrianPace*(legTime-slowTime/2);
+  if(legTime<slowTime)distance=.5*pedestrianPace*legTime**2/slowTime;
+  else if(legTime>passageLeg-slowTime)distance=passageHalf-.5*pedestrianPace*(passageLeg-legTime)**2/slowTime;
+  const progress=(distance+(returning?passageHalf:0))/(2*passageHalf);
+  const p=pierPassage.getPointAt(progress),d=pierPassage.getTangentAt(progress);
+  const glance=standing?.70*Math.sin(Math.PI*(phase-passageLeg)/lookTime):0;
+  return {x:p.x,z:p.z,y:pierOneHalfPassageHeight(p.x,p.z),heading:Math.atan2(d.z,d.x)+glance,standing};
+}
+
 const cityRoutes=[
   {line:rinconWalkers,count:12}, {line:ferry,count:10},
   {line:pierSeven,count:10}, {line:northShore,count:8}, {line:southShore,count:10},
-  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7},
+  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {line:pierPassage,count:2},
 ];
 const streetRoutes=[cityRoutes[0],cityRoutes[5],cityRoutes[6],{line:southShore,count:5}];
-const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3]];
+const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],cityRoutes[7]];
 type Region='street'|'plaza';
 const walks=(region?:Region)=>region==='street'?streetRoutes:region==='plaza'?plazaRoutes:cityRoutes;
 export const waterfrontWalkerCount=(region?:Region)=>walks(region).reduce((sum,r)=>sum+r.count,0);
@@ -128,6 +152,7 @@ export const waterfrontWalkerCount=(region?:Region)=>walks(region).reduce((sum,r
 export function waterfrontWalker(time:number,index:number,region?:Region){
   for(const {line,count} of walks(region)){
     if(index<count){
+      if(line===pierPassage)return passageVisitor(time,index);
       const phase=(index+.18+.17*Math.sin(index*3.51))/count+.093;
       return along(line,time,pedestrianPace,phase);
     }

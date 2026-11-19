@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
-import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import {footprintGeometry} from './sf-map.ts';
 import {bakeRigidChunk} from './city-blocks.ts';
 
 type Pane={x:number;y:number;z:number;w:number;h:number;ry:number};
 type XY=[number,number];
 const plaster='#c9bda9',trim='#e0d5bc',sill='#b2a991',iron='#465657',glass='#597478';
-const cube=new THREE.BoxGeometry(1,1,1);
+const cube=new THREE.BoxGeometry(1,1,1),inkPlane=new THREE.PlaneGeometry(1,1).rotateY(Math.PI);
 
 // Port National Register district, section 7, Pier 5; photograph 13 (street face).
 // https://www.sfport.com/files/2022-12/EmbarcaderoRegisterNominationSec7.pdf
@@ -25,6 +24,9 @@ export function pierFive(footprint:number[][],font:Font){
   }
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,parent=frame){
     const m=part(cube,c,x,y,z,parent);m.scale.set(w,h,d);return m;
+  }
+  function flat(x:number,y:number,z:number,w:number,h:number,c:string){
+    const m=part(inkPlane,c,x,y,z);m.scale.set(w,h,1);return m;
   }
   const ring=(coords:XY[])=>new THREE.Shape(coords.map(([x,y])=>new THREE.Vector2(x,y)));
   function prism(points:XY[],holes:XY[][],depth:number,z:number,c:string){
@@ -48,20 +50,28 @@ export function pierFive(footprint:number[][],font:Font){
   }
   // Recess the west wall behind the new openings; the mapped east wall steps back mid-block.
   const plan=footprint.slice(0,-1).map(([x,z])=>[(x-a[0])*Math.cos(angle)+(z-a[1])*Math.sin(angle),-(x-a[0])*Math.sin(angle)+(z-a[1])*Math.cos(angle)]);
-  plan[0][1]=plan[1][1]=.138;
+  plan[0][1]=plan[1][1]=.37;
   part(footprintGeometry(plan,.674),plaster,0,0,0);
   const cx=1.922,left=cx-.786,right=cx+.786,shoulder=.827,peak=.998;
   const holes:XY[][]=[];
   function sash(x:number,w:number,lo:number,hi:number,door=false){
     holes.push(rect(x,w,lo,hi));
-    box(x,(lo+hi)/2,.065,w+.004,hi-lo,.012,glass);
-    box(x,lo+(hi-lo)*(door?.23:.56),.050,w,.009,.017,iron);
+    const upstairs=lo>.4,back=upstairs?.087:.129;
+    flat(x,(lo+hi)/2,back-.006,w+.004,hi-lo,upstairs?glass:'#776e60');
+    for(const side of [-1,1]){
+      const reveal=flat(x+side*w*.49,(hi+lo)/2,back/2+.016,back-.025,hi-lo,'#857c6c');
+      reveal.rotation.y=side*Math.PI/2;
+    }
+    box(x,hi-.005,back/2+.016,w,.010,back-.025,'#c0ab87');
+    flat(x-w*.22,lo+(hi-lo)*.44,back-.015,w*.39,(hi-lo)*.62,upstairs?'#70817c':'#a69877');
+    if(!upstairs)box(x+w*.22,lo+(hi-lo)*.24,back-.012,w*.35,.017,.013,'#505b52');
+    flat(x,lo+(hi-lo)*(door?.23:.56),.0415,w,.009,iron);
     box(x,(hi+lo)/2,.050,.009,hi-lo,.017,iron);
     if(door){
       box(x,lo+.025,.048,w,.05,.015,iron);
       box(x+.016,lo+.066,.038,.007,.031,.011,sill);
     }else box(x,lo-.005,-.006,w+.023,.011,.032,sill);
-    night(x-w*.26,(lo+hi)*.5,.057,w*.39,(hi-lo)*.39);
+    night(x-w*.25,lo+(hi-lo)*.49,back-.018,w*.30,(hi-lo)*.43);
   }
   const gate=arch(cx,.93,.43,.335),spurX=left*.24,spur=arch(spurX,.405,.276,.060);
   holes.push(gate,spur);
@@ -81,7 +91,9 @@ export function pierFive(footprint:number[][],font:Font){
   // The returning soffits are the actual thickness of the stucco cutouts.
   prism([[0,0],[length,0],[length,.674],[right,.674],[right,shoulder],[cx+.52,shoulder],
     [cx,peak],[cx-.52,shoulder],[left,shoulder],[left,.674],[0,.674]],holes,.139,0,plaster);
-  prism(gate,[],.012,.115,glass);prism(spur,[],.012,.119,glass);
+  // The monumental arch is a deep vestibule. The fanlight is overhead;
+  // depth and the doors beyond remain legible below the transom.
+  prism(gate.slice(2),[],.012,.115,glass);prism(spur.slice(2),[],.012,.119,glass);
   for(const [x,w,spring,rise] of [[cx,.93,.43,.335],[spurX,.405,.276,.060]]){
     for(let i=0;i<16;i++){
       const t0=i*Math.PI/16+.008,t1=(i+1)*Math.PI/16-.008;
@@ -94,23 +106,45 @@ export function pierFive(footprint:number[][],font:Font){
     }
     for(let i=-3;i<=3;i++){
       const u=i/4,top=spring+rise*Math.sqrt(1-u*u);
-      box(x+w*u/2,(top+threshold)/2,.105,.010,top-threshold,.016,iron);
+      box(x+w*u/2,(top+spring)/2,.105,.010,top-spring,.016,iron);
     }
-    for(const y of [.204,spring])box(x,y,.102,w,.014,.017,iron);
-    night(x-w*.31,.146,.110,w*.09,.131);
-    box(x+.019,.134,.091,.007,.036,.014,trim);
+    box(x,spring,.102,w,.021,.029,iron);
+    const back=x===cx?.319:.224;
+    for(const side of [-1,1]){
+      box(x+side*(w/2-.006),(spring+threshold)/2,back/2,.012,spring-threshold,back,'#a29680');
+      box(x+side*w*.25,(spring+threshold)/2,back,w*.48,spring-threshold,.017,'#5b6f6c');
+      box(x+side*w*.32,.172,back-.014,w*.24,.139,.010,'#a09878');
+      night(x+side*w*.32,.174,back-.022,w*.19,.115);
+      box(x+side*w*.22,.098,back-.033,w*.40,.071,.018,'#736958');
+      box(x+side*.017,.155,back-.053,.006,.036,.013,trim);
+    }
+    box(x,.193,back-.035,.014,.268,.022,iron);
+    box(x,spring-.008,back/2,w,.016,back,'#b9ad8e');
+    box(x,.059,back/2,w,.012,back,sill);
+
+  }
+  for(const x of [.040,left/2,left-.045,right+.045,(right+length)/2,length-.04]){
+    for(let y=.142;y<.637;y+=.063)flat(x,y,-.017,.067,.005,'#aca28f');
+    box(x,.088,-.004,.084,.057,.034,sill);
+  }
+  for(const [start,end] of [[0,left],[right,length]]){
+    box((start+end)/2,.617,-.005,end-start,.009,.028,sill);
+    box((start+end)/2,.657,-.015,end-start,.012,.063,trim);
   }
   // Thick gabled front, capped shoulder piers and the lower roof behind it.
   for(const side of [-1,1]){
     const foot=cx+side*.696;
     prism([[foot-.086,.038],[foot+.086,.038],[foot+.066,shoulder],[foot-.066,shoulder]],[],.067,-.028,plaster);
+    box(foot,.117,-.010,.205,.083,.097,sill);
+    box(foot,.168,-.013,.195,.017,.101,trim);
+    box(foot,.792,-.015,.168,.010,.086,sill);
     box(foot,shoulder-.024,-.001,.189,.032,.092,trim);
     const dx=.52,dy=peak-shoulder;
     const rake=box(cx+side*dx/2,(peak+shoulder)/2,-.009,Math.hypot(dx,dy),.018,.048,trim);
     rake.rotation.z=-side*Math.atan2(dy,dx);
   }
   prism([[left,.666],[right,.666],[right,.725],[cx,.877],[left,.725]],[],.548,.116,sill);
-  const sign=new TextGeometry('PIER 5',{font,size:.061,depth:.0018,curveSegments:2});
+  const sign=new THREE.ShapeGeometry(font.generateShapes('PIER 5',.061),2);
   sign.computeBoundingBox();sign.translate(-(sign.boundingBox!.max.x+sign.boundingBox!.min.x)/2,0,0);
   part(sign,iron,cx,.831,-.004).rotation.y=Math.PI;
   const pole=part(new THREE.CylinderGeometry(.003,.005,.486,8),sill,cx,1.212,.097);
@@ -143,6 +177,16 @@ export function pierFive(footprint:number[][],font:Font){
   }
   frame.updateMatrixWorld(true);
   const batch=bakeRigidChunk('Pier 5 bulkhead and glazed entries',parts,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.89}));
+  // Port 1997–2014 Waterfront Plan Review, p. 200: warm washes on the
+  // arch reveal and bay piers. The district baker samples this once at build.
+  batch.userData.uplight=(p:THREE.Vector3,n:THREE.Vector3)=>{
+    const x=(p.x-a[0])*Math.cos(angle)+(p.z-a[1])*Math.sin(angle);
+    const depth=-(p.x-a[0])*Math.sin(angle)+(p.z-a[1])*Math.cos(angle);
+    if(depth>.335||p.y<.09||p.y>.86||n.y>.75)return 0;
+    const edge=Math.abs(Math.abs(x-cx)-.70);
+    return Math.max(0,1-edge/.135)*(.35+.26*p.y)+
+      (depth>.07&&Math.abs(x-cx)<.478?.25:0);
+  };
   root.name='Pier 5';root.add(batch);
   return {root,windows};
 }

@@ -9,10 +9,10 @@ const bounds=o=>new THREE.Box3().setFromObject(o);
 const meter=.06;
 const feet=length=>length*.3048*meter;
 
-test('Salesforce preserves the mapped base, measured taper and open crown',()=>{
+test('Salesforce preserves the mapped base, measured taper and continuous summit rim',()=>{
   const site=tower('Salesforce Tower'),model=createSalesforceTower(site);
   const body=model.getObjectByName('Rounded-square glazed shaft');
-  const crown=model.getObjectByName('Open steel screen crown');
+  const crown=model.getObjectByName('Perforated aluminum lantern');
   const plant=model.getObjectByName('Recessed crown plant');
   assert.ok(Math.abs(bounds(model).max.y-site.h)<.0001);
   assert.equal(salesforceScale(0),salesforceScale(382));
@@ -43,4 +43,30 @@ test('Transamerica retains the 853-foot summit, quartz spire, two service fins a
   const center=bounds(root).getCenter(new THREE.Vector3());
   const ray=new THREE.Raycaster(new THREE.Vector3(center.x,8,5),new THREE.Vector3(0,0,-1));
   assert.ok(ray.intersectObject(root,true).length>0,'Pyramid faces the opening waterfront camera');
+});
+
+test('the perforated lantern presents continuous metal coverage as the camera moves, with filtered panels and night imagery',()=>{
+  const site=tower('Salesforce Tower'),night={value:0},time={value:2},root=createSalesforceTower(site,night,time);
+  const screen=root.getObjectByName('Perforated aluminum lantern'),b=bounds(screen),center=b.getCenter(new THREE.Vector3());
+  assert.equal(site.id,431972186);assert.equal(screen.geometry.index.count/3,820);
+  const metal=screen.material;
+  assert.ok(!metal.transparent&&metal.depthWrite&&metal.alphaTest===0&&!metal.alphaToCoverage);
+  assert.ok(metal.map.generateMipmaps&&metal.map.minFilter===THREE.LinearMipmapLinearFilter);
+  assert.equal(metal.map.image.width,256);
+  const ray=new THREE.Raycaster(),eye=new THREE.Vector3(),point=new THREE.Vector3(),side=new THREE.Vector3();
+  for(const angle of [-1.4,0,.67,1.9])for(const distance of [6,95,190]){
+    eye.set(center.x+Math.cos(angle)*distance,center.y-.07*distance,center.z+Math.sin(angle)*distance);
+    side.set(-Math.sin(angle),0,Math.cos(angle));
+    for(const scale of [-.33,0,.33])for(let i=1;i<20;i++){
+      point.copy(center).addScaledVector(side,scale);point.y=THREE.MathUtils.lerp(b.min.y,b.max.y,i/20);
+      ray.set(eye,point.sub(eye).normalize());assert.ok(ray.intersectObject(screen).length);
+    }
+  }
+  const shader={...THREE.ShaderLib.standard,uniforms:{}};
+  metal.onBeforeCompile(shader,{});
+  assert.equal(shader.uniforms.lanternNight,night);assert.equal(shader.uniforms.lanternTime,time);
+  assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance+=')&&shader.fragmentShader.includes('#include <fog_fragment>'));
+  const alpha=metal.map.image.data;
+  for(let i=3;i<alpha.length;i+=4)assert.equal(alpha[i],255);
+  metal.dispose();
 });

@@ -66,13 +66,58 @@ export function salesforceScale(feet:number){
   return salesforceProfile.at(-1)![1];
 }
 
-export function createSalesforceTower(tower:Tower){
+type Clock={value:number};
+
+// SF Planning's 2017 review describes a perforated-aluminum skin above the
+// glazed parapet. Model the density of the drilled sheet as surface pigment:
+// minified mip levels converge to the mean panel tone without a stippled edge.
+// https://sfplanning.s3.amazonaws.com/commissions/cpcpackets/2012.0257EBX.pdf
+function lanternMetal(){
+  const size=256,rgba=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const row=Math.floor(y/8),dx=((x+.5+4*(row%2))%8)-4,dy=(y+.5)%8-4;
+    const hole=1-THREE.MathUtils.smoothstep(Math.hypot(dx,dy),2.0,2.8);
+    const edge=Math.min(x+.5,size-x-.5,y+.5,size-y-.5);
+    const tint=1-hole*.42-(1-THREE.MathUtils.smoothstep(edge,.25,1.9))*.18;
+    const i=4*(y*size+x);
+    rgba[i]=Math.round(239*tint);rgba[i+1]=Math.round(244*tint);rgba[i+2]=Math.round(242*tint);rgba[i+3]=255;
+  }
+  const map=new THREE.DataTexture(rgba,size,size);
+  map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;
+  map.magFilter=THREE.LinearFilter;map.minFilter=THREE.LinearMipmapLinearFilter;
+  map.generateMipmaps=true;map.anisotropy=4;map.repeat.set(24,6);map.needsUpdate=true;
+  return map;
+}
+
+function lanternMaterial(night:Clock,time:Clock){
+  const map=lanternMetal(),material=new THREE.MeshStandardMaterial({color:'#c4cccb',map,roughness:.67,metalness:.13,side:THREE.DoubleSide});
+  material.addEventListener('dispose',()=>map.dispose());
+  material.onBeforeCompile=shader=>{
+    shader.uniforms.lanternNight=night;shader.uniforms.lanternTime=time;
+    shader.vertexShader='varying vec2 lanternUV;\n'+shader.vertexShader.replace('#include <uv_vertex>','#include <uv_vertex>\nlanternUV=uv;');
+    // Original, low-frequency tidal imagery for the model. Campbell's actual
+    // Day for Night projects city footage back onto the screen with 11,000 LEDs.
+    // https://www.jimcampbell.tv/portfolio/day-for-night
+    shader.fragmentShader='uniform float lanternNight; uniform float lanternTime; varying vec2 lanternUV;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      if(lanternNight>.01){
+        float az=lanternUV.x*6.2831853, y=lanternUV.y;
+        float tide=.47+.16*sin(az*2.-lanternTime*.19)+.10*cos(az*3.+lanternTime*.12);
+        float wave=exp(-17.*abs(y-tide))+.30*exp(-26.*abs(y-tide+.17));
+        float halo=.09+.14*(1.-smoothstep(.08,.95,y));
+        totalEmissiveRadiance+=smoothstep(.05,.96,lanternNight)*(vec3(.54,.68,.78)*wave+vec3(.53,.57,.55)*halo);
+      }`);
+  };
+  material.customProgramCacheKey=()=>'salesforce-perforated-lantern-v1';
+  return material;
+}
+
+export function createSalesforceTower(tower:Tower,night:Clock={value:0},time:Clock={value:0}){
   const root=new THREE.Group();root.name='Salesforce Tower';
   const plan=outline(tower),center=centroid(plan);
   // A station retains every mapped plan corner. Regular curtain-wall joints
   // are interpolated within the surveyed outline and projected up the profile.
   const offsets=plan.map(p=>p.clone().sub(center));
-  const walls=new PaintedSurface(),fins=new PaintedSurface(),screen=new PaintedSurface();
+  const walls=new PaintedSurface(),fins=new PaintedSurface();
   function point(offset:THREE.Vector2,feet:number,lip=0){
     const s=salesforceScale(feet),radius=offset.length();
     return new THREE.Vector3(center.x+offset.x*(s+lip/radius),feet/1070*tower.h,center.y+offset.y*(s+lip/radius));
@@ -99,24 +144,43 @@ export function createSalesforceTower(tower:Tower){
     bands(feet,.72,feet<382?.049:.034,floor%6===0?'#b9bdaf':'#a0b2af',fins);
     bands(feet-.64,.43,.014,'#516e7b',fins);
   }
-  for(let feet=sfScreen;feet<1070;feet+=7.5){
-    bands(feet,1.05,.018,feet<988?'#a9b6ae':'#a0b3b4',screen);
-  }
-  bands(1069,1,.013,'#bec6ba',screen);
   for(let i=0;i<offsets.length;i++){
     const a=offsets[i],b=offsets[(i+1)%offsets.length],distance=a.distanceTo(b);
     const steps=Math.max(1,Math.round(distance/.129));
     for(let step=0;step<steps;step++){
       const from=a.clone().lerp(b,(step+.33)/steps);
       const to=a.clone().lerp(b,(step+.33)/steps+Math.min(.28/steps,.015/distance));
-      for(let s=1;s<salesforceProfile.length;s++){
+      for(let s=1;salesforceProfile[s-1][0]<sfScreen;s++){
         const low=Math.max(15,salesforceProfile[s-1][0]),high=salesforceProfile[s][0];
         const depth=low<382?.044:low<sfRoof?.039:.019;
-        (low>=sfScreen?screen:fins).quad(point(from,low,depth),point(to,low,depth),point(to,high,depth),point(from,high,depth),
-          low>=sfScreen?'#9caeaf':step%3===0?'#a7b7b3':'#9caeb0');
+        fins.quad(point(from,low,depth),point(to,low,depth),point(to,high,depth),point(from,high,depth),
+          step%3===0?'#a7b7b3':'#9caeb0');
       }
     }
   }
+  const perimeter=[0];
+  for(let i=0;i<offsets.length;i++)perimeter.push(perimeter[i]+offsets[i].distanceTo(offsets[(i+1)%offsets.length]));
+  const pitch=offsets.length+1,positions:number[]=[],uv:number[]=[],indices:number[]=[];
+  const hoops=[[sfScreen,0],[1004,0],[1043,0],[1070,0],[1070,-.018],[1068,-.018]];
+  for(const [j,[feet,lip]] of hoops.entries())for(let i=0;i<pitch;i++){
+    const p=point(offsets[i%offsets.length],feet,lip);
+    positions.push(p.x,p.y,p.z);uv.push(perimeter[i]/perimeter.at(-1)!, (feet-sfScreen)/(1070-sfScreen));
+    if(j&&i){
+      const d=j*pitch+i-1,c=d+1,b=c-pitch,a=d-pitch;
+      indices.push(a,b,c,a,c,d);
+    }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();
+  const normals=g.getAttribute('normal'),normal=new THREE.Vector3(),other=new THREE.Vector3();
+  for(let j=0;j<hoops.length;j++){
+    const first=j*pitch,last=first+pitch-1;
+    normal.fromBufferAttribute(normals,first).add(other.fromBufferAttribute(normals,last)).normalize();
+    normals.setXYZ(first,normal.x,normal.y,normal.z);normals.setXYZ(last,normal.x,normal.y,normal.z);
+  }
+  const screen=new THREE.Mesh(g,lanternMaterial(night,time));screen.name='Perforated aluminum lantern';
+  screen.receiveShadow=true;
   // The screen's open top exposes its inner maintenance structure rather than
   // putting a solid dome above the curtain wall.
   const inner=new PaintedSurface();
@@ -126,7 +190,7 @@ export function createSalesforceTower(tower:Tower){
     inner.triangle(point(a,1020),point(b,1020),new THREE.Vector3(center.x,tower.h*1020/1070,center.y),'#8b9a95');
   }
   root.add(walls.mesh('Rounded-square glazed shaft'),fins.mesh('Floor sunshades and vertical mullions'),
-    screen.mesh('Open steel screen crown'),inner.mesh('Recessed crown plant'));
+    screen,inner.mesh('Recessed crown plant'));
   return root;
 }
 

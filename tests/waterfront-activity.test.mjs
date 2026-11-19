@@ -80,3 +80,54 @@ test('three skaters roll on brick clear of the vendor line and the basin, includ
     for(let t=0;t<360;t+=7.8)checkFloor(waterfrontWalker(t,id),courts,.01);
   }
 });
+
+test('two shared walkers turn inside Pier 1½, pause, then return on supported clear lanes',()=>{
+  const scene=createLandscape(),positions=[];
+  scene.root.updateMatrixWorld(true);
+  // Keep the actual baked triangles around this short route, including curb
+  // furniture, roof beams and glazing. Probe both sides of the opaque geometry.
+  const area=new THREE.Box3(new THREE.Vector3(15,-.15,-2.2),new THREE.Vector3(16.85,.67,-.83));
+  const tri=new THREE.Triangle(),bounds=new THREE.Box3();
+  for(const m of scene.architectureChunks){
+    if(!area.intersectsBox(m.geometry.boundingBox))continue;
+    const g=m.geometry,pos=g.attributes.position;
+    for(let i=0;i<g.index.count;i+=3){
+      for(const [k,v] of [tri.a,tri.b,tri.c].entries())v.fromBufferAttribute(pos,g.index.getX(i+k)).applyMatrix4(m.matrixWorld);
+      bounds.setFromPoints([tri.a,tri.b,tri.c]);if(!area.intersectsBox(bounds))continue;
+      for(const v of [tri.a,tri.b,tri.c])positions.push(v.x,v.y,v.z);
+    }
+  }
+  const local=new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(positions,3)),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const ray=new THREE.Raycaster(),v=new THREE.Vector3(),down=new THREE.Vector3(0,-1,0),up=new THREE.Vector3(0,1,0);
+  const first=waterfrontWalkerCount()-2,plaza=waterfrontWalkerCount('plaza')-2;
+  let minSpace=Infinity;
+  for(let i=0;i<2;i++){
+    let outside=false,entered=false,looked=false,returned=false,held;
+    for(let t=0;t<=155;t+=.38){
+      const p=waterfrontWalker(t,first+i),other=waterfrontWalker(t,first+1-i);
+      minSpace=Math.min(minSpace,Math.hypot(other.x-p.x,other.z-p.z));
+      assert.deepEqual(p,waterfrontWalker(t,plaza+i,'plaza'));
+      if(p.z<-1.94){outside=true;if(looked)returned=true;}
+      if(p.z>-1.7&&p.z<-1.25){entered=true;assert.ok(Math.abs(p.x-16.515)<.06);}
+      if(p.standing){
+        assert.ok(p.x<15.45&&Math.abs(p.z+1.045)<.05);looked=true;
+        if(held){assert.ok(Math.hypot(held.x-p.x,held.z-p.z)<1e-7);}
+        held=p;
+      }else held=undefined;
+      assert.ok(p.z<-.98,'stay landward of the slip');
+      for(const offset of [-.012,0,.012]){
+        const x=p.x+Math.sin(p.heading)*offset,z=p.z-Math.cos(p.heading)*offset;
+        ray.set(v.set(x,p.y+.012,z),down);ray.far=.022;
+        const floor=ray.intersectObject(local,false)[0];assert.ok(floor&&Math.abs(floor.point.y-p.y)<.004,'foot support '+JSON.stringify(p));
+      }
+      ray.set(v.set(p.x,p.y+.012,p.z),up);ray.far=.136;
+      assert.equal(ray.intersectObject(local,false).length,0,'head clearance '+JSON.stringify(p));
+      for(const sign of [-1,1]){
+        ray.set(v.set(p.x,p.y+.068,p.z),new THREE.Vector3(sign*Math.sin(p.heading),0,-sign*Math.cos(p.heading)));
+        ray.far=.026;assert.equal(ray.intersectObject(local,false).length,0,'shoulder clearance '+JSON.stringify(p));
+      }
+    }
+    assert.ok(outside&&entered&&looked&&returned);
+  }
+  assert.ok(minSpace>.055,'opposing pedestrians have separate passing lanes');
+});
