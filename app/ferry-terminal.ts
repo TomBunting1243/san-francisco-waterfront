@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {doradoBoardingFreeboard} from './dorado-ferry.ts';
+import {berthThresholds} from './ferry-service.ts';
 import {center,footprintGeometry,sfMap} from './sf-map.ts';
 import {harborDatum,waterSurface} from './water-surface.ts';
 
@@ -38,14 +39,17 @@ export function createBoardingBrows(count:number){
   mesh.name='Telescoping ferry boarding brows';mesh.frustumCulled=false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const part=new THREE.Object3D();
-  function update(i:number,pose:{gate:Gate;x:number;y:number;brow:number}){
-    const [x,z]=boardingStops[pose.gate],side=Math.sign(pose.x-x);
+  function update(i:number,pose:{gate:Gate;x:number;y:number;brow:number;stopX?:number;stopZ?:number;hullHalfBeam?:number;boardingFreeboard?:number}){
+    const [fallbackX,fallbackZ]=boardingStops[pose.gate];
+    const x=pose.stopX??fallbackX,z=pose.stopZ??fallbackZ,side=Math.sign(pose.x-x);
+    const sill=pose.boardingFreeboard??doradoBoardingFreeboard;
     if(pose.brow<=0){
       part.position.set(x,waterSurface.level,z);part.scale.set(0,0,0);
     }else{
-      const start=x+side*.020, end=pose.x-side*.308;
-      const rise=(pose.y-waterSurface.level)*pose.brow,run=(end-start)*pose.brow;
-      part.position.set(start+run/2,waterSurface.level+doradoBoardingFreeboard-.005+rise/2,z);
+      const shore=pose.gate==='C'?.084+.0495:waterSurface.level+sill;
+      const start=x+side*(pose.gate==='C'?.026:.020),end=pose.x-side*((pose.hullHalfBeam??.315)-.007);
+      const rise=(pose.y+sill-shore)*pose.brow,run=(end-start)*pose.brow;
+      part.position.set(start+run/2,shore-.004+rise/2,z);
       part.rotation.z=Math.atan2(rise,run);
       part.scale.set(Math.hypot(run,rise),.008,.091);
     }
@@ -159,21 +163,29 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
       // The flat float sits below the high-freeboard ferries. A longitudinal
       // boarding ramp rises to a short transverse brow at the service opening.
-      const side=Math.sign(stopX-cx), rampX=stopX-side*.091;
-      const sill=waterSurface.level+doradoBoardingFreeboard;
-      const rampStart=new THREE.Vector3(rampX,deckY-.006,stopZ-1.79);
-      const rampEnd=new THREE.Vector3(rampX,sill-.006,stopZ);
-      link(rampStart,rampEnd,.012,'#aab4ad',landing,.123).name='Adjustable vessel boarding ramp';
-      for(const offset of [-.057,.057]){
-        const rail=new THREE.Vector3(offset,.065,0);
-        link(rampStart.clone().add(rail),rampEnd.clone().add(rail),.007,steel,landing);
-        for(let i=0;i<=5;i++){
-          const at=rampStart.clone().lerp(rampEnd,i/5);
-          box(.008,.065,.008,at.x+offset,at.y+.0325,at.z,steel,landing);
-        }
+      const thresholds=[{x:stopX,z:stopZ,freeboard:doradoBoardingFreeboard}];
+      if(gate==='E'||gate==='F'){
+        const [x,z]=berthThresholds[gate==='E'?'E2':'F2'];
+        thresholds.push({x,z,freeboard:doradoBoardingFreeboard});
       }
-      box(.177,.012,.126,stopX-side*.065,sill-.006,stopZ,'#b4b8ab',landing).name='Vessel boarding threshold';
-      box(.022,.003,.127,stopX+side*.012,sill+.0015,stopZ,yellow,landing);
+      if(gate==='B')thresholds.push({x:6.617,z:6.456,freeboard:.084});
+      for(const {x:stopX,z:stopZ,freeboard} of thresholds){
+        const side=Math.sign(stopX-cx), rampX=stopX-side*.091;
+        const sill=waterSurface.level+freeboard;
+        const rampStart=new THREE.Vector3(rampX,deckY-.006,stopZ-1.79);
+        const rampEnd=new THREE.Vector3(rampX,sill-.006,stopZ);
+        link(rampStart,rampEnd,.012,'#aab4ad',landing,.123).name='Adjustable vessel boarding ramp';
+        for(const offset of [-.057,.057]){
+          const rail=new THREE.Vector3(offset,.065,0);
+          link(rampStart.clone().add(rail),rampEnd.clone().add(rail),.007,steel,landing);
+          for(let i=0;i<=5;i++){
+            const at=rampStart.clone().lerp(rampEnd,i/5);
+            box(.008,.065,.008,at.x+offset,at.y+.0325,at.z,steel,landing);
+          }
+        }
+        box(.177,.012,.126,stopX-side*.065,sill-.006,stopZ,'#b4b8ab',landing).name='Vessel boarding threshold';
+        box(.022,.003,.127,stopX+side*.012,sill+.0015,stopZ,yellow,landing);
+      }
     }else{
       for(const [x,z] of [to,[stopX-.15,stopZ]]){
         const cap=deckY-depth, toe=waterSurface.level-.32;
@@ -200,7 +212,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       for(let j=0;j<count;j++){
         const t=(j+.5)/count,x=THREE.MathUtils.lerp(ax,bx,t),z=THREE.MathUtils.lerp(az,bz,t);
         const threshold=Math.hypot(x-to[0],z-to[1])<width*.61;
-        const berth=Math.hypot(x-stopX,z-stopZ)<.165;
+        const dual=gate==='B'||gate==='E'||gate==='F';
+        const berth=Math.hypot(x-stopX,z-stopZ)<.165||(dual&&Math.abs(z-stopZ)<.16&&Math.abs(x-cx)>.30);
         const sideLoading=covered&&Math.abs(x-cx)>.31&&[6.19,6.43,7.1].some(shipZ=>Math.abs(z-(gate==='B'?shipZ-.61:shipZ))<.085);
         if(threshold||berth||sideLoading)continue;
         const a=new THREE.Vector3(THREE.MathUtils.lerp(ax,bx,j/count),deckY+.065,THREE.MathUtils.lerp(az,bz,j/count));

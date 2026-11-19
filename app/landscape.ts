@@ -2,6 +2,8 @@ import {createPromenadeTransit} from './promenade-transit.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
 import {applyWalkPanelJoints} from './promenade-pavement.ts';
 import {ferryFleet,ferryPose} from './motion.ts';
+import {collectStreetGlobes,createSignalHousings} from './street-illumination.ts';
+export {createStreetIllumination} from './street-illumination.ts';
 import {buildPromenadeLighting} from './promenade-lighting.ts';
 import {createCanopyMaterial} from './canopy-pigment.ts';
 import {createFerryMarket} from './ferry-market.ts';
@@ -37,7 +39,8 @@ import {addRinconRestaurant} from './rincon-restaurants.ts';
 import {createRememberedWaterfront} from './remembered-waterfront.ts';
 import {bindFountainWaterClock,fountainWaterName} from './fountain-flow.ts';
 import {createFireboat} from './fireboat.ts';
-import {createDoradoFerry} from './dorado-ferry.ts';
+import {createServiceFerry,serviceFerryPaint} from './service-ferries.ts';
+import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
 import {bakeBlocks,freezeBakedArchitecture} from './city-blocks.ts';
@@ -55,6 +58,7 @@ import {isMooredVessel,mooredVessel,pierThreeFloat} from './moored-vessels.ts';
 import {windowGlow,applyWindowLighting} from './window-lighting.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
+import {addBayLightStrand,createBayLights} from './bay-lights.ts';
 import {buildApproachRoad} from './approach-road.ts';
 import {buildApproachBlocks} from './approach-blocks.ts';
 import {hillsCoffeeTubes} from './coffee-neon.ts';
@@ -84,6 +88,7 @@ import {add300Mission} from './300-mission.ts';
 import {add100Pine} from './100-pine.ts';
 import {addMarketCenterPlaza} from './market-center-plaza.ts';
 import {addMarketCenter} from './market-center.ts';
+import {add455Market} from './455-market.ts';
 import {add333Market} from './333-market.ts';
 import {addCaliforniaCenter} from './california-center.ts';
 import {addHarrison} from './harrison.ts';
@@ -135,8 +140,9 @@ export function createLandscape() {
   const waterMaterial = new THREE.MeshStandardMaterial({ color: '#a5ccd1', roughness: .38, metalness: .15 });
   const waterTime = { value: 0 };
   const nightInk={value:0};
-  const hullShadows=Array.from({length:ferryFleet.length+2},()=>new THREE.Vector3(10000,10000,0));
-  const bayWeather=configureBayWater(waterMaterial,waterTime,hullShadows,nightInk);
+  const hullShadows=Array.from({length:ferryFleet.length+2},()=>new THREE.Vector4(10000,10000,1,0));
+  const artClock={value:0};
+  const bayWeather=configureBayWater(waterMaterial,waterTime,hullShadows,nightInk,artClock);
   const water = new THREE.Mesh(baySurfaceGeometry(), waterMaterial);
   water.rotation.x = -Math.PI / 2; water.position.y = waterSurface.level; water.receiveShadow = true; root.add(water);
   addSurveyShore(mesh,bayReliefBankHeight);
@@ -223,6 +229,7 @@ export function createLandscape() {
     if(add360Spear(b,root,windowPositions)||add160Spear(b,root,windowPositions,font))return;
     if(add211Main(b,root,windowPositions)||add300Mission(b,root,windowPositions))return;
     if(addParkTower(b,root,windowPositions)||addHarrison(b,root,windowPositions)||add100Pine(b,root,windowPositions))return;
+    if(add455Market(b,root,windowPositions))return;
     if(add333Market(b,root,windowPositions)||addCaliforniaCenter(b,root,windowPositions))return;
     if(addMarketCenter(b,root,windowPositions)||addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
@@ -348,14 +355,12 @@ export function createLandscape() {
     for(let i=0;i<=96;i++){
       const t=i/96,z=from+(to-from)*t,y=ya+(yb-ya)*t-(main?4.7:1.65)*4*t*(1-t);
       points.push(new THREE.Vector3(x,y,z));
-      if(i%2===0)cableLightPositions.push(x,y+.045,z);
-      if(i%3===0)for(let yy=deckHigh+.15;yy<y-.05;yy+=.21)cableLightPositions.push(x,yy,z);
+      if(i%3===0&&i>0&&i<96)addBayLightStrand(cableLightPositions,x,z,y);
       if(i%3===0&&y>deckHigh+.12)pole(new THREE.Vector3(x,deckHigh+.05,z),new THREE.Vector3(x,y,z),.017,'#94aaa9',bridge);
     }
     mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.027,5,false),'#516d79',0,0,0,bridge);
   }
-  const bridgeLightMaterial=new THREE.PointsMaterial({color:'#d8e8ed',size:1.25,sizeAttenuation:false,transparent:true,opacity:0,depthWrite:false,toneMapped:false});
-  const bridgeLights=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(cableLightPositions,3)),bridgeLightMaterial);bridge.add(bridgeLights);
+  const bayLights=createBayLights(cableLightPositions,artClock);bridge.add(bayLights.lights);
   const roadLightPositions:number[]=[];
   for(let z=0;z<bridgeEnd;z+=3)roadLightPositions.push(-.61,deckHigh+.64,z,.61,deckHigh+.64,z);
   const roadLightMaterial=new THREE.PointsMaterial({color:'#ffdf9e',size:2,sizeAttenuation:false,transparent:true,opacity:0,depthWrite:false,toneMapped:false});
@@ -499,12 +504,25 @@ export function createLandscape() {
   // Buckyball at the Exploratorium, north along the Embarcadero.
   const bucky=mesh(new THREE.IcosahedronGeometry(.58,0),'#bc985d',47.26,.9,.07);bucky.material=material('#bc985d');bucky.material.wireframe=true;
   const lanterns=buildPromenadeLighting(root);
+  const streetGlobes=collectStreetGlobes(root,lanterns);root.add(createSignalHousings());
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
   buildStreetcarTrack(box,pole);
-  const ferries=ferryFleet.map(name=>createDoradoFerry(mesh,name));
+  const ferryClock=ferryClockAt(new Date());
+  const ferries=vessels.map((_,i)=>createServiceFerry(mesh,i));
   root.add(...ferries);
-  for(const ferry of ferries)for(const side of [-1,1]){
+  for(const [i,ferry] of ferries.entries())for(const side of [-1,1]){
+    const vessel=vessels[i];
+    if(vessel.family!=='dorado'){
+      const small=vessel.family==='prop',gga=vessel.family==='spaulding'||vessel.family==='mendocino';
+      const title=small?'TREASURE ISLAND':gga?'GOLDEN GATE FERRY':'SAN FRANCISCO BAY FERRY';
+      const flank=side*vessel.beam*.03*(small?.83:.93);
+      const name=lettering(vessel.name.toUpperCase(),small?.017:.026,.01,vessel.sill+.032,flank,'#304757',ferry);
+      const operator=lettering(title,small?.011:.018,-vessel.length*.007,vessel.sill+.032,flank,'#31485b',ferry);
+      name.rotation.y=operator.rotation.y=side<0?Math.PI:0;
+      name.scale.z=operator.scale.z=.05;
+      continue;
+    }
     const name=lettering(ferry.name.toUpperCase(),.092,1.445,.563,side*.766,'#344e5d',ferry);
     name.rotation.y=side<0?Math.PI:0;
     const operator=lettering('SAN FRANCISCO BAY FERRY',.059,-.36,1.066,side*.762,'#476570',ferry);
@@ -567,7 +585,7 @@ export function createLandscape() {
   });
   // Instanced windows keep the detailed city inexpensive to draw.
   const windowMaterial=new THREE.MeshStandardMaterial({color:'#597b85',roughness:.8,emissive:'#e4c89a',emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
-  applyWindowLighting(windowMaterial);
+  applyWindowLighting(windowMaterial,bayLights.clock);
   const windowGeometry=new THREE.PlaneGeometry(1,1);
   windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(windowPositions.map(windowGlow)),1));
   const windowMesh=new THREE.InstancedMesh(windowGeometry,windowMaterial,windowPositions.length);
@@ -602,7 +620,7 @@ export function createLandscape() {
   root.add(...architectureChunks);
   staticMeshes.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});
   // Keep each moving object intact while batching its own small components.
-  const ferryPaint=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02});
+  const ferryPaint=serviceFerryPaint;
   for(const group of [tram,...ferries,...cyclists]) {
     const isFerry=ferries.includes(group);
     group.updateMatrixWorld(true);
@@ -618,6 +636,7 @@ export function createLandscape() {
       const solidFerryPaint=isFerry&&source instanceof THREE.MeshStandardMaterial&&!source.transparent&&!source.map&&!source.vertexColors&&
         source.opacity===1&&source.emissive.getHex()===0&&source.roughness===.86&&source.metalness===.02;
       const mat=solidFerryPaint?ferryPaint:source;
+      if(mat===ferryPaint)g.deleteAttribute('uv');
       if(solidFerryPaint){
         const {r,g:green,b}=source.color;
         const paint=new Float32Array(g.getAttribute('position').count*3);
@@ -761,9 +780,13 @@ export function createLandscape() {
   const relief=createBayRelief();root.add(relief.root,createUrbanContext());
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);
-  ferries.forEach((_,i)=>boardingBrows.update(i,ferryPose(0,i)));
+  ferries.forEach((boat,i)=>{
+    const pose=ferryPose(0,i,ferryClock);
+    boat.position.set(pose.x,pose.y,pose.z);boat.rotation.y=pose.heading;
+    boardingBrows.update(i,pose);
+  });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bridgeLightMaterial, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   cityTemplate=result;
   return result;
 }

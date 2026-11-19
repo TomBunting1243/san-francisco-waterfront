@@ -4,6 +4,8 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { center, footprintGeometry, mappedBuildings, sfMap } from './sf-map.ts';
 import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import type { FerryConnection } from './ferry-terminal.ts';
+import {addPier14Corpus} from './pier14-corpus.ts';
+import {createPier14Plaza,createPier14Chairs,pier14Ground} from './pier14-plaza.ts';
 
 type Building = (typeof mappedBuildings)[number];
 type Pier = (typeof sfMap.piers)[number];
@@ -624,17 +626,17 @@ export function harborPublicPiers(piers:Pier[],font:Font){
   for(const p of [classic,modern]){
     const historic=p===classic, x=historic?27.28:-17.31;
     const length=historic?14.42:11.97, width=historic?.437:.275;
-    const color=historic?'#537277':'#80999e', top=historic?.35:.31;
+    const color=historic?'#537277':'#80999e', top=historic?.35:.128;
     // The historic timber promenade has cast iron balusters. The breakwater uses an open modern rail.
     for(const edge of edges(p.p)){
       if(edge.z<.02)continue;
       const f=m.facade(edge);
-      m.box(edge.w+.008,.026,.034,0,top,-.019,color,f);
-      m.box(edge.w,.018,.021,0,top*.53,-.020,color,f);
+      m.box(edge.w+.008,historic?.026:.004,historic?.034:.005,0,top,-.019,color,f);
+      m.box(edge.w,historic?.018:.003,historic?.021:.004,0,historic?top*.53:.095,-.020,color,f);
       const d=historic?.15:.25, count=Math.max(1,Math.round(edge.w/d));
       for(let i=0;i<count;i++){
-        const sx=((i+.5)/count-.5)*edge.w,w=historic?.012:.019;
-        m.box(w,top-.07,w,sx,(top+.07)/2,-.019,color,f);
+        const sx=((i+.5)/count-.5)*edge.w,w=historic?.012:.0045,base=historic?.07:.06;
+        m.box(w,top-base,w,sx,(top+base)/2,-.019,color,f);
       }
     }
     if(historic){
@@ -650,11 +652,8 @@ export function harborPublicPiers(piers:Pier[],font:Font){
         m.box(width,.006,.009,x,.064,z,'#a9ada3');
         m.box(.029,.011,.069,x-.097,.067,z,'#acbdba');
       }
-      for(const z of [2.7,6.6,11.76]){
-        const seat=m.box(.11,.027,.33,x,.173,z,'#c0aa86');
-        if(z>11)seat.rotation.y=Math.PI/2;
-        for(const delta of [-.105,.105])m.box(.064,.10,.021,x,.116,z+delta,color);
-      }
+      m.root.add(createPier14Plaza(),createPier14Chairs());
+      addPier14Corpus(m.root,-15.1954,pier14Ground(-15.1954,-.807),-.807,-.08);
     }
     const marker=m.facade({x:x+(historic?-.40:.30),z:historic?-.45:-.10,w:.37,nx:0,nz:-1});
     m.box(.055,.43,.056,0,.253,0,color,marker);

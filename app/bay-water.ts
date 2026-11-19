@@ -1,4 +1,7 @@
 import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
+import {vessels} from './ferry-service.ts';
+import {bridgeLayout} from './bridge-layout.ts';
+import {bayLightPattern} from './bay-lights.ts';
 import {pierThreeShelter,waterSurface,waveAmplitudes} from './water-surface.ts';
 import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
@@ -29,8 +32,16 @@ export const marineDistanceFog = `
   #endif`;
 
 /** Three shallow skyline strips approximate shore reflections without drawing the city a second time. */
-export function configureBayWater(material:THREE.MeshStandardMaterial, time:{value:number}, hulls:THREE.Vector3[],night:{value:number}) {
+export function configureBayWater(material:THREE.MeshStandardMaterial, time:{value:number}, hulls:THREE.Vector4[],night:{value:number},artClock:{value:number}) {
   const ferryWakes={value:new Float32Array(hulls.length-2)};
+  const contact=vessels.map(v=>{
+    if(v.family==='dorado')return new THREE.Vector4(doradoDimensions.length/2,doradoWake.halfBeam,doradoWake.stern,doradoWake.hullOffset);
+    const bow=v.length*.03,beam=v.beam*.03;
+    const offset=v.family==='spaulding'?0:v.family==='prop'?.61:.63;
+    return new THREE.Vector4(bow,beam,-bow,beam*offset);
+  });
+  const sailer=new THREE.Vector4(daySailerContact.halfLength,daySailerContact.halfBeam,0,0);
+  const hullSize={value:[...contact.slice(0,hulls.length-2),sailer,sailer]};
   const columns=512, bytes=new Uint8Array(columns*3), span=256;
   for(const building of mappedBuildings) {
     const [,z]=center(building.p);
@@ -53,7 +64,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
   const wind={value:new THREE.Vector2(.188,.982)},chop={value:.5};
   material.addEventListener('dispose',()=>profiles.dispose());
   material.onBeforeCompile=shader=>{
-    shader.uniforms.harborTime=time;
+    shader.uniforms.harborTime=time;shader.uniforms.bayLightTime=artClock;shader.uniforms.hullSize=hullSize;
     shader.uniforms.hullShadows={value:hulls};shader.uniforms.ferryWakes=ferryWakes;shader.uniforms.bayNight=night;
     shader.uniforms.shoreProfiles={value:profiles};
     shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
@@ -69,7 +80,10 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       uniform sampler2D shoreProfiles;
       uniform vec3 sunsetGlitter;
       uniform vec4 waterfrontSun;
-      uniform vec3 hullShadows[${hulls.length}];
+      uniform vec4 hullShadows[${hulls.length}];
+      uniform vec4 hullSize[${hulls.length}];
+      uniform float bayLightTime;
+      ${bayLightPattern}
       uniform float ferryWakes[${hulls.length-2}];
       uniform float bayNight;
       uniform vec2 bayWind;
@@ -127,20 +141,43 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       }
       // Low, feathered contact beneath the vessels is evaluated at their current pose.
       for(int i=0;i<${hulls.length};i++) {
-        vec3 hull=hullShadows[i];vec2 off=p-hull.xy;
-        vec2 along=vec2(cos(hull.z),-sin(hull.z));
-        vec2 size=i<${hulls.length-2}?vec2(${(doradoDimensions.length/2).toFixed(4)},${doradoWake.halfBeam.toFixed(4)}):vec2(${daySailerContact.halfLength.toFixed(4)},${daySailerContact.halfBeam.toFixed(4)});
+        vec4 hull=hullShadows[i];vec2 off=p-hull.xy;
+        if(dot(off,off)>100.)continue;
+        vec2 along=hull.zw, size=hullSize[i].xy;
         vec2 local=vec2(dot(off,along),dot(off,vec2(-along.y,along.x)))/size;
         diffuseColor.rgb *= .67+.33*smoothstep(.24,1.45,dot(local,local));
         if(i<${hulls.length-2}){
-          float aft=${doradoWake.stern.toFixed(4)}-dot(off,along);
+          float aft=hullSize[i].z-dot(off,along);
           float width=abs(dot(off,vec2(-along.y,along.x)));
           // Foam leaves each transom at its hull center. The two
           // wash lines open away from one another behind the boat.
           float spread=max(0.,aft);
-          float wake=1.-smoothstep(.012,.055+spread*.038,abs(width-${doradoWake.hullOffset.toFixed(4)}-spread*.20));
+          float wake=1.-smoothstep(.012,.055+spread*.038,abs(width-hullSize[i].w-spread*.20));
           float fade=smoothstep(-.025,.10,aft)*(1.-smoothstep(2.8,7.6,aft));
           diffuseColor.rgb+=vec3(.21,.23,.21)*wake*fade*ferryWakes[i]*(.6+.4*swell)*detail;
+        }
+      }
+      // Intersect a broken reflection ray with the lit western suspender plane.
+      // A single sample of its light field gives a silver stroke on a wavelet.
+      if(bayNight>.035){
+        const vec2 acrossBridge=vec2(${Math.cos(bridgeLayout.angle).toFixed(7)},${(-Math.sin(bridgeLayout.angle)).toFixed(7)});
+        vec2 alongBridge=vec2(-acrossBridge.y,acrossBridge.x);
+        vec2 offset=p-vec2(${bridgeLayout.origin.join(',')});
+        float face=dot(mirrorRay.xz,acrossBridge);
+        if(face<-.04){
+          float travel=(.772-dot(offset,acrossBridge))/face;
+          float z=dot(offset+mirrorRay.xz*travel,alongBridge);
+          float h=bayElevation+mirrorRay.y*travel+wobble*1.8;
+          if(travel>0.&&z>15.64&&z<${bridgeLayout.length}&&h>3.8&&h<10.){
+            float station=z<100.31?z-15.64:z-100.31;
+            float endDistance=min(station,(z<100.31?84.67:88.518)-station);
+            float u=clamp((station-21.21)/42.25,0.,1.);
+            float side=clamp(endDistance/21.21,0.,1.);
+            float top=endDistance<21.21?mix(4.85,9.55,side)-6.6*side*(1.-side):9.55-18.8*u*(1.-u);
+            float band=smoothstep(3.85,4.6,h)*(1.-smoothstep(top-.3,top+.28,h));
+            float stroke=smoothstep(.24,.88,lanes*.50+ripple*.36+.27);
+            diffuseColor.rgb+=vec3(.24,.255,.25)*bayNight*band*stroke*bayLightLevelAt(z,h-4.24,bayLightTime);
+          }
         }
       }
       // Glints lie between the viewer and actual lantern positions. The virtual image
@@ -174,6 +211,6 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       diffuseColor.rgb+=vec3(.058,.068,.064)*glint*detail*(1.-bayNight*.82)*mix(.52,1.48,bayChop);
     `);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v6';
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v7-'+hulls.length;
   return {ferryWakes,baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

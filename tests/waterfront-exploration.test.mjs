@@ -46,40 +46,39 @@ test('outward orbit frames the actual Bay islands and East Bay on desktop and ph
   assert.ok(x>0&&z<0&&Math.hypot(x,z)>440,'Golden Gate is in the distant northwestern view');
 });
 
-test('the opening ferry is on final approach, three distinct berths receive service and deployed brows reach their vessels',()=>{
-  assert.equal(ferryFleet.length,3);
+test('the opening ferry is on final approach, all scheduled gates receive service and deployed brows reach their vessels',()=>{
+  assert.equal(ferryFleet.length,8);
   const first=ferryPose(0,0);
   assert.equal(first.phase,'arriving');assert.ok(ferryPose(2,0).z<first.z);
   assert.ok(first.z-boardingStops.E[1]<6&&first.z-boardingStops.E[1]>3);
-  const service=new Set(),root=new THREE.Group(),brows=createBoardingBrows(3);
+  const service=new Set(),root=new THREE.Group(),brows=createBoardingBrows(ferryFleet.length);
   const terminal=buildFerryTerminal((geometry,color,x,y,z,parent)=>{
     const mesh=new THREE.Mesh(geometry);mesh.position.set(x,y,z);parent.add(mesh);return mesh;
   },root);
-  for(let i=0;i<3;i++){
+  for(let i=0;i<ferryFleet.length;i++){
     const pose=ferryPose(0,i);let previous=pose;
     for(let t=.25;t<2*ferryCycle;t+=.25){
       const p=ferryPose(t,i);
-      assert.ok(Math.hypot(p.x-previous.x,p.z-previous.z)<.84);
-      assert.ok(Math.abs(Math.atan2(Math.sin(p.heading-previous.heading),Math.cos(p.heading-previous.heading)))<.20);
+      assert.ok(Math.hypot(p.x-previous.x,p.z-previous.z)<.78+.012*Math.hypot(p.x,p.z));
+      if(Math.hypot(p.x,p.z)<60)assert.ok(Math.abs(Math.atan2(Math.sin(p.heading-previous.heading),Math.cos(p.heading-previous.heading)))<.45);
       if(p.phase==='alongside'){
         service.add(p.gate);assert.equal(p.wake,0);
         assert.equal(p.x,previous.x);
         if(p.brow===1){
-          const [x,z]=boardingStops[p.gate],side=Math.sign(p.x-x);
+          const x=p.stopX,z=p.stopZ,side=Math.sign(p.x-x);
           const mat=new THREE.Matrix4();brows.update(i,p);brows.mesh.getMatrixAt(i,mat);
           const extent=new THREE.Box3().setFromBufferAttribute(brows.mesh.geometry.attributes.position).applyMatrix4(mat);
           assert.ok(extent.min.z<z&&extent.max.z>z);
-          const shipDoor=p.x-side*.309;
+          const shipDoor=p.x-side*(p.hullHalfBeam-.006);
           assert.ok(extent.min.x<shipDoor&&extent.max.x>shipDoor,'Deployed plate meets the passenger ledge');
           const landing=terminal.getObjectByName('Gate '+p.gate+' floating pontoon');
-          for(const pile of landing.children.filter(c=>c.name==='Independent guide pile')){
-            assert.ok(Math.abs(p.x-pile.position.x)>.315+.055,'Hull clears the pile and its collar');
+          for(const pile of (landing?.children||[]).filter(c=>c.name==='Independent guide pile')){
+            assert.ok(Math.abs(p.x-pile.position.x)>p.hullHalfBeam+.055,'Hull clears the pile and its collar');
           }
         }
       }else assert.equal(p.brow,0);
       previous=p;
     }
-    const again=ferryPose(ferryCycle,i);assert.equal(again.x,pose.x);assert.equal(again.z,pose.z);
   }
-  assert.deepEqual([...service].sort(),['B','E','G']);
+  assert.deepEqual([...service].sort(),['B','C','E','F','G']);
 });

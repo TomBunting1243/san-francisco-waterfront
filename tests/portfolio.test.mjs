@@ -13,7 +13,9 @@ test('detailed geometry stays finite and uses batched rendering',()=>{
   scene.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(o instanceof THREE.Mesh)meshes++;for(const v of o.geometry.attributes.position.array)assert.ok(Number.isFinite(v));if(o instanceof THREE.InstancedMesh){windows+=o.count;for(const v of o.instanceMatrix.array)assert.ok(Number.isFinite(v));}}});
   let reliefMeshes=0;scene.relief.root.traverse(o=>{if(o instanceof THREE.Mesh)reliefMeshes++;});
   assert.ok(reliefMeshes>0 && reliefMeshes<110,'Regional terrain stays spatially batched');
-  assert.ok(meshes-reliefMeshes<240,`Too many separately culled waterfront batches: ${meshes-reliefMeshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
+  const extraVessels=scene.ferries.length-3;
+  for(const boat of scene.ferries)assert.equal(boat.children.filter(child=>child.isMesh).length,1,boat.name+' hull and lettering share a draw');
+  assert.ok(meshes-reliefMeshes-extraVessels<240,`Too many separately culled waterfront batches: ${meshes-reliefMeshes}`);assert.ok(scene.architectureChunks.length>20);assert.ok(windows>3000);
   assert.equal(scene.hitTargets.length,3);assert.equal(scene.clockHands.length,4);
   for(const name of ['Hi Dive',"Red's Java House",'Pier 24','Pier 26','Pier 28','Ferry Building hall',...['1181064591','1181064592','1181064594'].map(id=>'Pier 3 boarding shelter '+id)])assert.ok(scene.root.getObjectByName(name),name);
   // A low orbit now passes behind the bridge and offices at a visitor's
@@ -68,7 +70,7 @@ function overlapConvex(a,b){
   }
   return true;
 }
-test('ferries clear the surveyed piers, bridge caissons and each other through all three berth cycles',async()=>{
+test('ferries clear the surveyed piers, bridge caissons and each other through the full service cycle',async()=>{
   const {ferryPose,ferryCycle}=await import('../app/motion.ts');
   const world=createLandscape();
   const shapes=sfMap.piers.filter(p=>p.closed).flatMap(p=>{
@@ -82,7 +84,7 @@ test('ferries clear the surveyed piers, bridge caissons and each other through a
     const sample=vessel.clone();sample.position.set(0,0,0);sample.rotation.set(0,0,0);
     return new THREE.Box3().setFromObject(sample,true);
   });
-  assert.equal(dimensions.length,3);
+  assert.equal(dimensions.length,8);
   for(let t=0;t<=ferryCycle;t+=.2){
     const hulls=[];
     for(const [i,box] of dimensions.entries()){
@@ -246,7 +248,7 @@ test('night windows retain dark rooms without changing daylight glazing or flick
   assert.ok(values.every(v=>Number.isFinite(v)&&v>=0&&v<.86));
   assert.deepEqual(panes.slice().reverse().map(windowGlow).reverse(),values);
   const material=new THREE.MeshStandardMaterial({emissiveIntensity:0});applyWindowLighting(material);
-  const shader={vertexShader:'#include <begin_vertex>',fragmentShader:'#include <color_fragment>\n#include <emissivemap_fragment>'};
+  const shader={uniforms:{},vertexShader:'#include <begin_vertex>',fragmentShader:'#include <color_fragment>\n#include <emissivemap_fragment>'};
   material.onBeforeCompile(shader,{});
   assert.ok(shader.fragmentShader.includes('#include <color_fragment>'));
   assert.match(shader.fragmentShader,/totalEmissiveRadiance\*=roomGlow/);

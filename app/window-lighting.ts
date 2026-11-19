@@ -12,10 +12,22 @@ export function windowGlow({x,y,z}:WindowPosition){
 }
 
 /** Occupancy affects emitted light only; the daytime glazing remains unchanged. */
-export function applyWindowLighting(material:THREE.MeshStandardMaterial){
+export function applyWindowLighting(material:THREE.MeshStandardMaterial,clock={value:0}){
   material.onBeforeCompile=shader=>{
-    shader.vertexShader='attribute float windowGlow; varying float roomGlow;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nroomGlow=windowGlow;');
+    shader.uniforms.windowAirTime=clock;
+    shader.vertexShader='uniform float windowAirTime; attribute float windowGlow; varying float roomGlow;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+      #include <begin_vertex>
+      roomGlow=windowGlow;
+      #ifdef USE_INSTANCING
+        if(roomGlow>.0){
+          vec3 room=(modelMatrix*instanceMatrix[3]).xyz;
+          float distanceFade=smoothstep(48.,135.,distance(room,cameraPosition));
+          float phase=dot(room,vec3(.74,.39,.21));
+          roomGlow*=1.+distanceFade*.048*sin(phase+.63*windowAirTime)*sin(.43*phase-.21*windowAirTime);
+        }
+      #endif
+    `);
     shader.fragmentShader='varying float roomGlow;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance*=roomGlow;');
   };
-  material.customProgramCacheKey=()=> 'waterfront-window-occupancy-v1';
+  material.customProgramCacheKey=()=> 'waterfront-window-occupancy-v2';
 }

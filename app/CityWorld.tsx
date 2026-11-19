@@ -28,6 +28,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
   useEffect(()=>{linesRef.current=passerbyLines;},[passerbyLines]);
   useEffect(()=>{visitRef.current=onVisit;},[onVisit]);
   const [focus, setFocus] = useState<Landmark | null>(null);
+  const [ferryLabel,setFerryLabel]=useState('');
+  const selectedFerry=useRef(-1),cycleFerry=useRef(()=>{});
   const [paused, setPaused] = useState(false);
   useEffect(()=>{const sync=()=>setPaused(readMotionPreference());sync();window.addEventListener(motionEvent,sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener(motionEvent,sync);window.removeEventListener('storage',sync);};},[]);
   const toggleMotion=()=>{const next=!paused;setPaused(next);writeMotionPreference(next);};
@@ -61,7 +63,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     reducedMotion.current = motionQuery.matches;
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain')]).then(([THREE, { createLandscape, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain}]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain')]).then(([THREE, { createLandscape, createStreetIllumination, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain}]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
@@ -86,6 +88,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       sun.shadow.normalBias=.023; sun.shadow.bias=-.00008; scene.add(sun);
       const fill = new THREE.DirectionalLight('#bed8e9',.4); fill.position.set(40,20,-20); scene.add(fill);
       const world = streetView?createCityVignette(variant):createLandscape(); scene.add(world.root);
+      const streetIllumination=createStreetIllumination(world.root,world.streetGlobes,world.waterMaterial);
       let maxQuality=streetView||host.clientWidth<650?1:2,qualityMonitor=createQualityMonitor(maxQuality);
       let quality=maxQuality;
       let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
@@ -185,6 +188,36 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           visible:head.z>-1&&head.z<1&&Math.abs(head.x)<1&&Math.abs(head.y)<1};
       }
       const sightObstacles=world.treeDraw?[...world.architectureChunks,world.treeDraw]:world.architectureChunks;
+      const ferryPoint=new THREE.Vector3();
+      let lastFerryLabel='';
+      function routeLabel(i:number,p:ReturnType<typeof ferryPose>){
+        return p.phase==='off service'?world.ferries[i].name+' · '+p.route+' · Off service':
+            world.ferries[i].name+' · '+p.origin+' → '+p.destination+' · Gate '+p.berth;
+      }
+      function identifyFerry(i:number){
+        selectedFerry.current=i;
+        let label='';
+        if(i>=0){
+          const p=ferryPose(elapsed,i,world.ferryClock);
+          label=routeLabel(i,p);
+          setFocus(null);
+        }
+        lastFerryLabel=label;setFerryLabel(label);
+      }
+      cycleFerry.current=()=>{
+        for(let n=1;n<=world.ferries.length;n++){
+          const i=(selectedFerry.current+n)%world.ferries.length;
+          const boat=world.ferries[i];
+          ferryPoint.copy(boat.position);ferryPoint.y+=.16;
+          const distance=camera.position.distanceTo(ferryPoint);
+          ferryPoint.project(camera);
+          if(Math.abs(ferryPoint.x)>.99||Math.abs(ferryPoint.y)>.98||Math.abs(ferryPoint.z)>1)continue;
+          mouse.set(ferryPoint.x,ferryPoint.y);sightRay.setFromCamera(mouse,camera);
+          sightRay.far=Math.max(.01,distance-.15);
+          if(!sightRay.intersectObjects(sightObstacles,false).length){identifyFerry(i);return;}
+        }
+        identifyFerry(-1);
+      };
       type PersonProjection=ReturnType<typeof personScreen>;
       function seen(person:PersonProjection){
         // A visible head may project in front of a building across the bay.
@@ -304,7 +337,27 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       host.addEventListener('wheel',onWheel,{passive:false});
       const onLeave=()=>{hoveredPerson=-1;};
       const onCancel=(e:PointerEvent)=>{touches.delete(e.pointerId);pointer.down=false;};
-      const onUp=(e:PointerEvent)=>{lastInput=performance.now();touches.delete(e.pointerId);if(wasPinch){if(touches.size===0){wasPinch=false;pair=null;}pointer.down=false;return;}if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){const person=pickPerson(e,true);if(person>=0)say(person);else{const key=pick(e);if(key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}}}pointer.down=false;};
+      const onUp=(e:PointerEvent)=>{
+        lastInput=performance.now();touches.delete(e.pointerId);
+        if(wasPinch){if(touches.size===0){wasPinch=false;pair=null;}pointer.down=false;return;}
+        if(pointer.down&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<7){
+          const person=pickPerson(e,true);
+          if(person>=0){identifyFerry(-1);say(person);}
+          else{
+            const key=pick(e); // Also sets the ray from this pointer event.
+            const hit=raycaster.intersectObjects(world.ferries,true)[0];
+            let ferry=-1;
+            if(hit){
+              sightRay.ray.copy(raycaster.ray);sightRay.far=hit.distance;
+              if(!sightRay.intersectObjects(sightObstacles,false).length)
+                ferry=world.ferries.findIndex(boat=>boat===hit.object.parent);
+            }
+            identifyFerry(ferry>=0&&selectedFerry.current===ferry?-1:ferry);
+            if(ferry<0&&key){setFocus(prev=>prev===key?null:key);visitRef.current?.(key);}
+          }
+        }
+        pointer.down=false;
+      };
       host.addEventListener('pointerdown',onDown);host.addEventListener('pointermove',onMove);host.addEventListener('pointerup',onUp);host.addEventListener('pointercancel',onCancel);host.addEventListener('pointerleave',onLeave);
       const onLost=(e:Event)=>{e.preventDefault();rendering=false;setStatus('fallback');}; renderer.domElement.addEventListener('webglcontextlost',onLost);
       const onVisibility=()=>{
@@ -411,9 +464,11 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.edgeFogColor.value.copy(scene.background as InstanceType<typeof THREE.Color>);
         if(sky)world.edgeFogColor.value.copy(coastalHorizon);
         world.edgeFogColor.value.convertLinearToSRGB();
+        streetIllumination.update(elapsed,duskAmount,true,world.rainOnStone.value);
         world.nightInk.value=duskAmount;world.lampGlow.opacity=duskAmount*.96;
         world.coffeeMaterial.emissiveIntensity=duskAmount*2.6;
-        world.bridgeLightMaterial.opacity=duskAmount*.8;world.roadLightMaterial.opacity=duskAmount;world.streetcarGlazing.emissiveIntensity=duskAmount*.7;world.streetcarLamp.emissiveIntensity=.35+duskAmount*1.3;
+        if(!streetView)world.bayLights.update(duskAmount,reducedMotion.current?0:elapsed);
+        world.roadLightMaterial.opacity=duskAmount;world.streetcarGlazing.emissiveIntensity=duskAmount*.7;world.streetcarLamp.emissiveIntensity=.35+duskAmount*1.3;
         world.waterMaterial.roughness=.49+duskAmount*.18;
         world.waterMaterial.color.lerp(weatherTint.copy(waterColor).lerp(rainWater,Math.max(cloud*.56,rain*.72)*(1-duskAmount)),lightEase);
         world.windowMaterial.emissiveIntensity=duskAmount*2.15;
@@ -466,7 +521,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.transit?.update(elapsed);world.updateApproach(elapsed);
         if(world.fireboat){const fireboatPose=world.fireboat.update(elapsed);host.dataset.fireboat=fireboatPose.phase;}
         world.sailboats.forEach((boat,i)=>{const p=sailingPose(elapsed,i);boat.position.set(p.x,p.y,p.z);boat.rotation.set(p.heel,p.heading,0,'YXZ');});
-        world.ferries.forEach((boat,i)=>{const pose=ferryPose(elapsed,i);world.boardingBrows.update(i,pose);world.ferryWakes.value[i]=pose.wake;boat.position.set(pose.x,pose.y,pose.z);boat.rotation.set(0,pose.heading,Math.sin(elapsed*1.2+i)*.007*(1-pose.brow));});
+        world.ferries.forEach((boat,i)=>{const pose=ferryPose(elapsed,i,world.ferryClock);if(i===selectedFerry.current){const label=routeLabel(i,pose);if(label!==lastFerryLabel){lastFerryLabel=label;setFerryLabel(label);}}world.boardingBrows.update(i,pose);world.ferryWakes.value[i]=pose.wake;boat.position.set(pose.x,pose.y,pose.z);boat.rotation.set(0,pose.heading,Math.sin(elapsed*1.2+i)*.007*(1-pose.brow));});
         world.updateBridgeTraffic(elapsed);
         world.skaters?.update(elapsed);
         world.updateTraffic(elapsed);
@@ -508,8 +563,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(!streetView)world.relief.update(elapsed,duskAmount,.74-.2*duskAmount,world.bayHorizon.value,weatherNow.w);
         world.waterTime.value=elapsed;
         if(!streetView)world.updateMarina();
-        world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,boat.rotation.y));
-        world.sailboats.forEach((boat,i)=>world.hullShadows[i+world.ferries.length].set(boat.position.x,boat.position.z,boat.rotation.y));
+        world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));
+        world.sailboats.forEach((boat,i)=>world.hullShadows[i+world.ferries.length].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));
         precipitation.update(camera,width,height,rain,windTarget,chopTarget,duskAmount,still||reducedMotion.current?0:frameMs/1000,snowfall?'snow':'rain',quality);
         const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
         const visual=[marketRevision,snowfall,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
@@ -545,16 +600,16 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
         world.root.traverse(o=>{if(o instanceof THREE.BatchedMesh){geometries.delete(o.geometry);o.dispose();}});
-        precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
+        streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
       };
     }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};
   },[streetView,variant]);
-  const reset=()=>{resetTravel.current();wake.current();settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
+  const reset=()=>{selectedFerry.current=-1;setFerryLabel('');resetTravel.current();wake.current();settings.current.tilt=0;dismissSpeech.current();setFocus(null);setZoom(openingCamera.zoom);const yaw=settings.current.yaw,home=openingYaw(mount.current?.clientWidth||0,mount.current?.clientHeight||0);settings.current.yaw=yaw+Math.atan2(Math.sin(home-yaw),Math.cos(home-yaw));};
   if(streetView)return <div className="contact-street-world">
     <div className="world-scene" ref={mount} aria-hidden="true"/>
   </div>;
-  return <section className="world" aria-label="Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. Enter speaks to a passerby." tabIndex={0}
+  return <section className="world" aria-label="Explore the Embarcadero. Drag to orbit. W A S D or arrow keys move along the waterfront. Q and E turn. Double-click, pinch or use plus and minus to zoom. Slide two fingers together to tilt. Escape returns to the Ferry Building. F identifies a visible ferry and its gate. Enter speaks to a passerby." tabIndex={0}
     onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget)||e.relatedTarget!==mount.current){travelKeys.current.clear();tapKeys.current.clear();}}}
     onKeyDown={e=>{
       if((e.target!==e.currentTarget&&e.target!==mount.current)||e.metaKey||e.ctrlKey||e.altKey)return;
@@ -564,12 +619,13 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       }else if(key==='+'||key==='=')changeZoom(.25);
       else if(key==='-')changeZoom(-.25);
       else if(key==='escape')reset();
+      else if(key==='f')cycleFerry.current();
       else if(key==='enter')speak.current();
       else return;
       e.preventDefault();wake.current();
     }}>
     <div className="world-poster" data-state={status} data-still={paused} aria-hidden="true"><div className="world-arrival-fog"/></div><div className="world-scene" ref={mount} tabIndex={-1} data-ready={status==='ready'}/>
-    {overlay}{focus&&<div className="world-place" role="status">{landmarks[focus].label}</div>}
+    {overlay}{(ferryLabel||focus)&&<div className="world-place" role="status">{ferryLabel||(focus&&landmarks[focus].label)}</div>}
     {speech&&<div className="passerby-bubble" ref={bubble} role="status" key={speech.serial}><span>{speech.text}</span></div>}
     {status==='loading'&&<div className="world-loading" role="status"><span className="sr-only">Loading the waterfront</span></div>}
     {status==='fallback'&&fallback}
