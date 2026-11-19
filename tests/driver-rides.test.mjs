@@ -79,7 +79,7 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
   assert.ok(distance(driverPose('bridge',join-.001).eye,driverPose('bridge',join+.001).eye)<.003);
 });
 test('1051 stops northbound at the correct doors, holds at Washington, then brakes into Broadway',()=>{
-  const door=1.21*pccDimensions.length/3.629,leg=(15.1602+1.1513)/.72+.72/.075;
+  const door=1.521*pccDimensions.length/3.629,leg=(15.1602+1.1513)/.72+.72/.075;
   const depart=museumLegDuration+7;
   for(const [time,stop] of [[0,museumDoorStation],[museumLegDuration,-1.1513],[depart,-1.1513],[depart+leg,15.1602],[depart+leg+3,15.1602],[depart+leg+7,15.1602],[Infinity,35.3121]]){
     const p=driverPose('streetcar',time),body=p.body;

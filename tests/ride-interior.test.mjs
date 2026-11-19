@@ -55,7 +55,8 @@ test('each wiper turns on a sill-mounted spindle, freezes on pause and finishes 
     const cab=root.children.find(m=>m.visible),wiper=cab.getObjectByName('Windshield wiper');
     const hidden=root.children.find(m=>!m.visible)?.getObjectByName('Windshield wiper');
     const meshes=[];root.traverseVisible(o=>{if(o.isMesh)meshes.push(o)});
-    assert.equal(meshes.length,2);
+    assert.equal(meshes.length,mode==='tram'?3:2);
+    if(mode==='tram')assert.ok(meshes.some(m=>m.isInstancedMesh&&m.count===4),'one draw for all four folding leaves');
     const pivot=wiper.getWorldPosition(new T.Vector3());
     const axis=new T.Vector3(0,0,1).transformDirection(wiper.parent.matrixWorld);
     const ray=new T.Raycaster(pivot.clone().addScaledVector(axis,.004),axis.clone().negate(),0,.009);
@@ -83,7 +84,11 @@ test('both cabs surround the seat and preserve exterior sightlines through both 
     const hit=(x,y,z)=>new T.Raycaster(new T.Vector3(),new T.Vector3(x,y,z).normalize()).intersectObject(cab,false)[0];
     for(const side of [-1,1]){
       assert.ok(!hit(side,.07,0),'eye-level side window');
-      assert.ok(hit(side,-1,0),'door interior below glass');
+      if(side>0&&mode==='tram'){
+        // The front entry beside the seat has low glazing between its kick plate and waist.
+        const plate=new T.Raycaster(new T.Vector3(),new T.Vector3(1,-1.12,.18).normalize());
+        assert.ok(plate.intersectObject(cab,true).length,'front folding door kick plate');
+      }else assert.ok(hit(side,-1,0),'door interior below glass');
       assert.ok(hit(side,2,.2),'headlining above side glass');
     }
     assert.ok(!hit(0,.015,1),'rear glass remains open towards the horizon');
@@ -106,7 +111,7 @@ test('saloon lighting reaches the passenger compartment while the driving glass 
   const [car,tram]=root.children,glow=tram.geometry.getAttribute('cabLight'),position=tram.geometry.getAttribute('position');
   let front=0,litSides=0,globes=0;
   for(let i=0;i<glow.count;i++){
-    if(position.getZ(i)<-.70*.06)front+=glow.getX(i);
+    if(position.getZ(i)<-.70*.06&&position.getY(i)>-.40*.06&&position.getX(i)<.66*.06)front+=glow.getX(i);
     if(glow.getX(i)>2){globes++;assert.ok(position.getY(i)>.80*.06);}
     if(Math.abs(position.getX(i))>.8*.06&&glow.getX(i)>.4)litSides++;
   }

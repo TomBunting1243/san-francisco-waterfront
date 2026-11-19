@@ -9,6 +9,7 @@ import SceneControls from './SceneControls';
 import { ferryPose, birdPose, sailingPose } from './motion';
 import {waterHeight} from './water-surface';
 import { streetcarPose } from './streets';
+import {ambientStreetcarCall,washingtonDoorOpening} from './washington-call';
 import {setVehiclePaintLight} from './street-vehicles';
 import type { RideMode } from './driver-rides';
 type Ride = {mode:RideMode; paused:boolean};
@@ -77,7 +78,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     const onMotion = () => { reducedMotion.current = motionQuery.matches;setPaused(readMotionPreference());wake.current(); };
     motionQuery.addEventListener('change', onMotion);
     const rideModules=enableRides?Promise.all([import('./driver-rides'),import('./ride-interior')]):null;
-    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances'),rideModules]).then(([THREE, { createLandscape, createStreetIllumination, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule,rides]) => {
+    Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances'),rideModules]).then(([THREE, { createLandscape, createStreetIllumination, setPccFrontDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule,rides]) => {
       if (disposed) return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
@@ -99,6 +100,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       let rideFence:WebGLSync|null=null;
       let lookDrag:{id:number;x:number;y:number;yaw:number;pitch:number}|null=null;
       const clampHeadPitch=(r:number)=>THREE.MathUtils.clamp(r,-1.10,1.04);
+      let previousPlatformTime=NaN;
       let rideMode:RideMode|null=null,rideSeconds=0,rideEnded=false,rideMoving=false;
       scene.add(camera);
       const ambient = new THREE.HemisphereLight('#d5e5f2','#99a6b5',2.1); scene.add(ambient);
@@ -664,9 +666,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.people.flush();
         }
         const localMinutes=lighting.hours*60+lighting.minutes;
+        const ambientTram=ambientStreetcarCall(elapsed,variant==='plaza');
+        const platformTime=mode==='streetcar'&&rides?rideSeconds-rides[0].washingtonRideArrival:
+          variant==='street'?-Infinity:ambientTram.t;
+        const station=variant==='street'?((elapsed*.85+7)%32)-48:ambientTram.station;
+        const tramPose=driver?.body??streetcarPose(station);
+        const callChanged=platformTime!==previousPlatformTime;
         const patioSheltered=snowfall||rain>.35;
-        if(motionChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
-          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date);
+        if(motionChanged||callChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
+          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose);
           lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
         }
         if(motionChanged){
@@ -699,10 +707,16 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
           bike.rotation.y=-p.heading;
         });
-        const tramPose=driver?.body??streetcarPose(streetView?((elapsed*.85+7)%32)-(variant==='plaza'?12:48):((elapsed*.85+42)%130)-65);world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);world.tram.rotation.y=tramPose.heading;world.tram.rotation.z=driver?.body?.pitch??0;
-        rides?.[0].setStreetcarTrucks(world.tram,driver?.body);
         world.birds.forEach((bird,i)=>{const pose=birdPose(elapsed,i);bird.group.position.set(pose.x,pose.y,pose.z);bird.group.rotation.set(0,pose.heading,Math.cos(elapsed*.1+i)*.12);bird.wings[0].rotation.x=pose.flap;bird.wings[1].rotation.x=-pose.flap;});
         lastMotion=elapsed;
+        }
+        if(motionChanged||callChanged){
+          world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);
+          world.tram.rotation.y=tramPose.heading;world.tram.rotation.z=driver?.body?.pitch??0;
+          rides?.[0].setStreetcarTrucks(world.tram,driver?.body);
+          const opening=washingtonDoorOpening(platformTime);
+          setPccFrontDoor(world.tram,opening);interiors?.setFrontDoor(opening);
+          previousPlatformTime=platformTime;
         }
         camera.updateMatrixWorld();
         if(!ride&&!still&&!reducedMotion.current&&!streetView&&!conversation&&!pointer.down&&linesRef.current.length){

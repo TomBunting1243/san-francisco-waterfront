@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {mountCabEntrance,setPccFrontDoor} from './pcc-entrance.ts';
 import {pccCarCards} from './pcc-car-cards.ts';
 import {addPccSaloon} from './pcc-saloon.ts';
 
@@ -179,9 +180,13 @@ export function createRideInteriors(){
     const tramSillZ=-.89-(.125+.57)*(.15/.87)+.010*.023/.024;
     const wiper=isTram?mountedWiper(cab,[.125,-.440,tramSillZ],-.15/.87,.09,.53):
       mountedWiper(cab,[.34,-.4155,-.99],-.08,.58,.64);
-    if(isTram){cards.value=pccCarCards();printed.value=cards.value!==null;}
-    root.add(cab);
-    return {cab,wiper,sweep:isTram?1.10:1.21};
+    const entrance=isTram?mountCabEntrance():null;
+    if(entrance){
+      cab.add(entrance);
+      cards.value=pccCarCards();printed.value=cards.value!==null;
+    }
+    root.add(cab);cab.updateMatrixWorld(true);
+    return {cab,wiper,entrance,sweep:isTram?1.10:1.21};
   }
   const cabs=new Map<RideInteriorMode,ReturnType<typeof build>>();
   let disposed=false,phase=0,rest=0,active:ReturnType<typeof build>|undefined;
@@ -215,8 +220,17 @@ export function createRideInteriors(){
   function dispose(){
     if(disposed)return;
     show(null);disposed=true;root.removeFromParent();
-    for(const {cab,wiper} of cabs.values()){cab.geometry.dispose();wiper.geometry.dispose();}
+    for(const {cab,wiper,entrance} of cabs.values()){
+      cab.geometry.dispose();wiper.geometry.dispose();
+      if(entrance){entrance.geometry.dispose();(entrance.material as THREE.Material).dispose();entrance.dispose();}
+    }
     root.clear();cabs.clear();cards.value?.dispose();cards.value=null;printed.value=false;material.dispose();
   }
-  return {root,show,updateRain,setNight:(night:number)=>{interiorNight.value=night;},dispose};
+  return {root,show,updateRain,
+    setFrontDoor:(opening:number)=>{if(active?.entrance)setPccFrontDoor(active.entrance,opening);},
+    setNight:(night:number)=>{
+      interiorNight.value=night;
+      const entrance=cabs.get('tram')?.entrance;
+      if(entrance)(entrance.material as THREE.MeshStandardMaterial).emissive.setRGB(night*.10,night*.076,night*.043);
+    },dispose};
 }

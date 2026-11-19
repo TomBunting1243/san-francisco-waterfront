@@ -126,8 +126,11 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   assert.equal(reader.length,3);
   const readerTris=[...new Set(reader.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
   assert.ok(readerTris<300);
-  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length-reader.length,69);
-  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles-readerTris<6200);
+  const station=scene.poses.getObjectByName('Washington F-line station').getObjectsByProperty('isMesh',true);
+  const stationTris=[...new Set(station.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
+  assert.equal(station.length,6);assert.ok(stationTris<3500);
+  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length-reader.length-station.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles-readerTris-stationTris<6200);
   assert.ok(carTriangles<4600);
 });
 
@@ -176,7 +179,7 @@ test('California 49 dwells at Drumm, boards from the island and runs on the narr
 test('car 49 lights only its saloon glass and leading dash lens in the existing transit draw',()=>{
   const scene=createPromenadeTransit(),batch=scene.batch;
   const position=batch.geometry.attributes.position,mask=batch.geometry.attributes.cableLight;
-  const byKind=[[],[],[],[]];
+  const byKind=[[],[],[],[],[]];
   for(let i=0;i<mask.count;i++)if(mask.getX(i))byKind[mask.getX(i)].push(new THREE.Vector3().fromBufferAttribute(position,i));
   assert.ok(byKind[1].length>80);
   assert.ok(byKind[1].every(v=>Math.abs(v.x)<1.69&&v.y>1.28&&v.y<2.42));
@@ -201,6 +204,41 @@ test('car 49 lights only its saloon glass and leading dash lens in the existing 
   assert.equal(local.uniforms.cableDusk.value,.2);
   assert.equal(shader.uniforms.cableDusk.value,.75);
   assert.equal(local.vertexShader.split('attribute float cableLight;').length,2);
+  assert.equal(scene.root.children.length,1);
+});
+
+test('only the Washington rider receives nearby canopy, doorway and saloon light inside the transit draw',async()=>{
+  const {driverPose,washingtonRideArrival}=await import('../app/driver-rides.ts');
+  const scene=createPromenadeTransit(),batch=scene.batch;
+  const rider=scene.poses.getObjectByName('Washington front-door passenger'),parts=[],riderParts=new Set();
+  scene.poses.traverse(p=>{if(p.isMesh&&!parts.includes(p.geometry))parts.push(p.geometry);});
+  rider.traverse(p=>{if(p.isMesh)riderParts.add(p.geometry);});
+  const tags=batch.geometry.attributes.cableLight;
+  parts.forEach((geometry,id)=>{
+    const r=batch.getGeometryRangeAt(id);
+    for(let j=r.vertexStart;j<r.vertexStart+r.vertexCount;j++)assert.equal(tags.getX(j)===4,riderParts.has(geometry));
+  });
+  const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};
+  batch.material.onBeforeCompile(shader,{});
+  scene.setNight(1);
+  const lamp=shader.uniforms.washingtonLamp.value;
+  let previous=0;
+  for(const t of [-4,1.6,3.2,4.68,10,25]){
+    const car=driverPose('streetcar',washingtonRideArrival+t);
+    scene.update(t,1320,false,undefined,t,car.body);
+    assert.ok(lamp.w>=previous);previous=lamp.w;
+    if(t===-4)assert.equal(lamp.w,.13);
+    if(t>=4.68)assert.equal(lamp.w,1);
+    if(t>=10){
+      const camera=new THREE.PerspectiveCamera();
+      camera.position.set(car.eye.x,car.eye.y,car.eye.z);camera.lookAt(car.look.x,car.look.y,car.look.z);
+      const local=camera.worldToLocal(new THREE.Vector3(lamp.x,lamp.y,lamp.z)).divideScalar(.06);
+      assert.ok(local.distanceTo(new THREE.Vector3(1.03,.896,2.74))<.002,'source is the lit globe above the occupied berth');
+    }
+  }
+  assert.match(shader.fragmentShader,/dot\(normal,delta\*inversesqrt/);
+  assert.match(shader.fragmentShader,/diffuseColor\.rgb\*vec3\(1\.,\.88,\.73\)\*received/);
+  scene.setNight(0);assert.equal(shader.uniforms.cableDusk.value,0);
   assert.equal(scene.root.children.length,1);
 });
 

@@ -1,3 +1,4 @@
+export {setPccFrontDoor} from './streetcar.ts';
 import {rinconGardenBorder} from './rincon-curb-edge.ts';
 import {createPromenadeTransit} from './promenade-transit.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
@@ -27,7 +28,7 @@ import {addSurveyBlocks,addSurveyFront,outsideSurveyRoads,surveyedHeight} from '
 import {hasShorelineFacade,shorelineFacade} from './shoreline-facades.ts';
 import * as THREE from 'three';
 import {buildStreetcarTrack} from './streets.ts';
-import {bakeStreetcarTrucks,createStreetcar,setStreetcarTrucks} from './streetcar.ts';
+import {bakePccBody,createStreetcar} from './streetcar.ts';
 import {createWaterfrontTraffic} from './waterfront-traffic.ts';
 import {createPlazaSkaters} from './plaza-skaters.ts';
 import {createPeople} from './people.ts';
@@ -687,8 +688,8 @@ export function createLandscape() {
   staticMeshes.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});
   // Keep each moving object intact while batching its own small components.
   const ferryPaint=serviceFerryPaint;
-  for(const group of [tram,...ferries,...cyclists]) {
-    const trucks=group===tram?bakeStreetcarTrucks(tram):null;
+  bakePccBody(tram,streetcar.glazing,streetcar.lamp);
+  for(const group of [...ferries,...cyclists]) {
     const isFerry=ferries.includes(group);
     const boardingBody=group.children.find(o=>o.userData.pyxisBoardingBody) as THREE.Mesh|undefined;
     group.updateMatrixWorld(true);
@@ -731,7 +732,6 @@ export function createLandscape() {
       batch.objects.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});batch.geometries.forEach(g=>g.dispose());
       const m=new THREE.Mesh(g,mat);m.castShadow=true;m.receiveShadow=true;group.add(m);
     });
-    if(trucks){group.add(trucks);setStreetcarTrucks(group);}
   }
   for(const object of moving)object.traverse(child=>{child.castShadow=false;});
   const transit=createPromenadeTransit();root.add(transit.root);

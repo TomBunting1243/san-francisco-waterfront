@@ -2,6 +2,7 @@ import {approachPose} from './approach-road.ts';
 import {bridgeLaneCenters} from './bridge-deck.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
 import {pccDimensions} from './streetcar.ts';
+import {pccDoorLead,washingtonStopX,washingtonDwell} from './washington-call.ts';
 import {museumDoorStation,streetcarRideBody} from './streetcar-ride-path.ts';
 
 export {setStreetcarTrucks} from './streetcar.ts';
@@ -9,17 +10,19 @@ export type RideMode='bridge'|'streetcar';
 type Point={x:number;y:number;z:number};
 const metres=.06;
 const bridgeStart=bridgeLayout.length+7.65,approachEnd=32,bridgeSpeed=1.10;
-const streetcarSpeed=.72,acceleration=.075,dwell=7;
+const streetcarSpeed=.72,acceleration=.075,dwell=washingtonDwell;
 const bodyScale=pccDimensions.length/3.629;
 // SFMTA northbound stops 14727, 14513, 14532 and 14503, projected onto the mapped rail.
-// The front boarding door (1.21 in the 1051 body mesh) meets each stop marker.
-const doorAhead=1.21*bodyScale;
-const ferry=-1.1513-doorAhead,washington=15.1602-doorAhead,broadway=35.3121-doorAhead;
+// The front boarding door (1.521 in the 1051 body mesh) meets each stop marker.
+const doorAhead=pccDoorLead;
+const ferry=-1.1513-doorAhead,washington=washingtonStopX,broadway=35.3121-doorAhead;
 const legDuration=(length:number,speed=streetcarSpeed)=>length/speed+speed/acceleration;
 const museum=museumDoorStation-doorAhead;
 const turnSpeed=.32; // 11.9 mph in the switch and across the arterial.
 export const museumLegDuration=legDuration(ferry-museum,turnSpeed);
 const firstLeg=legDuration(washington-ferry),lastLeg=legDuration(broadway-washington);
+
+export const washingtonRideArrival=museumLegDuration+dwell+firstLeg;
 
 export function rideDuration(mode:RideMode){
   return mode==='bridge'?(bridgeStart+approachEnd)/bridgeSpeed:museumLegDuration+dwell+firstLeg+dwell+lastLeg;

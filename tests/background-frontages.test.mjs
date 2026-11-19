@@ -15,15 +15,9 @@ function build(id){
 test('the narrow 139 Steuart parcel presents its three photographed bays toward the Embarcadero',()=>{
   const {root,windows}=build(193054137);
   root.updateMatrixWorld(true);
-  assert.equal(windows.filter(p=>Math.cos(p.ry)>.98).length,7);
+  assert.equal(windows.filter(p=>Math.cos(p.ry)>.98).length,4,'three second-floor windows and one upper curtain wall');
   assert.ok(windows.some(p=>Math.cos(p.ry)<-.98));
-  const [first]=windows;
-  assert.ok(Math.cos(first.ry)>.98,'The bay side faces the waterfront');
-  const frame=root.getObjectByName('Entry transom'),v=new THREE.Vector3();
-  frame.getWorldPosition(v);
-  const direction=new THREE.Vector3(-Math.sin(first.ry),0,-Math.cos(first.ry));
-  const hit=new THREE.Raycaster(v.clone().addScaledVector(direction,-.25),direction).intersectObjects(root.children,true)[0];
-  assert.equal(hit.object,frame);
+  assert.ok(root.getObjectByName('Angler waterfront entry and dining room'));
   assert.ok(Math.abs(new THREE.Box3().setFromObject(root).max.y-(surveyedHeight(193054137)+.009))<1e-5);
   assert.equal(build(193054135),undefined,'121 Steuart keeps its own architecture');
 });

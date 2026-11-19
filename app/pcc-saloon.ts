@@ -1,4 +1,6 @@
 import type {CabGeometry,CabPoint} from './ride-interior.ts';
+import {pccCabDoorZ,pccFrontLeafWidth} from './pcc-layout.ts';
+import {pccTreads} from './pcc-entrance.ts';
 
 // Car 1051's interior photographed by Elizabeth K. Joseph, September 2011:
 // https://www.flickr.com/photos/pleia2/6161168575/
@@ -58,7 +60,26 @@ export function addPccSaloon(g:CabGeometry){
     rail([x+r-.035,-.165,z+.09],[x+r,-.28,z+.084],.013);
     g.cross(z-.18,x-.047,x+.047,floor,-.78,'#43524b',.66);
   }
-  g.panel([left,floor,front],[right,floor,front],[right,floor,back],[left,floor,back],'#53564a',.44);
+  // Split the saloon floor at the front entrance. The lowest tread is 38 cm
+  // above the rail and all three risers face the boarding island.
+  const start=pccCabDoorZ-2*pccFrontLeafWidth,end=pccCabDoorZ+2*pccFrontLeafWidth,lip=1.506,inside=lip-.84;
+  if(start>front)g.level(floor,left,right,front,start,'#53564a',.44);
+  g.level(floor,left,inside,start,end,'#53564a',.44);
+  g.level(floor,left,right,end,back,'#53564a',.44);
+  for(const z of [start,end]){
+    g.cross(z,inside,lip,.38-2.15,floor,'#72816b',.58);
+  }
+  for(let k=0;k<pccTreads.length;k++){
+    const edge=lip-.21*k,h=pccTreads[k]-2.15;
+    g.level(h,edge-.21,edge,start,end,'#767a67',.70);
+    g.level(h+.002,edge-.029,edge,start,end,'#beb496',.82);
+    g.side(edge,k?pccTreads[k-1]-2.15:h-.06,h,start,end,'#515d50',.52);
+  }
+  const sidePanel=(x:number,lo:number,hi:number,a:number,b:number,tint:string,light:number)=>{
+    if(x<0||lo>.32||a>=end||b<=start){g.side(x,lo,hi,a,b,tint,light);return;}
+    if(a<start)g.side(x,lo,hi,a,start,tint,light);
+    if(b>end)g.side(x,lo,hi,end,b,tint,light);
+  };
   // Transverse ribs follow the formed roof between the clerestory and center spine.
   const arch=[[-1.2,.586],[-1.15,.75],[-.95,.87],[-.55,.953],[0,.979],[.55,.953],[.95,.87],[1.15,.75],[1.2,.586]];
   for(let j=1;j<arch.length;j++){
@@ -75,15 +96,18 @@ export function addPccSaloon(g:CabGeometry){
   }
   const cards=['#8b643f','#53716d','#a37159','#777f61'];
   for(const [x,inward] of [[left,1],[right,-1]]){
-    g.side(x,floor,-.47,front,back,'#7b907a',.66);
-    g.side(x+inward*.005,-.49,-.464,front,back,'#b7b29b',.66);
-    rail([x+inward*.03,-.195,front],[x+inward*.03,-.195,back],.014);
-    g.side(x,.30,.397,front,back,'#c3c2a4',.66);g.side(x,.554,.604,front,back,cream,.66);
+    sidePanel(x,floor,-.47,front,back,'#7b907a',.66);
+    sidePanel(x+inward*.005,-.49,-.464,front,back,'#b7b29b',.66);
+    for(const [a,b] of (inward<0?[[front,start],[end,back]]:[[front,back]])){
+      if(b<=a)continue;
+      rail([x+inward*.03,-.195,a],[x+inward*.03,-.195,b],.014);
+    }
+    sidePanel(x,.30,.397,front,back,'#c3c2a4',.66);sidePanel(x,.554,.604,front,back,cream,.66);
     for(let i=0;i<12;i++){
       const z=front+i*1.16;
-      g.side(x,-.47,.59,z,z+.046,'#b8bba3',.66);
-      g.side(x,.395,.555,z+.044,z+.21,cream,.66);
-      g.side(x,.395,.555,z+.966,z+1.16,cream,.66);
+      sidePanel(x,-.47,.59,z,z+.046,'#b8bba3',.66);
+      sidePanel(x,.395,.555,z+.044,z+.21,cream,.66);
+      sidePanel(x,.395,.555,z+.966,z+1.16,cream,.66);
       // Chamfered corners in rolled enamel, leaving real openings for the upper lights.
       for(const [edge,dir] of [[z+.21,1],[z+.966,-1]]){
         for(const [y,sy] of [[.395,1],[.555,-1]]){
@@ -99,14 +123,14 @@ export function addPccSaloon(g:CabGeometry){
     const aisle=center+inward*(-.37);
     rail([aisle,.77,1.05],[aisle,.77,12.77],.018);
     for(let i=0;i<9;i++){
-      const z=2.22+i*1.16;
+      const z=2.22+i*1.16+(inward<0&&i===0?.45:0);
       if(inward===-1&&i===5)continue;
       seat(inward===1?-.49:1.06,z,inward===1?.73:.83);
       rail([aisle,-.171,z+.09],[aisle,.77,z+.09],.015);
     }
   }
-  for(const z of [1.34,8.26])for(const offset of [-.58,-.20,.20,.58]){
-    g.side(right-.012,-.46,.36,z+offset,z+offset+.032,'#68736a',.66);
+  for(const z of [8.26])for(const offset of [-.58,-.20,.20,.58]){
+    sidePanel(right-.012,-.46,.36,z+offset,z+offset+.032,'#68736a',.66);
   }
   g.cross(back,left,right,floor,-.47,'#80947f',.66);
   g.cross(back,left,right,.46,.71,'#b6b39a',.66);

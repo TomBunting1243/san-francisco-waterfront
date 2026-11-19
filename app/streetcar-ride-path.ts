@@ -1,7 +1,7 @@
 import junction from '../public/data/steuart-junction.json' with {type:'json'};
 import {registeredMarketTracks} from './california-sidewalk.ts';
 import {trackAt,waterfrontRailTop,donCheeRailTop} from './streets.ts';
-import {pccDimensions} from './streetcar.ts';
+import {pccLengthScale,pccTruckHalfSpacing,pccAxleHalfSpacing} from './pcc-layout.ts';
 
 const turn=junction.curves.find(curve=>curve.way===93448549)!.points;
 const path=[...registeredMarketTracks[331003151].slice(-5),...junction.westJoin.slice(1),...turn.slice(1)];
@@ -28,8 +28,7 @@ export function rideRailAt(s:number){
   const x=a[0]+f*(b[0]-a[0]),z=a[1]+f*(b[1]-a[1]);
   return {x,z,y:donCheeRailTop(z),heading:-Math.atan2(b[1]-a[1],b[0]-a[0])};
 }
-const carScale=pccDimensions.length/3.629;
-const halfWheelbase=1.08*carScale,halfAxles=.22*carScale;
+const halfWheelbase=pccTruckHalfSpacing*pccLengthScale,halfAxles=pccAxleHalfSpacing*pccLengthScale;
 type Sample=ReturnType<typeof rideRailAt>;
 function chord(a:Sample,b:Sample){
   return {x:(b.x+a.x)/2,y:(a.y+b.y)/2,z:(b.z+a.z)/2,heading:-Math.atan2(b.z-a.z,b.x-a.x)};
