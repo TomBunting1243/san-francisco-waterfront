@@ -41,8 +41,22 @@ export function harryBridgesGround(x:number,z:number):number|undefined{
   return medianGrade(x,z);
 }
 
+// Sidewalk 337 was clipped against a simplified round-corner buffer. Its
+// straight chords part from the actual back of curb 3818976 near the junction.
+// Use the same section vertices as addSurveyCurbs and intersect the final
+// segment with the surviving hotel-side boundary.
+const museumReturn=curbRuns.find(([id])=>id===3818976)![2];
+const curbBack=museumReturn.map(([x,z,nx,nz])=>[x-.031*nx,z-.031*nz]);
+const backA=curbBack[curbBack.length-2],backB=curbBack[curbBack.length-1];
+const backDx=backB[0]-backA[0],backDz=backB[1]-backA[1],wallSlope=.340/-2.297;
+const backT=(-7.844+(backA[0]+8.554)*wallSlope-backA[1])/(backDz-wallSlope*backDx);
+export const museumWalkSeam=[backA[0]+backDx*backT,backA[1]+backDz*backT];
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
   const overrides=data.overrides as Record<string,Record<string,number[][][][]>>;
+  if(kind==='sidewalk'&&index===337){
+    const ring=overrides.sidewalk[index][0][0];
+    return [[[...ring.slice(0,6),...curbBack.slice(0,-1),museumWalkSeam]]];
+  }
   return frostPavement(kind,index,overrides[kind]?.[index]??[original]);
 }
 

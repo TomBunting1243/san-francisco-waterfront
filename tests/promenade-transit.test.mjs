@@ -122,8 +122,12 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const diners=scene.poses.getObjectByName('Terrene patio diners').getObjectsByProperty('isMesh',true);
   const dinerTriangles=diners.reduce((n,o)=>n+o.geometry.index.count/3,0);
   assert.equal(diners.length,5);assert.ok(dinerTriangles<900);
-  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length,69);
-  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles<6200);
+  const reader=scene.poses.getObjectByName('Railway museum exhibit reader').getObjectsByProperty('isMesh',true);
+  assert.equal(reader.length,3);
+  const readerTris=[...new Set(reader.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
+  assert.ok(readerTris<300);
+  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length-reader.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles-readerTris<6200);
   assert.ok(carTriangles<4600);
 });
 
@@ -241,4 +245,32 @@ test('Terrene seats its guests facing the same table during opening hours in fai
   const resting=height();
   scene.update(6,735,false);assert.ok(resting>.74&&height()>resting+.15);
   scene.update(12,735,false);assert.equal(height(),resting);
+});
+
+test('the museum visitor strolls the unobstructed exhibition aisle during Pacific opening hours',async()=>{
+  const {addMuseumGallery}=await import('../app/museum-gallery.ts');
+  const room=new THREE.Group();addMuseumGallery(room);room.updateMatrixWorld(true);
+  const transit=createPromenadeTransit(),frame=transit.poses.getObjectByName('Railway museum exhibit reader');
+  const person=frame.children[0],body=person.getObjectByName('Painted passenger');
+  const instance=transit.poses.getObjectsByProperty('isMesh',true).indexOf(body);
+  for(const [date,minute,open] of [['2026-11-15',720,true],['2026-11-16',810,false],['2026-11-17',719,false],['2026-11-17',720,true],['2026-11-17',1019,true],['2026-11-17',1020,false]]){
+    transit.update(0,minute,false,date);assert.equal(transit.batch.getVisibleAt(instance),open);
+  }
+  const tuesday='2026-11-17',ray=new THREE.Raycaster(),floor=room.getObjectByName('Museum room and pendant shades');
+  let previous;
+  for(let t=0;t<=38;t+=.25){
+    transit.update(t,810,false,tuesday);
+    const foot=person.getWorldPosition(new THREE.Vector3()),down=new THREE.Vector3(0,-1,0);
+    ray.set(foot.clone().addScaledVector(down,-.025),down);
+    const hit=ray.intersectObject(room)[0];
+    assert.equal(hit.object,floor);assert.ok(Math.abs(hit.point.y-foot.y)<.00015);
+    assert.ok(!previous||previous.distanceTo(foot)<.019);previous=foot;
+  }
+  transit.update(13,810,false,tuesday);const reading=body.matrixWorld.toArray();
+  transit.update(18,810,false,tuesday);assert.deepEqual(body.matrixWorld.toArray(),reading);
+  const eye=person.localToWorld(new THREE.Vector3(0,1.49,0));
+  ray.set(eye,person.getWorldDirection(new THREE.Vector3()));
+  assert.ok(ray.intersectObject(room)[0].distance>.10);
+  const matrix=new THREE.Matrix4();transit.batch.getMatrixAt(instance,matrix);
+  assert.ok(reading.every((n,i)=>Math.abs(n-matrix.elements[i])<.000001));
 });

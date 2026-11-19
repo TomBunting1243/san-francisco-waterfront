@@ -666,7 +666,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const localMinutes=lighting.hours*60+lighting.minutes;
         const patioSheltered=snowfall||rain>.35;
         if(motionChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
-          world.transit?.update(elapsed,localMinutes,patioSheltered);
+          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date);
           lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
         }
         if(motionChanged){

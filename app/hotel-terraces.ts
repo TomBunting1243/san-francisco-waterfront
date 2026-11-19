@@ -1,43 +1,76 @@
 import * as THREE from 'three';
+import {museumWalkSeam} from './curb-survey.ts';
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
-import {donCheeHotelCurb,donCheeBedHeight} from './steuart-junction.ts';
+import {donCheeHotelCurb,donCheeGutterHeight} from './steuart-junction.ts';
 
 const paint=new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.91});
 type Plan=[number,number];
 const pavement=.068;
 const unit=.06;
 
-/** Traced between the museum corner and its neighbor on SF's 2024 orthophoto.
- * The north edge uses precisely the line and grade of the streetcar reservation. */
+/** Don Chee south sidewalk abuts Steuart sidewalk 337 and municipal curb
+ * return 3818976. Its last cross-section is already present in the curb mesh.
+ * The concrete door approach and lowered edge are visible in the Railway
+ * Museum's entrance photograph. No tactile stud pattern is resolved here. */
 export function addMuseumWalk(root:THREE.Group){
   const wall:Plan[]=[[-8.611,-7.807],[-8.462,-6.749],[-8.53,-6.50],[-8.40,-5.50],[-8.52,-5.22],[-8.45,-4.65]];
-  const curb=donCheeHotelCurb.filter(p=>p[1]>-7.86);
-  const panels=new FacadePanels();
-  function wallX(z:number){
-    const i=wall.findIndex(p=>p[1]>=z);
-    if(i<=0)return i===0?wall[0][0]:wall.at(-1)![0];
-    const [a,b]=[wall[i-1],wall[i]];
+  const panels=new FacadePanels(),stone='#c1baab',lip='#c8c2b4',face='#9e9c8e';
+  function interpolate(rows:Plan[],z:number){
+    const i=rows.findIndex(p=>p[1]>=z);
+    if(i<=0)return rows[i===0?0:rows.length-1][0];
+    const [a,b]=[rows[i-1],rows[i]];
     return a[0]+(b[0]-a[0])*(z-a[1])/(b[1]-a[1]);
   }
-  function edgeX(z:number){
-    const i=donCheeHotelCurb.findIndex(p=>p[1]>=z),a=donCheeHotelCurb[i-1],b=donCheeHotelCurb[i];
-    return a[0]+(b[0]-a[0])*(z-a[1])/(b[1]-a[1]);
+  // The cut grade returns to a six-inch curb outside the sloped approach.
+  const curbRise:Plan[]=[[.00914,-7.8248073],[.0028,-7.774],[0,-7.709],[0,-7.51],[.008,-7.40]];
+  // Walk up toward the sill from the trackside approach. Its wall edge
+  // stays level along the door, including the recess behind the exterior brick.
+  const wallGrade:Plan[]=[[.045,-7.834],[.050,-7.774],[.061,-7.709],[pavement,-7.698]];
+  function row(z:number){
+    const gutter=donCheeGutterHeight(z),edge=interpolate(donCheeHotelCurb,z);
+    const top=gutter+interpolate(curbRise,z);
+    const inside=interpolate(wall,z);
+    const back=interpolate(wallGrade,z);
+    const width=edge-.012-inside;
+    // Carry the sill level across the entrance landing. The outer part of
+    // the walk follows the dropped gutter; at the far end it becomes a curb.
+    const landing=Math.min(width*.40,.072),transition=THREE.MathUtils.smoothstep(z,-7.71,-7.66);
+    const fall=THREE.MathUtils.lerp((back-top-.00035)*landing/width,.001,transition);
+    return [[inside,back,z],[edge-.012,top+.00035,z],[edge,top,z],[edge,gutter,z],[inside+landing,back-fall,z]] as FacadePoint[];
   }
-  const zs=Array.from(new Set([...curb.map(p=>p[1]),...wall.map(p=>p[1]),-7.95])).sort((a,b)=>a-b);
+  function topPolygon(outline:FacadePoint[],tint:string){
+    const tris=THREE.ShapeUtils.triangulateShape(outline.map(([x,,z])=>new THREE.Vector2(x,-z)),[]);
+    for(const [a,b,c] of tris)panels.triangle(outline[a],outline[b],outline[c],tint);
+  }
+  // Continue the clipped back edge of sidewalk 337 and the five-point curb
+  // profile. Joining this oblique polyline avoids a flat cover on the old arc.
+  const endX=-8.513,endZ=-7.824,nx=.936,nz=-.351;
+  const cap=(t:number,y:number):FacadePoint=>[endX+nx*t,y,endZ+nz*t];
+  const steuartWall:Plan[]=[[-12.0,-7.3239],[-11.664,-7.371],[-10.851,-7.4878],[-10.531,-7.533],
+    [-9.564,-7.671],[-8.611,-7.807]];
+  function backOfWalk(x:number){
+    return x< -10.851?-7.504+(x+10.851)*(.171/-1.149):-7.844+(x+8.554)*(.340/-2.297);
+  }
+  for(let k=1;k<steuartWall.length;k++){
+    const [a,z]=steuartWall[k-1],[b,w]=steuartWall[k];
+    panels.quad([a,.045,backOfWalk(a)],[a,.0472,z],[b,.0472,w],[b,.045,backOfWalk(b)],stone);
+  }
+  const inner:FacadePoint=[-8.611,.045,backOfWalk(-8.611)];
+  const start=row(-7.774);
+  topPolygon([inner,[museumWalkSeam[0],.045,museumWalkSeam[1]],cap(-.031,.0451),cap(-.011,.04064),
+    start[1],start[4],start[0],[-8.611,.0472,-7.807]],stone);
+  topPolygon([cap(-.011,.04064),cap(0,.04064),start[2],start[1]],lip);
+  panels.quad(cap(0,.04064),start[2],start[3],cap(.0023,.0315),face);
+  const zs=Array.from(new Set([-7.774,...donCheeHotelCurb.map(p=>p[1]),...wall.map(p=>p[1]),
+    ...curbRise.map(p=>p[1]),...wallGrade.map(p=>p[1]),-7.71,-7.51])).filter(z=>z>=-7.774).sort((a,b)=>a-b);
   for(let i=1;i<zs.length;i++){
-    const a=zs[i-1],b=zs[i],n=Math.ceil((b-a)/.145);
+    const a=zs[i-1],b=zs[i],n=Math.ceil((b-a)/.19);
     for(let j=0;j<n;j++){
-      const l=a+(b-a)*j/n,r=a+(b-a)*(j+1)/n;
-      function cross(z:number,d:number):FacadePoint{
-        const t=Math.max(0,Math.min(1,(z+7.95)/.13)),x=edgeX(z);
-        const inside=wallX(z)-.018*(1-t),width=x-inside;
-        const h=donCheeBedHeight(z)+.008*t;
-        return [inside+width*d,h+(pavement-h)*t*(1-d),z];
-      }
-      panels.quad(cross(l,0),cross(r,0),cross(r,.87),cross(l,.87),j%2?'#b8b4a8':'#bcb7ac');
-      panels.quad(cross(l,.87),cross(r,.87),cross(r,1),cross(l,1),'#c8c2b4');
-      const p=cross(l,1),q=cross(r,1);
-      panels.quad(p,q,[q[0],donCheeBedHeight(r)-.0005,r],[p[0],donCheeBedHeight(l)-.0005,l],'#9e9c8e');
+      const lo=row(a+(b-a)*j/n),hi=row(a+(b-a)*(j+1)/n);
+      panels.quad(lo[0],hi[0],hi[4],lo[4],stone);
+      panels.quad(lo[4],hi[4],hi[1],lo[1],stone);
+      panels.quad(lo[1],hi[1],hi[2],lo[2],lip);
+      panels.quad(lo[2],hi[2],hi[3],lo[3],face);
     }
   }
   const walk=panels.mesh(paint);walk.name='Don Chee museum sidewalk and dropped corner';root.add(walk);
@@ -76,7 +109,7 @@ const patioTablePositions:Plan[]=[
 export const patioFurniture={positions:patioTablePositions,yaw:-streetYaw,ground:.051,chairOffset:.67};
 
 function diningTable(p:FacadePanels,x:number,z:number,i:number){
-  const {cuboid,bowl}=furnishings(p,x,patioFurniture.ground,z,patioFurniture.yaw);
+  const {cuboid,bowl,at}=furnishings(p,x,patioFurniture.ground,z,patioFurniture.yaw);
   const oak=i%3===0?'#a97653':'#ae8262',slat='#765f4c';
   for(const dx of [-.45,.45])for(const dz of [-.35,.35])cuboid(dx,0,dz,.07,.70,.07,slat);
   cuboid(0,.686,0,1.12,.055,.86,oak);
@@ -86,8 +119,39 @@ function diningTable(p:FacadePanels,x:number,z:number,i:number){
     const cz=side*patioFurniture.chairOffset;
     for(const u of [-.22,.22])for(const v of [-.20,.20])cuboid(u,0,cz+v,.044,.414,.044,slat);
     cuboid(0,.414,cz,.48,.037,.46,oak);cuboid(0,.451,cz,.46,.039,.43,'#e0d0ae');
-    for(const u of [-.21,.21])cuboid(u,.45,cz+.20*side,.040,.39,.04,oak);
-    cuboid(0,.69,cz+.21*side,.46,.125,.028,'#c7b79a');
+    // The window row has canvas backs. Along the walk the curved cane chairs
+    // have the lighter open profile visible in the hotel's patio photograph.
+    if(i>=5){
+      for(const u of [-.218,.218])cuboid(u,.45,cz+.20*side,.039,.40,.039,oak);
+      cuboid(0,.648,cz+.20*side,.405,.177,.025,'#b9b3a0');
+    }else curvedBack(side,cz);
+    bowl(0,.745,.239*side,.123,.013,'#d5c5ad',12);
+    bowl(0,.758,.239*side,.103,.004,'#efe6d0',12);
+    cuboid(.209,.745,.249*side,.080,.013,.176,'#595551');
+    if(i!==3||side>0)bowl(-.171,.745,.164*side,.041,.092,'#b7c6bd',8);
+  }
+  function curvedBack(side:number,cz:number){
+    // A single bent cane back sweeps from elbow height at the arms up
+    // around the cushion. The cutouts between the woven bands read at cab scale.
+    const profile=(t:number,r:number,h:number):FacadePoint=>{
+      const a=t*Math.PI*1.24-Math.PI*.62;
+      return at(Math.sin(a)*r,h+.145*Math.cos(a),cz+side*Math.cos(a)*(r+.007));
+    };
+    for(let j=0;j<10;j++){
+      const t=j/10,next=(j+1)/10;
+      for(const [h,band] of [[.713,.031],[.650,.043],[.568,.033]]){
+        const a=profile(t,.252,h),b=profile(next,.252,h),c=profile(next,.252,h+band),d=profile(t,.252,h+band);
+        if(side>0)p.quad(a,b,c,d,'#b29571');else p.quad(d,c,b,a,'#b29571');
+        if(side>0)p.quad(profile(t,.232,h+band),d,c,profile(next,.232,h+band),'#c6ad87');
+        else p.quad(profile(next,.232,h+band),c,d,profile(t,.232,h+band),'#c6ad87');
+        if(side>0)p.quad(profile(t,.232,h+band),profile(next,.232,h+band),profile(next,.232,h),profile(t,.232,h),'#a98b67');
+        else p.quad(profile(t,.232,h),profile(next,.232,h),profile(next,.232,h+band),profile(t,.232,h+band),'#a98b67');
+      }
+    }
+    for(const t of [.045,.29,.5,.71,.955]){
+      const a=(t-.5)*Math.PI*1.24,r=.243;
+      cuboid(Math.sin(a)*r,.45,cz+side*Math.cos(a)*(r+.007),.027,.267+.145*Math.cos(a),.034,'#997c60');
+    }
   }
 }
 
@@ -101,6 +165,21 @@ function patio(p:FacadePanels){
     p.quad(v(i,.035),v(j,.035),v(j,deck),v(i,deck),'#aa9f91');
   }
   for(const [i,pt] of patioTablePositions.entries())diningTable(p,pt[0],pt[1],i);
+  // A service cupboard at the end and the fine top edge of the windscreens
+  // define the patio without filling the waterfront sightline with a glass wall.
+  const cabinet=plate(204,69);
+  const f=furnishings(p,cabinet[0],deck,cabinet[1],patioFurniture.yaw);
+  f.cuboid(0,0,0,.65,.90,1.79,'#735947');f.cuboid(0,.9,0,.73,.045,1.88,'#bba78b');
+  for(const offset of [-.48,0,.48])f.bowl(0,.945,offset,.09,.14,'#adb399');
+  for(const [l,r] of [[.04,.42],[.54,.91]]){
+    const outer=(t:number,y:number):FacadePoint=>[corners[0][0]+(corners[1][0]-corners[0][0])*t,y,corners[0][1]+(corners[1][1]-corners[0][1])*t];
+    const top=deck+1.02*unit;
+    for(let j=0;j<=3;j++){
+      const pt=outer(l+(r-l)*j/3,deck);
+      furnishings(p,pt[0],deck,pt[2],patioFurniture.yaw).cuboid(0,0,0,.033,1.02,.033,'#847d6a');
+    }
+    p.quad(outer(l,top),outer(l,top-.0016),outer(r,top-.0016),outer(r,top),'#a3b7ae');
+  }
   // The outer balustrade and three strands of festoon lights leave the broad
   // waterfront sidewalk open. Each glowing bulb shares the city's night batch.
   const lights=new FacadePanels();

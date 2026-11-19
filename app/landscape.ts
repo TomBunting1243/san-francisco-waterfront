@@ -1,3 +1,4 @@
+import {rinconGardenBorder} from './rincon-curb-edge.ts';
 import {createPromenadeTransit} from './promenade-transit.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
 import {applyWalkPanelJoints} from './promenade-pavement.ts';
@@ -44,7 +45,7 @@ import {ferryPassengerCount,updateFerryPassengers} from './ferry-passengers.ts';
 import {createServiceFerry,serviceFerryPaint,updatePyxisBoardingDoor} from './service-ferries.ts';
 import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
-import {baySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
+import {baySurfaceGeometry,vignetteBaySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
 import {bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
@@ -436,10 +437,7 @@ export function createLandscape() {
   }
   for(const y of [.28,.45,.77])box(signWidth,.014,.018,0,y,-.04,'#726a5a',coffeeSign);
   // Rincon Park, a curved lawn set between boulevard and bay.
-  const gardenBorder=[[312,206],[310,178],[342,147],[376,129],[412,128],[495,140],[569,160],[640,183],
-    [714,201],[769,213],[760,225],[719,237],[675,237],[644,239],[602,216],[552,192],[502,177],[462,166],
-    [419,164],[378,175],[343,191]].map(([u,v])=>rinconPoint(u,v));
-  mesh(footprintGeometry(gardenBorder,.009),'#9a9878',0,.108,0);
+  mesh(footprintGeometry(rinconGardenBorder,.009),'#9a9878',0,.108,0);
   for(const bed of waterfrontLandscape.areas.filter(a=>[32862580,1164309758,1164309759,1164309760].includes(a.id))){
     mesh(footprintGeometry(bed.p,.008),'#889969',0,.109,0);
   }
@@ -927,7 +925,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   const windows=new THREE.InstancedMesh(windowGeometry,windowMaterial,indices.length);
   indices.forEach((index,i)=>{original.getMatrixAt(index,matrix);windows.setMatrixAt(i,matrix);const color=new THREE.Color();original.getColorAt(index,color);windows.setColorAt(i,color);});root.add(windows);
   const tidalPanes=source.tidalPanes.map(({i,y})=>({i:indices.indexOf(i),y})).filter(p=>p.i>=0);
-  const water=new THREE.Mesh(new THREE.PlaneGeometry(240,240,1,1),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=waterSurface.level;water.receiveShadow=true;root.add(water);
+  const water=new THREE.Mesh(vignetteBaySurfaceGeometry(),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=waterSurface.level;water.receiveShadow=true;root.add(water);
   const residents=source.residentPositions.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));
   const walkerCount=waterfrontWalkerCount(variant);
   const skaters=variant==='plaza'&&source.skaters?createPlazaSkaters(copiedMaterial(source.skaters.material) as THREE.MeshStandardMaterial):undefined;if(skaters)root.add(skaters.root);

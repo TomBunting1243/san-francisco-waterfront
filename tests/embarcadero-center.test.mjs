@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 import {createEmbarcaderoCenter,centerTowerFacade,centerTowerIds,centerLobby,centerPromenade} from '../app/embarcadero-center.ts';
+import {fourCenterDiningFloor} from '../app/four-center-retail.ts';
 import {insideBuilding} from '../app/building-character.ts';
 import {mappedBuildings} from '../app/sf-map.ts';
 import {refineReferenceMassing} from '../app/reference-architecture.ts';
@@ -72,12 +73,12 @@ test('Osha opens onto the plaza on the street level, with a clear approach betwe
   const sign=g.getObjectByName('Osha Thai lettering');
   const board=g.getObjectByName('Osha Thai signboard');
   assert.ok(sign && board);
-  const publicSide=g.localToWorld(new THREE.Vector3(0,.14,.68));
+  const publicSide=g.localToWorld(new THREE.Vector3(0,fourCenterDiningFloor+.065,.68));
   const inward=new THREE.Vector3(0,0,-1).transformDirection(g.matrixWorld);
   const forward=new THREE.Raycaster(publicSide,inward);
   const hits=forward.intersectObject(g).filter(h=>h.object.name==='Recessed glass door');
   // Test the left leaf itself rather than the narrow gap between leaves.
-  forward.ray.origin.copy(g.localToWorld(new THREE.Vector3(-.025,.14,.68)));
+  forward.ray.origin.copy(g.localToWorld(new THREE.Vector3(-.025,fourCenterDiningFloor+.065,.68)));
   assert.equal(forward.intersectObject(g)[0].object.name,'Recessed glass door');
   assert.equal(hits.length,0);
   assert.ok(sign.getWorldPosition(new THREE.Vector3()).y<centerLobby);

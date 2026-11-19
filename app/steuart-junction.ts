@@ -14,10 +14,24 @@ function direction(a:Point,b:Point){
   return [dx/d,dz/d];
 }
 
-const bed=[[-8.56,-7.50,-8.42],[-8.44,-7.52,-7.83],[-8.40,-7.52,-7.61],[-8.325,-7.51,-7.03],
+// SFMTA curb return 3818976 ends at (-8.513,-7.824), normal (.936,-.351).
+// Its transverse gutter cap supplies the first two shared edges. The short
+// side taper reaches the independently registered aerial curb near the door.
+const bed=[[-8.56,-7.50,-8.42],[-8.478368,-7.52,-7.836987],[-8.5108472,-7.52,-7.8248073],
+  [-8.490,-7.52,-7.774],[-8.458,-7.52,-7.709],[-8.40,-7.52,-7.61],[-8.3832,-7.518,-7.48],[-8.325,-7.51,-7.03],
   [-8.26,-7.44,-6.24],[-8.23,-7.35,-5.53],[-8.16,-7.27,-5.30],[-8.12,-7.23,-5.14],[-8.09,-7.20,-4.98],[-8.07,-7.17,-4.81],[-8.04,-7.13,-4.65]];
 export const donCheeHotelCurb=bed.map(([x,,z]):[number,number]=>[x,z]);
 export const donCheeBedHeight=(z:number)=>donCheeRailTop(z)-.0021;
+// The local outer margin descends toward Steuart's roadway; rails retain
+// their running levels across this triangular concrete apron.
+const cornerHeights=[.03116,.032,.0315,.0354,.0404,.0586,.0599];
+export function donCheeGutterHeight(z:number){
+  const i=bed.findIndex(row=>row[2]>=z);
+  if(i===0)return cornerHeights[0];
+  if(i<0||i>=cornerHeights.length)return donCheeBedHeight(z);
+  const a=bed[i-1][2],b=bed[i][2];
+  return THREE.MathUtils.lerp(cornerHeights[i-1],cornerHeights[i],(z-a)/(b-a));
+}
 
 type PlanPoint=[number,number];
 type TrackStrip=(a:PlanPoint,b:PlanPoint,y:number,w:number,h:number,paint:string)=>THREE.Mesh;
@@ -54,8 +68,18 @@ export function makeSteuartJunction(){
   for(let k=1;k<bed.length;k++){
     const [a,b,z]=bed[k-1],[c,d,w]=bed[k];
     const h=donCheeBedHeight(z),j=donCheeBedHeight(w);
-    panels.quad([a,h,z],[c,j,w],[d,j,w],[b,h,z],'#ada89a');
+    if(k<cornerHeights.length){
+      // Ease the track-side apron into the asphalt without lifting either rail.
+      const insideA=a+Math.min(.175,(b-a)*.21),insideC=c+Math.min(.175,(d-c)*.21);
+      panels.quad([a,donCheeGutterHeight(z),z],[c,donCheeGutterHeight(w),w],[insideC,j,w],[insideA,h,z],'#ada89a');
+      panels.quad([insideA,h,z],[insideC,j,w],[d,j,w],[b,h,z],'#ada89a');
+    }else panels.quad([a,h,z],[c,j,w],[d,j,w],[b,h,z],'#ada89a');
   }
+  // The rounded outside gutter and the taper meet beyond the final oblique
+  // edge of Steuart road polygon 111. Close the 0.01 m² intersection of the
+  // three edges with one gutter triangle, sharing existing road and apron vertices.
+  panels.triangle([-8.484980,.031,-7.854493],[-8.478368,.032,-7.836987],
+    [-8.480904,donCheeGutterHeight(-7.855098),-7.855098],'#989c91');
   function track(original:Point[],endAxis?:Point){
     const path=original.flatMap((p,i)=>{
       if(i===0)return [p];

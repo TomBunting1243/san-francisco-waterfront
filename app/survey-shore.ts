@@ -1,3 +1,4 @@
+import {rinconTerrace} from './rincon-curb-edge.ts';
 import {harborDatum,waterSurface} from './water-surface.ts';
 import * as THREE from 'three';
 import data from '../public/data/survey-shore.json' with {type:'json'};
@@ -49,7 +50,7 @@ export function addSurveyShore(mesh:Surface,bankHeight:(x:number,z:number)=>numb
   mesh(bank,'#89958b',0,0,0).name='Surveyed mainland retaining faces';
   // Carry the OSM park paving down to its surveyed wall with the same finished
   // level used by the raised lawn and the accessible promenade.
-  for(const rings of data.rincon){
+  for(const rings of [rinconTerrace,...data.rincon.slice(1)]){
     const geometry=new THREE.ExtrudeGeometry(shape(rings),{depth:.122,bevelEnabled:false});
     geometry.rotateX(-Math.PI/2);
     mesh(geometry,'#c2bfa8',0,-.012,0).name='Rincon Park terrace';

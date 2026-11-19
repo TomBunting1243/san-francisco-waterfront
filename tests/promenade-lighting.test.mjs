@@ -91,13 +91,13 @@ test('baked lantern glass emits on its actual faces while iron stays dark',()=>{
   }
 });
 
-test('both curb rows stand on their registered supporting surfaces, including the six lowered Rincon bases',()=>{
+test('both curb rows stand on their registered supporting surfaces, including both finished Rincon curb approaches',()=>{
   const poles=[...lamps.curb,...lamps.inland];
   assert.equal(Object.keys(grades).length,poles.length);
   for(const [i,[id]] of poles.entries()){
     const geometry=root.children[i].geometry;geometry.computeBoundingBox();
     assert.ok(Math.abs(geometry.boundingBox.min.y-grades[id])<.00001,id);
   }
-  for(const id of [287051,282079,284944,281691,281690,281688])assert.equal(grades[id],-.040);
+  for(const id of [287051,282079,284944,281691,281690,281688,284943,281687,282992])assert.equal(grades[id],.045);
   assert.equal(grades[287068],.045);assert.equal(grades[287069],.031);
 });

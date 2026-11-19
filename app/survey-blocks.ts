@@ -1,3 +1,4 @@
+import {addRinconCurbEdge} from './rincon-curb-edge.ts';
 import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
@@ -121,12 +122,14 @@ export function addSurveyFront(mesh:Surface,id:number,height:number){
 
 export function addSurveyBlocks(mesh:Surface){
   const tiles=new Map<string,Tile>();
-  function at(plan:Plan){
-    const [x,z]=plan[0][0],key=Math.floor(x/12)+','+Math.floor(z/12);
+  function tileAt(x:number,z:number){
+    const key=Math.floor(x/12)+','+Math.floor(z/12);
     let tile=tiles.get(key);
     if(!tile)tiles.set(key,tile=new Tile());
     return tile;
   }
+  const at=(plan:Plan)=>tileAt(plan[0][0][0],plan[0][0][1]);
+  addRinconCurbEdge(tileAt(-28,-2));
   for(const plan of bealeSidewalk)at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   // Broad planted beds visible in the registered Beale transit-block aerial.
   // A shallow raised crown darkens their edges without adding leaf cutouts.

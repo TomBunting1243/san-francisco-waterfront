@@ -45,16 +45,28 @@ test('the transit museum awning projects above a recessed glazed double door wit
   const fascia=root.getObjectByName('Don Chee Way museum awning');
   const facade=root.getObjectByName('Steuart hotel brick, stone and glazing returns');
   const front=new THREE.Vector3(0,0,1).applyQuaternion(fascia.quaternion);
+  const gallery=root.getObjectByName('San Francisco Railway Museum gallery');
   const sample=(u,v)=>{
     const origin=fascia.localToWorld(new THREE.Vector3(u,v,.20));
-    return new THREE.Raycaster(origin,front.clone().negate()).intersectObject(facade)[0];
+    return new THREE.Raycaster(origin,front.clone().negate()).intersectObjects([facade,gallery],true)[0];
   };
   for(const u of [-.078,0,.078])assert.ok(Math.abs(sample(u,-.008).distance-.2008)<1e-5);
   assert.ok(sample(0,.032).distance<.202);
   assert.ok(sample(.088,.032).distance>.265);
   const left=sample(-.045,-.059),right=sample(.045,-.059);
-  assert.ok(left.distance>.292&&right.distance>.292);
-  assert.ok(sample(0,-.059).distance<left.distance-.002);
+  for(const pane of [left,right]){
+    assert.equal(pane.object.name,'Museum room and pendant shades');
+    assert.ok(pane.distance>1.15);
+  }
+  assert.equal(sample(0,-.059).object,facade);
+  assert.equal(sample(-.02,-.059).object.name,'Car 105 motorman platform exhibit');
+  assert.equal(sample(.045,-.087).object.name,'Archive panels and streetcar display cases');
+  assert.ok(sample(0,-.059).distance<.295);
+  for(const [z,name] of [[-2.8,'Archive panels and streetcar display cases'],[-7.2,'Archive panels and streetcar display cases'],[-12,'Car 105 motorman platform exhibit']]){
+    const origin=gallery.localToWorld(new THREE.Vector3(4.3,1.3,z));
+    const intoRoom=new THREE.Vector3(-1,0,0).transformDirection(gallery.matrixWorld);
+    assert.equal(new THREE.Raycaster(origin,intoRoom).intersectObject(root)[0].object.name,name,'Steuart bay at '+z);
+  }
   assert.ok(root.getObjectByName('Railway museum blade on Steuart'));
   assert.ok(root.getObjectByName('Terrene waterfront dining patio'));
   assert.ok(root.getObjectByName('Terrene festoon lamp glass').userData.signLight);

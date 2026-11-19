@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {FacadePanels, type FacadePoint} from './facade-panels.ts';
+import {addMuseumGallery} from './museum-gallery.ts';
 import {addHotelTerraces,addMuseumWalk} from './hotel-terraces.ts';
 
 type Building={id:number;p:number[][];h:number;minH?:number;parent?:number};
@@ -72,7 +73,7 @@ type Wall=ReturnType<typeof elevation>;
 
 // The north and west elevations are deliberately open at the storefront.
 // Each arch has a soffit and returns, with glazing recessed behind the masonry.
-function groundArc(p:FacadePanels,f:Wall,l:number,r:number,spring:number,rise:number,recess:number,finish=brick){
+function groundArc(p:FacadePanels,f:Wall,l:number,r:number,spring:number,rise:number,recess:number,finish=brick,glazedBacking=true){
   const {at,face}=f;
   const top=(i:number)=>spring+rise*Math.sin(Math.PI*i/12);
   for(let i=0;i<12;i++){
@@ -84,7 +85,7 @@ function groundArc(p:FacadePanels,f:Wall,l:number,r:number,spring:number,rise:nu
   p.quad(at(l,floor,0),at(l,floor,recess),at(l,spring,recess),at(l,spring,0),shadowBrick);
   p.quad(at(r,floor,recess),at(r,floor,0),at(r,spring,0),at(r,spring,recess),shadowBrick);
   p.quad(at(l,floor,0),at(r,floor,0),at(r,floor,recess),at(l,floor,recess),stone);
-  face(l,r,floor,spring,recess,'#344b4d');
+  if(glazedBacking)face(l,r,floor,spring,recess,'#344b4d');
 }
 
 function museum(p:FacadePanels,f:Wall,north:boolean,root:THREE.Group,font:Font){
@@ -112,9 +113,11 @@ function museum(p:FacadePanels,f:Wall,north:boolean,root:THREE.Group,font:Font){
     let prev=0;
     for(let i=0;i<3;i++){
       const l=w*(.10+i*.315),r=l+w*.205;
-      pier(prev,l);groundArc(p,f,l,r,.208,.031,-.017,wallBrick);
+      pier(prev,l);groundArc(p,f,l,r,.208,.031,-.017,wallBrick,false);
       relief((l+r)/2-.0018,(l+r)/2+.0018,floor,.230,-.017,-.014,iron);
       relief(l,r,.174,.178,-.017,-.014,iron);
+      relief(l,r,floor,floor+.018,-.018,-.014,iron);
+      for(const x of [l+.002,r-.002])relief(x-.002,x+.002,floor+.016,.208,-.018,-.014,iron);
       prev=r;
     }
     pier(prev,w);
@@ -143,12 +146,13 @@ function museum(p:FacadePanels,f:Wall,north:boolean,root:THREE.Group,font:Font){
   }
   // Aerial red canopy centre, 3.3 m from the Steuart corner, along Don Chee.
   const mid=w-.198,l=mid-.084,r=mid+.084;
-  pier(0,l);groundArc(p,f,l,r,.199,.025,-.021,wallBrick);pier(r,w);
+  pier(0,l);groundArc(p,f,l,r,.199,.025,-.021,wallBrick,false);pier(r,w);
   const trim='#394746',door=-.017;
   // Glazed double leaves with low solid kick plates and the aluminum
   // meeting stiles and pulls visible under the canopy in the operator photo.
-  for(const [i,[a,b]] of [[l+.006,mid-.002],[mid+.002,r-.006]].entries()){
-    face(a,b,floor+.004,.179,door,i?'#70827d':'#576f6f');
+  for(const [a,b] of [[l+.006,mid-.002],[mid+.002,r-.006]]){
+    // A narrow sky glint on each top rail leaves the exhibit visible through the door.
+    face(a,b,.175,.179,door,'#8b9c98');
     relief(a,b,floor+.002,floor+.018,door,door+.002,'#636a66');
     relief(a,b,.126,.1285,door,door+.0015,'#b0afa0');
   }
@@ -158,6 +162,16 @@ function museum(p:FacadePanels,f:Wall,north:boolean,root:THREE.Group,font:Font){
   relief(w*.330,w*.411,floor,.168,.001,.004,'#515451');
   face(w*.352,w*.382,.103,.107,.005,'#b8baa9');
   relief(r+.014,r+.045,.138,.20,.001,.003,'#646f60');
+  // Shield and ivory lettering on the photographed wall plaque.
+  const cx=r+.0295;
+  const badge=(half:number,lo:number,hi:number,depth:number,color:string)=>{
+    face(cx-half,cx+half,lo,hi,depth,color);
+    p.triangle(at(cx-half,lo,depth),at(cx,lo-half*.83,depth),at(cx+half,lo,depth),color);
+  };
+  badge(.009,.176,.194,.0036,'#c0c2ad');
+  badge(.0073,.177,.192,.0040,wine);
+  face(cx-.0047,cx+.0047,.183,.188,.0043,'#adc6ba');
+  for(const [y,half] of [[.162,.010],[.158,.007],[.147,.004]])face(cx-half,cx+half,y,y+.0013,.0037,'#c9d1c3');
   // The operator's exterior photograph shows a barrel running out from
   // the wall, with the museum wordmark across its arched street-facing end.
   const half=.099,back=.002,reach=.077,hem=.205;
@@ -177,10 +191,13 @@ function museum(p:FacadePanels,f:Wall,north:boolean,root:THREE.Group,font:Font){
   const fascia=new THREE.Group();fascia.name='Don Chee Way museum awning';root.add(fascia);
   fascia.position.set(...at(mid,hem,reach+.0008));fascia.rotation.y=Math.atan2(f.nx,f.nz);
   lettering('museum',.020,.101,.016,-.002,0,fascia);
-  // Paired transit badges are color silhouettes at this scale.
-  for(const [dx,light] of [[-.065,'#e1c99a'],[-.047,'#e4d6ad']] as const){
-    relief(mid+dx-.0058,mid+dx+.0058,hem-.009,hem+.011,reach,reach+.0009,light);
-    face(mid+dx-.004,mid+dx+.004,hem-.003,hem+.005,reach+.0013,'#f1e8d3');
+  lettering('SAN FRANCISCO RAILWAY',.0031,.070,.016,.013,.0002,fascia);
+  for(const [dx,body] of [[-.067,'#c6ab64'],[-.049,'#b7aa8c']] as const){
+    const x=mid+dx,d=reach+.0015;
+    relief(x-.0058,x+.0058,hem-.009,hem+.010,reach,d,body);
+    p.triangle(at(x-.006,hem+.010,d),at(x+.006,hem+.010,d),at(x,hem+.014,d),'#c9c7ac');
+    for(const gap of [-.0024,.0024])face(x+gap-.0017,x+gap+.0017,hem+.001,hem+.007,d+.0004,'#58726e');
+    face(x-.0058,x+.0058,hem-.006,hem-.003,d+.0004,'#a36350');
   }
   // The plain brick wall has a single small second-story opening over the door.
   relief(mid-.048,mid+.048,.294,.387,.001,.004,iron);
@@ -208,7 +225,7 @@ export function railwayHotel(b:Building,neighbors:Building[],font:Font,inside:(x
     roofPanels.triangle(v(i),v(k),v(j),roofPaint);
   }
   const roof=roofPanels.mesh(surface);roof.name='Surveyed hotel roof';root.add(roof);
-  if(parent)addMuseumWalk(root);
+  if(parent){addMuseumWalk(root);addMuseumGallery(root);}
   addHotelTerraces(root,b.id,top);
   for(let i=0;i<ring.length;i++){
     const a=ring[i],c=ring[(i+1)%ring.length],dx=c[0]-a[0],dz=c[1]-a[1],len=Math.hypot(dx,dz);

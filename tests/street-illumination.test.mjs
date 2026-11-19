@@ -39,11 +39,26 @@ test('field derives from the scene globes, is local, and reaches the same shader
   const terrain=[];
   scene.root.traverse(node=>{if(node.isMesh&&node.parent?.name.endsWith(' elevation'))terrain.push(node);});
   const streetSurfaces=[...scene.architectureChunks,...terrain],down=new T.Vector3(0,-1,0);
+  const rincon=[287051,282079,284944,281691,281690,281688,284943,281687,282992];
+  const ground=(x,z)=>new T.Raycaster(new T.Vector3(x,.14,z),down,0,.30)
+    .intersectObjects(streetSurfaces,false).find(hit=>hit.face.normal.y>.6)?.point.y;
   for(const [id,x,z] of [...fixtures.curb,...fixtures.inland].filter(([id])=>
-    [287051,282079,284944,281691,281690,281688,287068,287069,282128,282127].includes(id))){
-    const support=new T.Raycaster(new T.Vector3(x,.14,z),down,0,.30)
-      .intersectObjects(streetSurfaces,false).find(hit=>hit.face.normal.y>.6);
-    assert.ok(support&&Math.abs(grades[id]-support.point.y)<.00002,'fixture sits on the final streetscape at '+id);
+    [...rincon,287068,287069,282128,282127].includes(id))){
+    assert.ok(Math.abs(grades[id]-ground(x,z))<.00002,'fixture sits on the final streetscape at '+id);
+    if(rincon.includes(id))for(let k=0;k<8;k++){
+      const a=Math.PI*k/4,r=.22*.06;
+      assert.ok(Math.abs(ground(x+r*Math.cos(a),z+r*Math.sin(a))-.045)<.0001,'whole pedestal supported at '+id+' azimuth '+k);
+    }
+  }
+  // A transect across a real protected cycleway segment, including the
+  // foreground carriageway and the soil shoulder behind the sidewalk.
+  const aerial=(u,v)=>ground(-31.3+u/132,-v/132);
+  for(const [v,y] of [[220,.031],[199-.9,.042],[182,.0361],[156,.045],[135,.045],[115,.0775]]){
+    assert.ok(Math.abs(aerial(394,v)-y)<.0015,'Rincon transect at pixel row '+v);
+  }
+  assert.ok(aerial(370,204)<.04,'physical gap between two separator blocks');
+  for(const [x,z] of [[-26.915,-4.501],[-27.319,-4.648],[-27.717,-4.79]]){
+    assert.ok(Math.abs(ground(x+.018,z)-.040)<.0001,'inland tree soil stays exposed at '+x);
   }
   // Inspect the final material/geometry along each row, after the city bake.
   // Every halo must share a housing with vertices that the night shader lights.

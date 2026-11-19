@@ -184,6 +184,15 @@ export function createEmbarcaderoCenter(areas:Area[],paths:BridgePath[],towers:T
       :frame(block,...block.rotunda);
     courts.push({id:block.id,center:courtyard,level:street});
 
+    // The street footprint includes the public dining apron. In the 2024
+    // aerial and 2023 roof surface the two public decks recede behind it.
+    // Preserve the ends where the 4EC footprint turns toward Clay/Sacramento.
+    const upperOutline=index===3?[
+      ...area.p.slice(0,4),
+      ...[[-.84,.29],[-.51,-.15],[.22,-.15],[.37,-.07],[1.58,-.07],[1.72,.16]].map(([u,d])=>
+        [2.669+.98561*u+.16904*d,-11.274-.16904*u+.98561*d]),
+      ...area.p.slice(5),
+    ]:area.p;
     const ground=mesh(footprintGeometry(area.p,.035),mosaic,0,street-.035,0,podium);ground.name='Street level paving';
     const groundCourt='void' in block?court:circle(courtyard,block.r*.98);
     mesh(footprintGeometry(groundCourt,.010),brick,0,street+.002,0,podium).name='Lower court paving';
@@ -193,7 +202,7 @@ export function createEmbarcaderoCenter(areas:Area[],paths:BridgePath[],towers:T
       [centerPromenade,1.09,block.upper,mosaic],
     ] as const){
       if(height>street){
-        const slab=mesh(slabGeometry(area.p,[court,stairOpening],.072),paint,0,height-.072,0,podium);
+        const slab=mesh(slabGeometry(upperOutline,[court,stairOpening],.072),paint,0,height-.072,0,podium);
         slab.name=height===centerLobby?'Lobby level paving':'Promenade level paving';
         for(let i=1;i<court.length;i++)rail(court[i-1],court[i],height,podium,index!==3);
       }
@@ -203,8 +212,8 @@ export function createEmbarcaderoCenter(areas:Area[],paths:BridgePath[],towers:T
       }
     }
     // Let street entrances and measured bridge mouths stay open on the fascia.
-    for(let edge=1;edge<area.p.length;edge++){
-      const a=area.p[edge-1],b=area.p[edge],length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    for(let edge=1;edge<upperOutline.length;edge++){
+      const a=upperOutline[edge-1],b=upperOutline[edge],length=Math.hypot(b[0]-a[0],b[1]-a[1]);
       if(length<.32)continue;
       const runs=Math.ceil(length/.19);
       let start=0;

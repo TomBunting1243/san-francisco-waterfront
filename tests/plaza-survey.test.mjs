@@ -58,6 +58,17 @@ test('36 benches have mapped seats, correct scale, independent feet and a suppor
       ray.set(p.clone().add(new THREE.Vector3(0,.001,0)),new THREE.Vector3(0,-1,0));ray.far=.004;
       const hit=ray.intersectObjects(meshes.filter((o,i)=>ray.ray.intersectsBox(bounds[i])),false)[0];
       assert.ok(hit&&Math.abs(hit.point.y-p.y)<.002,'Bench foot unsupported '+row.id+' '+p.toArray());
+      if(row.id===10968514766){
+        // The upper Rincon path turns beside the planted bank. Both runners
+        // must stand level across their full widths, clear of the lower slope.
+        for(const u of [-.5,.5])for(const v of [-.5,.5]){
+          const corner=foot.localToWorld(new THREE.Vector3(u,-.5,v));
+          ray.set(corner.clone().add(new THREE.Vector3(0,.012,0)),new THREE.Vector3(0,-1,0));ray.far=.015;
+          const top=ray.intersectObjects(meshes.filter((o,i)=>ray.ray.intersectsBox(bounds[i])),false)
+            .find(h=>h.face.normal.y>.9);
+          assert.ok(top&&Math.abs(top.point.y-corner.y)<.0001,'upper path supports the whole bench runner '+corner.toArray()+' surface '+top?.point.y);
+        }
+      }
     }
   }
   const inlay=realm.getObjectByName('Bay inlay');

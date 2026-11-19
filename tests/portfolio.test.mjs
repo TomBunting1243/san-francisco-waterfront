@@ -360,7 +360,10 @@ test('fireboat water contact matches the actual animated surface triangles',asyn
   surface.rotation.x=-Math.PI/2;surface.position.y=waterSurface.level;surface.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(),direction=new THREE.Vector3(0,-1,0),vertices=geometry.attributes.position;
   for(const time of [0,37,68,95]){
-    for(let i=0;i<vertices.count;i++)vertices.setZ(i,Math.sin(vertices.getX(i)*.47+time*.5)*waveAmplitudes.x+Math.cos(vertices.getY(i)*.64+time*.65)*waveAmplitudes.z);
+    const phase=geometry.getAttribute('bayWavePhase');
+    for(let i=0;i<vertices.count;i++)vertices.setZ(i,
+      waveAmplitudes.x*(phase.getX(i)*Math.cos(time*.5)+phase.getY(i)*Math.sin(time*.5))+
+      waveAmplitudes.z*(phase.getZ(i)*Math.cos(time*.65)+phase.getW(i)*Math.sin(time*.65)));
     vertices.needsUpdate=true;geometry.computeBoundingSphere();geometry.computeBoundingBox();
     for(let i=0;i<12;i++){const x=-45+i*1.37,z=5+i*1.61;ray.set(new THREE.Vector3(x,10,z),direction);const hit=ray.intersectObject(surface)[0];assert.ok(hit);assert.ok(Math.abs(hit.point.y-waterHeight(x,z,time))<1e-5);}
   }

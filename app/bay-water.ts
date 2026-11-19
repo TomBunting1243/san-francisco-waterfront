@@ -2,9 +2,10 @@ import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
 import {vessels} from './ferry-service.ts';
 import {bridgeLayout} from './bridge-layout.ts';
 import {bayLightPattern} from './bay-lights.ts';
-import {pierThreeShelter,waterSurface,waveAmplitudes} from './water-surface.ts';
+import {shelterAtVertex,waterSurface,waveAmplitudes} from './water-surface.ts';
 import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
+import shoreCut from '../public/data/bay-shore-cut.json' with {type:'json'};
 import surveyShore from '../public/data/survey-shore.json' with {type:'json'};
 import {insideBuilding} from './building-character.ts';
 import {center,mappedBuildings,sfMap} from './sf-map.ts';
@@ -20,8 +21,62 @@ export function baySurfaceGeometry(){
     if(col===0||col===columns+2)position.setX(i,col===0?-far:far);
     if(row===0||row===rows+2)position.setY(i,row===0?far:-far);
   }
+  // Only triangles cut by the NOAA hard shoreline need replacement. Water
+  // remains below pile-supported piers and inside both surveyed slip holes.
+  const indices:number[]=[],original=sheet.index!;
+  let start=0;
+  for(const [first,count] of shoreCut.removed){
+    for(let i=start*3;i<first*3;i++)indices.push(original.getX(i));
+    start=first+count;
+  }
+  for(let i=start*3;i<original.count;i++)indices.push(original.getX(i));
+  indices.push(...shoreCut.indices);
+  const positions=new Float32Array((position.count+shoreCut.points.length)*3);
+  positions.set(position.array);
+  const normals=new Float32Array(positions.length);
+  normals.set(sheet.attributes.normal.array);
+  // A shoreline vertex inherits its three original corners' wave phases.
+  // The same two oscillators can then deform the whole mesh without seams or
+  // three extra wave evaluations on each cut vertex. Signed 16-bit phase
+  // weights introduce less than two hundredths of a millimetre of height error.
+  const phase=new Int16Array(positions.length/3*4),stride=columns+3;
+  const dx=size/columns,dz=size/rows;
+  for(let i=0;i<position.count;i++){
+    const x=position.getX(i),z=-position.getY(i),gain=32767*shelterAtVertex(x,z);
+    phase[4*i]=Math.round(gain*Math.sin(x*.47));
+    phase[4*i+1]=Math.round(gain*Math.cos(x*.47));
+    phase[4*i+2]=Math.round(gain*Math.cos(z*.64));
+    phase[4*i+3]=Math.round(gain*Math.sin(z*.64));
+  }
+  for(const [i,[x,z]] of shoreCut.points.entries()){
+    const vertex=position.count+i;
+    positions[3*vertex]=x;positions[3*vertex+1]=-z;
+    normals[3*vertex+2]=1;
+    const gx=(x+size/2)/dx,gz=(z+size/2)/dz,col=Math.floor(gx),row=Math.floor(gz);
+    const u=gx-col,v=gz-row,nw=(row+1)*stride+col+1,ne=nw+1,sw=nw+stride,se=sw+1;
+    for(let k=0;k<4;k++){
+      phase[4*vertex+k]=Math.round(u+v<=1
+        ? (1-u-v)*phase[4*nw+k]+u*phase[4*ne+k]+v*phase[4*sw+k]
+        : (u+v-1)*phase[4*se+k]+(1-v)*phase[4*ne+k]+(1-u)*phase[4*sw+k]);
+    }
+  }
+  sheet.deleteAttribute('uv');
+  sheet.setAttribute('bayWavePhase',new THREE.Int16BufferAttribute(phase,4,true));
+  sheet.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  sheet.setAttribute('normal',new THREE.BufferAttribute(normals,3));
+  sheet.setIndex(indices);
   sheet.computeBoundingSphere();
   return sheet;
+}
+
+export function vignetteBaySurfaceGeometry(){
+  const positions:number[]=[],normals:number[]=[];
+  for(const [x,z] of shoreCut.flat.points){positions.push(x,-z,0);normals.push(0,0,1);}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));
+  g.setIndex(shoreCut.flat.indices);
+  return g;
 }
 
 // Use the same measured visibility and horizon color on the wake and its hull.
@@ -90,11 +145,13 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
     shader.uniforms.shoreProfiles={value:profiles};shader.uniforms.ferryReflectionWater={value:openWater};
     shader.uniforms.sunsetGlitter=sunset;shader.uniforms.waterfrontSun=sun;
     shader.uniforms.bayWind=wind;shader.uniforms.bayChop=chop;
-    shader.vertexShader='uniform float harborTime; varying vec2 baySurface; varying float bayElevation;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+    shader.vertexShader=`uniform float harborTime; attribute vec4 bayWavePhase;
+      varying vec2 baySurface; varying float bayElevation;
+    `+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
       baySurface=vec2(position.x,-position.y);
-      vec2 slip=abs(baySurface-vec2(${pierThreeShelter.x},${pierThreeShelter.z}));
-      float amplitude=slip.x<${pierThreeShelter.halfX.toFixed(2)} && slip.y<${pierThreeShelter.halfZ} ? ${pierThreeShelter.strength} : 1.;
-      transformed.z += amplitude*(sin(position.x*.47+harborTime*.5)*${waveAmplitudes.x} + cos(position.y*.64+harborTime*.65)*${waveAmplitudes.z});
+      transformed.z+=dot(bayWavePhase,vec4(
+        ${waveAmplitudes.x}*cos(harborTime*.5),${waveAmplitudes.x}*sin(harborTime*.5),
+        ${waveAmplitudes.z}*cos(harborTime*.65),${waveAmplitudes.z}*sin(harborTime*.65)));
       bayElevation=${waterSurface.level.toFixed(7)}+transformed.z;`);
     shader.fragmentShader=`
       uniform float harborTime;
