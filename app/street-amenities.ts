@@ -34,20 +34,36 @@ export class StreetAssembly {
   }
 }
 
-export function streetPassenger(coat:string,skin:string,holdsRunningBoardRail=false){
+export function streetPassenger(coat:string,skin:string,gesture:boolean|'phone'|'pose'=false){
   const root=new THREE.Group(),body=new StreetAssembly(),trousers=new StreetAssembly();
   const oval=(w:number,h:number,d:number)=>new THREE.SphereGeometry(1,8,5).scale(w,h,d);
   body.add(oval(.19,.32,.13),coat,0,1.10,0);
   body.add(oval(.119,.146,.117),skin,0,1.53,0);
   body.add(oval(.121,.079,.119),'#53433e',0,1.61,-.01);
-  for(const side of holdsRunningBoardRail?[1]:[-1,1])body.box(side*.195,1.10,.02,.085,.44,.105,coat).rotation.z=side*.095;
+  const restingArms=gesture==='phone'?[]:gesture?[1]:[-1,1];
+  for(const side of restingArms)body.box(side*.195,1.10,.02,.085,.44,.105,coat).rotation.z=side*.095;
+  if(gesture==='pose'||gesture==='phone'){
+    // A short jacket hem bridges the hips when the wearer turns sideways.
+    body.add(new THREE.CylinderGeometry(.163,.176,.173,8),coat,0,.88,0).scale.z=.77;
+  }
+  if(gesture==='pose'){
+    const joint=new THREE.Vector3(0,1,0);
+    const hand=new THREE.Vector3(-.186,1.016,.098);
+    const elbow=new THREE.Vector3(-.305,1.066,.017);
+    for(const [a,b,width] of [[new THREE.Vector3(-.16,1.291,0),elbow,.105],[elbow,hand,.085]] as const){
+      const mid=a.clone().lerp(b,.5);
+      body.box(mid.x,mid.y,mid.z,width,a.distanceTo(b),width,coat).quaternion.setFromUnitVectors(joint,b.clone().sub(a).normalize());
+    }
+    body.add(oval(.043,.054,.040),skin,hand.x,hand.y,hand.z);
+    body.box(.068,1.205,.109,.071,.052,.017,'#aa7757').rotation.z=-.09;
+  }
   root.add(body.bake('Painted passenger'));
   trousers.box(0,-.208,0,.13,.42,.15,'#4c5962');trousers.box(0,-.58,0,.115,.36,.14,'#515c60');
   trousers.box(0,-.772,.045,.135,.085,.24,'#514c46');
   const left=trousers.bake('Walking leg'),right=left.clone();root.add(left,right);
   left.position.set(-.083,.817,0);right.position.set(.083,.817,0);
   let reachingArm:THREE.Mesh|undefined;
-  if(holdsRunningBoardRail){
+  if(gesture===true){
     const arm=new StreetAssembly();
     const upper=new THREE.Vector3(-.10,-.195,.107),wrist=new THREE.Vector3(-.125,-.05,.201);
     const limb=(a:THREE.Vector3,b:THREE.Vector3,diameter:number)=>{
@@ -59,11 +75,29 @@ export function streetPassenger(coat:string,skin:string,holdsRunningBoardRail=fa
     arm.add(oval(.047,.053,.040),skin,wrist.x,wrist.y,wrist.z);
     reachingArm=arm.bake('Left hand gripping the cable car rail');reachingArm.position.set(-.195,1.28,0);root.add(reachingArm);
   }
+  let cameraArms:THREE.Mesh|undefined;
+  if(gesture==='phone'){
+    const hands=new StreetAssembly(),up=new THREE.Vector3(0,1,0);
+    for(const side of [-1,1]){
+      const shoulder=new THREE.Vector3(side*.178,0,0);
+      const elbow=new THREE.Vector3(side*.211,-.18,.174);
+      const hand=new THREE.Vector3(side*.071,.109,.337);
+      for(const [a,b,width] of [[shoulder,elbow,.104],[elbow,hand,.084]] as const){
+        const mid=a.clone().lerp(b,.5),length=a.distanceTo(b);
+        hands.box(mid.x,mid.y,mid.z,width,length,width,coat).quaternion.setFromUnitVectors(up,b.clone().sub(a).normalize());
+      }
+      hands.add(oval(.048,.047,.033),skin,hand.x,hand.y,hand.z);
+    }
+    hands.box(0,.129,.349,.156,.080,.014,'#343d46');
+    hands.box(-.049,.146,.358,.027,.022,.006,'#768582');
+    cameraArms=hands.bake('Hands holding a landscape camera phone');
+    cameraArms.position.y=1.30;root.add(cameraArms);
+  }
   function stride(t:number,walking:boolean,grip=0){
     left.rotation.x=walking?.37*Math.sin(5.6*t):.014;right.rotation.x=-left.rotation.x;
     if(reachingArm)reachingArm.rotation.x=(1-grip)*1.18;
   }
-  return {root,stride};
+  return {root,stride,cameraArms};
 }
 
 const clamp=(x:number)=>Math.max(0,Math.min(1,x));

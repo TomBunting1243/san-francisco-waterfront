@@ -1,5 +1,8 @@
+import {addSurveyedFrostTree} from './frost-trees.ts';
+import {addMarketLights,insideMarketLampFooting} from './market-lights.ts';
 import * as THREE from 'three';
-import {californiaRailGeometry,californiaIslandTop} from './california-terminal.ts';
+import {addCaliforniaSidewalk,marketRailCenter,marketRailTop,registeredMarketTracks,replacedMarketCrossings} from './california-sidewalk.ts';
+import {californiaRailGeometry,californiaIslandTop,cableRailHead} from './california-terminal.ts';
 import {treeWell} from './tree-wells.ts';
 import data from '../public/data/market-street.json' with {type:'json'};
 import {footprintGeometry} from './sf-map.ts';
@@ -13,15 +16,13 @@ const records=data as unknown as {
   tracks:[number,number,Point[]][];platforms:[number,boolean,Point[]][];
   crossings:[number,Point[]][];entrances:[number,Point,Point][];trees:[number,Point,string,number][];
 };
-const marketX=(z:number)=>.15*z+.019;
 
 /** The street plane and sidewalks come from the city right-of-way survey.
  * All geometry here sits on it. Keep the F line's Steuart turn and the cable
  * terminal independent: they have different gauges and electrical systems. */
 export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
   const cube=new THREE.BoxGeometry(1,1,1), shaft=new THREE.CylinderGeometry(.70,1,1,8);
-  const orb=new THREE.SphereGeometry(1,8,6);
-  const steel='#536568',bronze='#655e4e',warmGlass='#ead9ab';
+  const steel='#536568';
   const part=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number)=>mesh(g,c,x,y,z,root);
   function box(x:number,y:number,z:number,w:number,h:number,d:number,c:string,ry=0){
     const obj=part(cube,c,x,y,z);obj.scale.set(w,h,d);obj.rotation.y=ry;return obj;
@@ -51,20 +52,29 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
       part(new THREE.CylinderGeometry(radius,radius,h,12,1,true,angle-arc/2,arc),paint,kioskX,kioskY+y,kioskZ).name='Curved poster frame and paper';
     }
   }
-  for(const [,cable,points] of records.tracks){
+  for(const [id,cable,original] of records.tracks){
     if(cable)continue; // The complete California terminal uses its own surveyed crossover.
+    const points=registeredMarketTracks[id]??original;
     const gauge=1.435*.06;
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
-      for(const sign of [-1,1]){
-        const ox=dz/len*gauge*.5*sign,oz=-dx/len*gauge*.5*sign;
-        line([a[0]+ox,a[1]+oz],[b[0]+ox,b[1]+oz],.060,streetcarTrack.railHead,.004,'#a9aaa0').name='Market running rail';
+      function trackStrip(offset:number,y0:number,y1:number,w:number,h:number,color:string){
+        const ox=dz/len*offset,oz=-dx/len*offset;
+        const obj=line([a[0]+ox,a[1]+oz],[b[0]+ox,b[1]+oz],(y0+y1)/2,w,h,color);
+        obj.scale.z=Math.hypot(len,y1-y0);
+        obj.rotation.order='YXZ';obj.rotation.x=-Math.atan2(y1-y0,len);
+        return obj;
       }
-      line(a,b,.060+streetcarTrack.wireRise,.003,.003,'#606a65').name='F line contact wire';
+      for(const sign of [-1,1]){
+        trackStrip(gauge*.5*sign,marketRailCenter(a[1]),marketRailCenter(b[1]),streetcarTrack.railHead,.004,'#a9aaa0').name='Market running rail';
+      }
+      trackStrip(0,marketRailTop(a[1])+streetcarTrack.wireRise,marketRailTop(b[1])+streetcarTrack.wireRise,.003,.003,'#606a65').name='F line contact wire';
     }
   }
   part(californiaRailGeometry(),'#ffffff',0,0,0).name='Lower California cable rails and crossover';
-  for(const [,points] of records.crossings){
+  addCaliforniaSidewalk(part,cableRailHead);
+  for(const [id,points] of records.crossings){
+    if(replacedMarketCrossings.has(id))continue;
     const path=new THREE.CurvePath<THREE.Vector3>();
     for(let j=1;j<points.length;j++)path.add(new THREE.LineCurve3(new THREE.Vector3(points[j-1][0],0,points[j-1][1]),new THREE.Vector3(points[j][0],0,points[j][1])));
     const n=Math.max(2,Math.round(path.getLength()/.076));
@@ -101,29 +111,14 @@ export function addMarketStreet(mesh:MeshFactory,root:THREE.Group){
   // from trunk diameter; a newly planted tree keeps its much smaller silhouette.
   const planted:Point[]=waterfrontLandscape.trees.map(t=>t.p as Point);
   for(const [id,[x,z],species,dbh] of records.trees){
-    if(planted.some(p=>Math.hypot(p[0]-x,p[1]-z)<.095))continue;
+    const trunkRadius=dbh>0?dbh*.0254*.03:undefined;
+    if(insideMarketLampFooting(x,z,trunkRadius??0)||planted.some(p=>Math.hypot(p[0]-x,p[1]-z)<.095))continue;
     planted.push([x,z]);
     const h=.06*Math.min(12.5,Math.max(3.5,3+Math.sqrt(dbh||9)*1.45));
-    const trunkRadius=dbh>0?dbh*.0254*.03:undefined;
     treeWell(part,id,x,.045,z,-Math.atan(.15));
+    if(addSurveyedFrostTree(part,x,.049,z,id,species,trunkRadius))continue;
     if(/Washingtonia|Phoenix/.test(species))waterfrontPalm(part,x,.049,z,id,h,h*.24,trunkRadius,species);
     else waterfrontTree(part,x,.049,z,id,h,species,undefined,trunkRadius);
   }
-  // Three opal globes, the middle one raised, on cast-iron trolley poles.
-  // The city designation documents the fitting; the spacing is interpreted.
-  for(let z=-11.65;z> -61;z-=1.98)for(const side of [-1,1]){
-    const x=marketX(z)+side*.91;
-    if(planted.some(p=>Math.hypot(p[0]-x,p[1]-z)<.14)||records.crossings.some(([,p])=>p.some(q=>Math.hypot(q[0]-x,q[1]-z)<.23)))continue;
-    mast(x,z,.022,.126,.048,bronze);mast(x,z,.013,.47,.134,'#4c5f5c');
-    mast(x,z,.009,.087,.598,bronze);
-    box(x,.602,z,.131,.012,.012,bronze);
-    for(const s of [-1,0,1]){
-      const y=s===0?.692:.650,u=x+s*.061;
-      mast(u,z,.010,.04,y-.050,bronze);
-      const globe=part(orb,warmGlass,u,y,z);globe.scale.set(.018,.026,.018);
-      globe.userData.signLight=[.29,.16,.048];globe.name='Path of Gold globe';
-      const cap=part(orb,bronze,u,y+.022,z);cap.scale.set(.014,.005,.014);
-    }
-    if(side>0)line([x,z],[x-1.82,z],.060+streetcarTrack.wireRise+.004,.0025,.0025,'#656c64');
-  }
+  addMarketLights(root);
 }

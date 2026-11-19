@@ -74,3 +74,24 @@ test('Exterior rays retain slate rooms, concrete guards and raised nighttime pan
     assert.ok(hit.face.normal.dot(ray.ray.direction)<-.999);
   }
 });
+
+test('Market foyer and shop doors sit behind concrete while the Drumm porte cochere opens to the hotel lobby',()=>{
+  const {group}=model(),site=mappedBuildings.find(b=>b.id===28319370);
+  function frontage(a,b,u,y){
+    const A=site.p[a],B=site.p[b],dx=B[0]-A[0],dz=B[1]-A[1];
+    const n=new THREE.Vector3(-dz,0,dx).normalize();
+    const origin=new THREE.Vector3(A[0]+dx*u,y,A[1]+dz*u).addScaledVector(n,.2);
+    return new THREE.Raycaster(origin,n.negate()).intersectObject(group)[0];
+  }
+  function within(hit,depth,tolerance=.001){
+    assert.ok(hit&&Math.abs(hit.distance-(.2+depth))<tolerance,'Survey facade depth '+depth);
+  }
+  within(frontage(1,3,2.5/14,.14),.092);       // Market foyer, behind piers
+  within(frontage(1,3,7.5/14,.12),.139);       // inset individual tenant door
+  within(frontage(28,29,2.5/11,.18),.545);     // two vehicle widths to the inner wall
+  within(frontage(28,29,2.5/11,.319),-.004);   // perimeter beam above opening
+  const through=frontage(29,0,.12,.15);        // drive is longitudinally clear
+  assert.ok(!through||through.distance>3.5);
+  within(frontage(29,0,.12,.40),-.004);        // sign above the drive
+  within(frontage(29,0,.60,.16),-.002);        // solid axial pier beside it
+});

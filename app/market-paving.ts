@@ -1,17 +1,19 @@
 import {marketAxis,medianGrade,medianPaving,westMarketGround} from './curb-survey.ts';
+import {frostBrickTriangles,frostWalkHeight} from './california-sidewalk.ts';
 import * as THREE from 'three';
 
 /** Market's pedestrian axis continues through two plazas, with a street crossing between them.
  * The city's Better Market Street survey describes alternating granite bands and herringbone brick. */
 export function createMarketPaving(){
   const positions:number[]=[],surface:number[]=[],indices:number[]=[];
-  function paint(t:number[][],grade:(x:number,z:number)=>number){
+  function paint(t:number[][],grade:(x:number,z:number)=>number,brick=false){
     const n=positions.length/3;
     const [a,b,c]=t;
-    for(const [x,z] of t){positions.push(x,grade(x,z)+.00035,z);surface.push(x-marketAxis(z),-z);}
+    for(const [x,z] of t){positions.push(x,grade(x,z)+.00035,z);surface.push(brick?8+x:x-marketAxis(z),-z);}
     const up=(b[1]-a[1])*(c[0]-a[0])-(b[0]-a[0])*(c[1]-a[1]);
     indices.push(n,n+(up>0?1:2),n+(up>0?2:1));
   }
+  for(const tri of frostBrickTriangles)paint(tri,frostWalkHeight,true);
   for(const tri of medianPaving)paint(tri,medianGrade);
   for(let i=0;i<32;i++){
     const z=-6.249-i*2.817/32,next=-6.249-(i+1)*2.817/32;
@@ -39,7 +41,16 @@ export function createMarketPaving(){
       vec2 seams=min(brick,1.-brick);
       float lod=1.-smoothstep(.13,.90,max(fwidth(q.x),fwidth(q.y)));
       float grout=(1.-smoothstep(.015,.085,min(seams.x,seams.y)))*lod;
-      vec3 clay=mix(vec3(.325,.192,.144),vec3(.397,.309,.237),grout);
+      // Each two-cell paver has one pigment. The broad kiln variation survives
+      // at the car-stop scale; individual bricks and mortar fade below a pixel.
+      vec2 brickOrigin=cell-(lane<2.?vec2(lane,0.):vec2(0.,3.-lane));
+      vec3 hash=fract(vec3(brickOrigin.xyx)*vec3(.1031,.1073,.0973));
+      hash+=dot(hash,hash.yzx+33.33);
+      float fired=fract((hash.x+hash.y)*hash.z)-.5;
+      float wash=sin(8.4*p.x+3.9*p.y+.75*sin(2.3*p.y))*sin(5.6*p.y-4.7*p.x);
+      vec3 terracotta=vec3(.325,.192,.144)+vec3(.072,.043,.031)*fired*lod
+        +vec3(.010,.006,.002)*wash;
+      vec3 clay=mix(terracotta,vec3(.397,.309,.237),grout);
       diffuseColor.rgb=mix(granite,clay,smoothstep(-.006,.006,border));`);
   };
   const mesh=new THREE.Mesh(geo,material);mesh.name='Market granite and herringbone promenade';mesh.receiveShadow=true;return mesh;

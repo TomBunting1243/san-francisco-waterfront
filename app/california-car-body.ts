@@ -6,8 +6,28 @@ const blue='#8ca4ad',wood='#a4774c',varnish='#815735',steel='#353e40';
 const glass='#607576',clerestory='#586767';
 type Point=[number,number,number];
 
+// The same cast wheelset serves all four stations in the transit batch.
+function axleInto(car:StreetAssembly,x:number){
+  const shaft=car.add(new THREE.CylinderGeometry(.097,.097,1.168,6,1,true),steel,x,.31,0);
+  shaft.rotation.x=Math.PI/2;
+  for(const side of [-1,1]){
+    const wheel=car.add(new THREE.CylinderGeometry(.31,.31,.091,12),steel,x,.31,side*.5335);
+    wheel.rotation.x=Math.PI/2;
+    const cap=new THREE.CircleGeometry(.105,8);
+    car.add(cap,'#616c6c',x,.31,side*.581).rotation.y=side>0?0:Math.PI;
+  }
+}
+function frameInto(car:StreetAssembly,x:number){
+  for(const side of [-1,1])car.box(x,.395,side*.637,1.99,.155,.101,'#495253');
+}
+export function makeCaliforniaRunningGear(){
+  const wheels=new StreetAssembly(),truck=new StreetAssembly();
+  axleInto(wheels,0);frameInto(truck,0);
+  const wheelset=wheels.bake('California car wheelset'),frame=truck.bake('California car truck frame');
+  return {axles:[wheelset,wheelset.clone(),wheelset.clone(),wheelset.clone()],frames:[frame,frame.clone()]};
+}
 /** California Street double-ended car 49, in metres above the tread contact plane. */
-export function makeCaliforniaCarBody(){
+export function makeCaliforniaCarBody(rigidGear=true){
   const car=new StreetAssembly();
   const box=(x:number,y:number,z:number,w:number,h:number,d:number,c:string)=>car.box(x,y,z,w,h,d,c);
   // Geometry used for flat painted faces has no back or buried side triangles.
@@ -42,24 +62,12 @@ export function makeCaliforniaCarBody(){
     }
     sheet(vertices,inds,c);sheet(vertices,skin,rim);
   }
-  // Rail contact is the circular tread, with four axles in two pivoting trucks.
-  for(const s of [-1,1]){
-    for(const x of [s*1.95,s*3.53]){
-      rod([x,.31,-.584],[x,.31,.584],.097,steel);
-      for(const side of [-1,1]){
-        const wheel=car.add(new THREE.CylinderGeometry(.31,.31,.091,12),steel,x,.31,side*.5335);
-        wheel.rotation.x=Math.PI/2;
-        const hub:Point[]=[],tri:number[]=[];
-        for(let k=0;k<8;k++){
-          const t=k*Math.PI/4;hub.push([x+.105*Math.cos(t),.31+.105*Math.sin(t),side*.581]);
-          if(k>=2)tri.push(0,k-1,k);
-        }
-        if(side<0)tri.reverse();
-        sheet(hub,tri,'#616c6c');
-      }
-    }
-    for(const side of [-1,1])box(s*2.74,.395,side*.637,1.99,.155,.101,'#495253');
+  if(rigidGear)for(const s of [-1,1]){
+    for(const x of [s*1.95,s*3.53])axleInto(car,x);
+    frameInto(car,s*2.74);
   }
+  // The visible shank of the underfloor cable grip reaches the track slot.
+  box(0,.204,0,.43,.408,.048,steel);
   box(0,.478,0,8.81,.19,1.82,'#494845');
   box(0,.603,0,8.97,.105,1.875,varnish);
   for(const side of [-1,1]){

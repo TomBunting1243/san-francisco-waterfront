@@ -116,8 +116,11 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const carParts=cableCar.getObjectsByProperty('isMesh',true);
   const newGeometry=new Set(carParts.map(p=>p.geometry));
   const carTriangles=[...newGeometry].reduce((n,g)=>n+g.index.count/3,0);
-  assert.equal(scene.batch.instanceCount-carParts.length,69);
-  assert.ok(scene.batch.geometry.index.count/3-carTriangles<6200);
+  const visitors=scene.poses.getObjectByName('Frost Plaza photo visitors').getObjectsByProperty('isMesh',true);
+  const visitTriangles=[...new Set(visitors.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
+  assert.equal(visitors.length,7);assert.ok(visitTriangles<850);
+  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles<6200);
   assert.ok(carTriangles<4600);
 });
 
@@ -192,4 +195,27 @@ test('car 49 lights only its saloon glass and leading dash lens in the existing 
   assert.equal(shader.uniforms.cableDusk.value,.75);
   assert.equal(local.vertexShader.split('attribute float cableLight;').length,2);
   assert.equal(scene.root.children.length,1);
+});
+
+test('the friends compose the cable-car picture then meet to review it without stepping off Frost Plaza',async()=>{
+  const {frostPlazaPhoto}=await import('../app/frost-plaza.ts');
+  const {frostPlazaSurface}=await import('../app/california-sidewalk.ts');
+  const transit=createPromenadeTransit(),subject=transit.poses.getObjectByName('Visitor posing in the heart');
+  const friend=transit.poses.getObjectByName('Friend taking the picture');
+  const hands=friend.getObjectByName('Hands holding a landscape camera phone');
+  transit.update(2);const original=subject.position.clone(),angle=hands.rotation.x;
+  assert.ok(Math.abs(subject.rotation.y-frostPlazaPhoto.pose.yaw)<.001);
+  assert.ok(subject.position.distanceTo(friend.position)>.24);
+  const view=friend.getWorldDirection(new THREE.Vector3());
+  assert.ok(view.dot(subject.position.clone().sub(friend.position).normalize())>.999);
+  let previous=original;
+  for(let t=0;t<=32;t+=.25){
+    transit.update(t);const pos=subject.position;
+    assert.ok(Math.abs(pos.y-frostPlazaSurface(pos.x,pos.z))<.0001);
+    assert.ok(pos.distanceTo(previous)<.022&&pos.distanceTo(friend.position)>.04);
+    previous=pos.clone();
+  }
+  assert.ok(original.distanceTo(subject.position)<1e-6);
+  transit.update(15);assert.ok(subject.position.distanceTo(friend.position)<.055);
+  assert.ok(hands.rotation.x-angle>.7);assert.equal(transit.root.children.length,1);assert.ok(transit.root.children[0].isBatchedMesh);
 });

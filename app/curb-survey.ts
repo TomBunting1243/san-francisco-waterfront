@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {frostCurbRuns,frostPavement} from './california-sidewalk.ts';
 import data from '../public/data/curb-survey.json' with {type:'json'};
 
 export const curbFaceHeight=.1524*.06;
@@ -15,7 +16,7 @@ function inside(x:number,z:number,ring:number[][]){
 }
 type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Run=[number,number,number[][]];
-export const curbRuns=data.lines as Run[];
+export const curbRuns=frostCurbRuns(data.lines as Run[]);
 export const medianPaving=data.medianPaving;
 export const bealeSidewalk=data.bealeWalk;
 export const bealeBeds=data.bealeBeds;
@@ -42,7 +43,7 @@ export function harryBridgesGround(x:number,z:number):number|undefined{
 
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
   const overrides=data.overrides as Record<string,Record<string,number[][][][]>>;
-  return overrides[kind]?.[index]??[original];
+  return frostPavement(kind,index,overrides[kind]?.[index]??[original]);
 }
 
 type Vec=[number,number,number];

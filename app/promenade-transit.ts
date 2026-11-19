@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {frostPlazaPhoto} from './frost-plaza.ts';
+import {frostPlazaSurface} from './california-sidewalk.ts';
 import {createCaliforniaCar} from './california-terminal.ts';
 import {batchTraffic} from './traffic-batches.ts';
 import {StreetAssembly,createStreetAmenities,streetPassenger} from './street-amenities.ts';
@@ -136,6 +138,44 @@ function shelterRider(){
   }
   return {root,update};
 }
+// Friends take a picture in front of the heart, then look at it together.
+// All four feet stay on the brick side of the terminal bollards.
+function plazaPhotograph(){
+  const {pose,photographer}=frostPlazaPhoto;
+  const subject=streetPassenger('#c48656','#825f51','pose'),friend=streetPassenger('#547977','#bb9172','phone');
+  const pair=new THREE.Group();pair.name='Frost Plaza photo visitors';
+  subject.root.name='Visitor posing in the heart';friend.root.name='Friend taking the picture';
+  for(const actor of [subject,friend]){actor.root.scale.setScalar(scale);pair.add(actor.root);}
+  friend.root.position.set(photographer.x,photographer.y,photographer.z);
+  const dx=Math.sin(pose.yaw),dz=Math.cos(pose.yaw);
+  const reviewX=photographer.x-.047*dz-.017*dx,reviewZ=photographer.z+.047*dx-.017*dz;
+  const yawToward=(x:number,z:number,targetX:number,targetZ:number)=>Math.atan2(targetX-x,targetZ-z);
+  const departure=yawToward(pose.x,pose.z,reviewX,reviewZ);
+  const review=yawToward(reviewX,reviewZ,photographer.x-.016*dx,photographer.z-.016*dz);
+  const bend=(from:number,to:number,k:number)=>from+k*Math.atan2(Math.sin(to-from),Math.cos(to-from));
+  const ease=(t:number)=>THREE.MathUtils.smoothstep(t,0,1);
+  function update(elapsed:number){
+    const t=THREE.MathUtils.euclideanModulo(elapsed,32);
+    const outward=ease((t-7)/4.9),back=ease((t-20)/4.9),travel=outward-back;
+    const x=THREE.MathUtils.lerp(pose.x,reviewX,travel),z=THREE.MathUtils.lerp(pose.z,reviewZ,travel);
+    subject.root.position.set(x,frostPlazaSurface(x,z)??pose.y,z);
+    let yaw=bend(pose.yaw,departure,ease((t-6.5)/.8));
+    yaw=bend(yaw,review,ease((t-11.2)/1.1));
+    yaw=bend(yaw,departure+Math.PI,ease((t-19)/1.3));
+    subject.root.rotation.y=bend(yaw,pose.yaw,ease((t-24.4)/1.25));
+    const walking=(t>7&&t<11.9)||(t>20&&t<24.9);
+    subject.stride((t<12?outward:back)*4.49,walking);
+    const posing=1-ease((t-5.8)/1.15)+ease((t-25.6)/1.15);
+    subject.root.children[0].rotation.z=-.064*posing;
+    subject.root.children[0].position.x=.027*posing;
+    subject.root.children[2].position.z=.078*posing;
+    const share=ease((t-7)/2)-ease((t-23)/2);
+    friend.root.rotation.y=bend(photographer.yaw,photographer.yaw+.47,share);
+    friend.cameraArms!.rotation.x=-.38+.97*share;
+  }
+  return {pair,update};
+}
+
 function coach(){
   const a=new StreetAssembly(),ink='#45565a',redBand='#bc4843',silver='#babcba';
   a.box(0,thresholdHeight-.09,0,11.98,.18,2.52,'#687373');a.box(0,2.85,0,12.12,.29,2.55,silver);
@@ -193,6 +233,7 @@ function coach(){
 export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const poses=new THREE.Group();
   const california=createCaliforniaCar();poses.add(california.car);
+  const photograph=plazaPhotograph();poses.add(photograph.pair);
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
   // Surveyed curb points. The F-line islands have a separate builder in market-street.ts.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
@@ -262,7 +303,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
   function update(elapsed:number,localMinutes=720){
     california.update(elapsed,localMinutes);headlamp.value=california.headlamp;
-    reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
+    photograph.update(elapsed);reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
     for(const [i,{group,leaves}] of coaches.entries()){
       const pose=busPose(elapsed+7+i*period/coaches.length),t=pose.t;
       // Only the waterfront segment has modeled transit and road grades. Vehicles outside it retain their route phase.
