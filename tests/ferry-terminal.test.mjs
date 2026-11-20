@@ -218,3 +218,76 @@ test('gate portals, gangway stringers and curved canopy sheet ends have a single
     }
   }
 });
+
+test('the four covered berths bounce light inside their roofs and onto their passenger paths',async()=>{
+  const {bakeRigidChunk}=await import('../app/city-blocks.ts');
+  const root=new THREE.Group(),terminal=buildFerryTerminal(addMesh,root);
+  terminal.updateMatrixWorld(true);
+  for(const {gate,covered} of ferryConnections){
+    const span=terminal.getObjectByName('Gate '+gate+(covered?' articulated gangway':' short boarding link'));
+    const path=span.getObjectByName('Gangway walking surface');
+    if(!covered){assert.equal(path.userData.uplight,undefined);continue;}
+    const pontoon=terminal.getObjectByName('Gate '+gate+' floating pontoon');
+    for(const roof of [span,pontoon]){
+      const panels=roof.getObjectsByProperty('name','Rolled canopy sheet');
+      assert.equal(panels.length,8);
+      const geo=bakeRigidChunk('canopy',panels,material).geometry,n=geo.getAttribute('normal'),light=geo.getAttribute('signLight');
+      assert.ok(light,'Covered '+gate+' canopy requires an interior light bake');
+      let inside=0,outside=0;
+      for(let i=0;i<n.count;i++){
+        if(n.getY(i)<-.85){assert.ok(light.getX(i)>.8);inside++;}
+        if(n.getY(i)>.85){assert.equal(light.getX(i),0);outside++;}
+      }
+      assert.ok(inside>0&&outside>0);
+    }
+    for(const part of [path,...pontoon.getObjectsByProperty('name','Adjustable vessel boarding ramp')]){
+      const geo=bakeRigidChunk('passenger path',[part],material).geometry;
+      const n=geo.getAttribute('normal'),light=geo.getAttribute('signLight');
+      const top=Array.from({length:n.count},(_,i)=>i).find(i=>n.getY(i)>.9);
+      assert.ok(light.getX(top)>.2&&light.getX(top)<.4);
+    }
+    assert.equal(pontoon.getObjectByName('Floating steel hull').userData.uplight,undefined);
+  }
+});
+
+test('at night the ferry dining frontages, approach, gangways and wet boarding thresholds receive local light',async()=>{
+  const {ferryHall}=await import('../app/ferry-architecture.ts');
+  const {createRememberedWaterfront}=await import('../app/remembered-waterfront.ts');
+  const {collectFerryWalkPools}=await import('../app/ferry-walk-lights.ts');
+  const {boardingStops}=await import('../app/ferry-terminal.ts');
+  const {createStreetField}=await import('../app/street-illumination.ts');
+  const font=new FontLoader().parse(fontData);
+  const root=new THREE.Group();root.add(ferryHall(font).root,createRememberedWaterfront(font));
+  const terminal=buildFerryTerminal(addMesh,root);
+  const pools=collectFerryWalkPools(root),field=createStreetField([],pools),before=createStreetField([]);
+  const texel=(texture,x,z,channel=0)=>texture.image.data[
+    (Math.floor((z+64)/.12)*texture.image.width+Math.floor((x+56)/.12))*4+channel];
+  const samples=[[4.84,1.549],[4.84,1.85],[2.41,1.76],[-3.94,1.755],[.52,1.91],
+    [-6.2,2.63],[-9.71,1.77],[-12.8,1.98],[-2.21,4.33],[-1.96,7.21],[-9.88,3.51]];
+  for(const {gate,from,to} of ferryConnections)samples.push(from,
+    [(from[0]+to[0])/2,(from[1]+to[1])/2],boardingStops[gate]);
+  for(const [x,z] of samples){
+    assert.equal(texel(before,x,z),0);
+    assert.ok(texel(field,x,z)>52,'locally lit surface at '+[x,z,texel(field,x,z)]);
+  }
+  for(const [x,y,z] of [[-2,.530,4.4],[-2.44,.535,4.4]]){
+    assert.ok(y>texel(field,x,z,3)/255+.001,'metal roof above the local lens cutoff');
+  }
+  for(const shelter of terminal.getObjectsByProperty('name','South Basin waiting canopy')){
+    const bounds=new THREE.Box3().setFromObject(shelter);
+    assert.ok(bounds.min.x>-8.65||bounds.max.x< -10.69,'modern queue shelters clear remembered Pier 2');
+    assert.ok(bounds.max.z<2.21,'shelter sits over fixed apron');
+  }
+  root.updateMatrixWorld(true);
+  const entry=root.getObjectByName('The Slanted Door'),title=entry.children.filter(m=>m.name);
+  assert.equal(root.getObjectByName('The Slanted Door promenade menu'),undefined);
+  assert.deepEqual(title.map(m=>m.name),['THE','SLANTED','DOOR'].map(word=>'The Slanted Door '+word));
+  for(const m of title){
+    const bounds=new THREE.Box3().setFromObject(m);
+    assert.ok(bounds.max.x-bounds.min.x<=.0241&&bounds.max.z-bounds.min.z<1e-5);
+    assert.ok(bounds.min.x>4.17&&bounds.max.x<4.58&&bounds.min.z>1.41&&bounds.max.z<1.50);
+    assert.equal(m.userData.signLight,undefined,'cream lettering printed on the door glass');
+  }
+  assert.equal(root.getObjectsByProperty('isLight',true).length,0);
+  before.dispose();field.dispose();
+});

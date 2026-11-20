@@ -1,0 +1,13 @@
+#cinematic-opening{display:none}
+html[data-opening-phase=film] #cinematic-opening,html[data-opening-phase=handoff] #cinematic-opening,html[data-opening-phase=fallback] #cinematic-opening{
+  display:block;position:absolute;inset:0 0 auto;height:100svh;min-height:320px;overflow:hidden;pointer-events:none;
+  background:#293c46 var(--opening-image) center/contain no-repeat;
+}
+#cinematic-opening video{width:100%;height:100%;object-fit:contain;display:block;opacity:0}
+#cinematic-opening video[data-playing=true]{opacity:1}
+#cinematic-opening video[hidden]{display:none}
+html[data-opening-phase] #root{position:relative}
+html:is([data-opening-phase=film],[data-opening-phase=handoff],[data-opening-phase=fallback]) :is(#root,#root main,#root .world){background:transparent}
+html:is([data-opening-phase=film],[data-opening-phase=handoff],[data-opening-phase=fallback]) .world-poster{display:none}
+html:is([data-opening-phase=film],[data-opening-phase=fallback]) .world-scene{opacity:0}
+html[data-opening-phase=handoff] .world-scene[data-ready=true]{opacity:1;transition:opacity .75s ease}

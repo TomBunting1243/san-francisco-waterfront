@@ -4,6 +4,7 @@ import {createFerryPassenger} from './ferry-stop-passenger.ts';
 import {ambientStreetcarCall} from './washington-call.ts';
 import * as THREE from 'three';
 import {museumReader} from './museum-gallery.ts';
+import {taylorDiners} from './taylors-refresher.ts';
 import {terreneDiners} from './terrene-diners.ts';
 import {frostPlazaPhoto} from './frost-plaza.ts';
 import {frostPlazaSurface} from './california-sidewalk.ts';
@@ -244,6 +245,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const photograph=plazaPhotograph();poses.add(photograph.pair);
   const museum=museumReader();poses.add(museum.frame);
   const diners=terreneDiners();poses.add(diners.root);
+  const picnic=taylorDiners();poses.add(picnic.root);
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
   // Curbside bus stops at the Steuart terminal. The F platforms occupy the waterfront median.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
@@ -331,6 +333,7 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
     ferryPassenger.update(ferrySeconds??fallback?.passengerTime??-Infinity,elapsed,car);
     museum.update(elapsed,localMinutes,date);
     diners.update(elapsed,localMinutes,sheltered);
+    picnic.update(elapsed,sheltered);
     california.update(elapsed,localMinutes);headlamp.value=california.headlamp;
     photograph.update(elapsed);reader.update(elapsed);conveniences.update(elapsed);alight.root.visible=false;board.root.visible=false;
     for(const [i,{group,leaves}] of coaches.entries()){

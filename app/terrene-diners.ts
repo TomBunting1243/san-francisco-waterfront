@@ -13,29 +13,33 @@ function segment(a:StreetAssembly,start:Joint,end:Joint,width:number,color:strin
   rod.quaternion.setFromUnitVectors(up,direction.normalize());
 }
 
-function seatedFigure(coat:string,skin:string,cup:boolean){
+export function seatedFigure(coat:string,skin:string,cup:boolean|'burger',upright=false){
   const figure=new THREE.Group(),body=new StreetAssembly(),head=new StreetAssembly();
-  body.add(oval,coat,0,.722,-.045).scale.set(.191,.232,.137);
+  const rise=upright?.175:0,elbowY=.709+rise*.40, reach=upright?.318:.241;
+  body.add(oval,coat,0,.722+rise*.46,-.045).scale.set(upright?.222:.191,.232+rise*.50,.137);
   for(const side of [-1,1]){
     const hip:Joint=[.084*side,.556,-.013],knee:Joint=[side*.103,.493,.31],ankle:Joint=[side*.106,.11,.293];
     segment(body,hip,knee,.128,'#51595c');segment(body,knee,ankle,.109,'#535b61');
-    body.box(ankle[0],.064,.344,.13,.108,.227,'#504b45');
-    const elbow:Joint=[side*.179,.709,.147];
-    segment(body,[side*.145,.868,-.024],elbow,.097,coat);
+    body.box(ankle[0],upright?.054:.064,.344,.13,.108,.227,'#504b45');
+    const elbow:Joint=[side*.179,elbowY,.147];
+    segment(body,[side*.145,.868+rise*.84,-.024],elbow,.097,coat);
     if(cup&&side===1)continue;
-    segment(body,elbow,[side*.101,.698,.264],.079,coat);
-    body.add(oval,skin,side*.089,.697,.272).scale.set(.050,.036,.047);
+    segment(body,elbow,[side*.101,.698+rise*.38,.264],.079,coat);
+    body.add(oval,skin,side*.089,.697+rise*.38,.272).scale.set(.050,.036,.047);
   }
   head.add(oval,skin,0,.014,0).scale.set(.106,.130,.099);
   head.add(oval,cup?'#614a39':'#423b39',0,.085,-.012).scale.set(.108,.069,.101);
-  const face=head.bake('Diner head');face.position.set(0,1.012,-.026);
+  const face=head.bake('Diner head');face.position.set(0,1.012+rise,-.026);
   figure.add(body.bake('Seated diner'),face);
   if(!cup)return {figure,face};
   const sleeve=new StreetAssembly();
-  segment(sleeve,[0,0,0],[-.055,.069,.241],.083,coat);
-  sleeve.add(oval,skin,-.06,.077,.249).scale.set(.049,.045,.041);
-  sleeve.add(new THREE.CylinderGeometry(.037,.031,.093,9),'#a5b7b4',-.092,.087,.260);
-  const forearm=sleeve.bake('Hand holding a tumbler');forearm.position.set(.179,.709,.147);
+  segment(sleeve,[0,0,0],[-.055,.069,reach],.083,coat);
+  sleeve.add(oval,skin,-.06,.077,reach+.008).scale.set(.049,.045,.041);
+  if(cup==='burger'){
+    for(const [y,r,h,color] of [[.090,.054,.021,'#bc8e57'],[.106,.052,.015,'#6f5142'],[.117,.055,.012,'#7a8c56'],[.133,.054,.023,'#d3a165']] as const)
+      sleeve.add(new THREE.CylinderGeometry(r,r*.94,h,8),color,-.092,y,reach+.019);
+  }else sleeve.add(new THREE.CylinderGeometry(.037,.031,.093,9),'#a5b7b4',-.092,.087,reach+.019);
+  const forearm=sleeve.bake(cup==='burger'?'Hand holding a burger':'Hand holding a tumbler');forearm.position.set(.179,elbowY,.147);
   figure.add(forearm);return {figure,face,forearm};
 }
 

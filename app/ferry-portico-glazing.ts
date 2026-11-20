@@ -4,11 +4,12 @@ type Pt=[number,number,number];
 // West-elevation local axes: +Z faces Market Street. Pack the sash, reveals
 // and shop interiors into a single opaque vertex-colour mesh per arcade.
 export function ferryGlazing(parent:THREE.Group){
-  const pos:number[]=[],col:number[]=[],ix:number[]=[],ink=new THREE.Color();
+  const pos:number[]=[],col:number[]=[],light:number[]=[],ix:number[]=[],ink=new THREE.Color();
   const redwood='#675f50',bronze='#49514d',metal='#868e80',warm='#b6a076',glass='#536768';
+  let illumination=.065;
   function quad(a:Pt,b:Pt,c:Pt,d:Pt,tint:string){
     const n=pos.length/3;ink.set(tint);
-    for(const p of [a,b,c,d]){pos.push(...p);col.push(ink.r,ink.g,ink.b);}
+    for(const p of [a,b,c,d]){pos.push(...p);col.push(ink.r,ink.g,ink.b);light.push(Math.round(255*ink.r*illumination),Math.round(239*ink.g*illumination),Math.round(213*ink.b*illumination));}
     ix.push(n,n+1,n+2,n,n+2,n+3);
   }
   function pane(x:number,y:number,z:number,w:number,h:number,tint:string){
@@ -72,15 +73,19 @@ export function ferryGlazing(parent:THREE.Group){
       }
     }
   }
-  function shop(x:number,w:number,z:number,seed:number){
+  function shop(x:number,w:number,z:number,seed:number,dining=false,serviceCounter=false){
     const lo=.106,hi=.324,back=z-.093;
     // Mullions are forward of a deep interior. Display counters, shelving and
     // warm panels sit on separate depth planes behind the shop windows.
+    illumination=dining?1.32:seed%5===0?.27:seed%3===0?.68:1.02;
     pane(x,(lo+hi)/2,back,w,hi-lo,seed%2?'#525f58':'#635e51');
-    pane(x-w*.23,lo+.112,back+.004,w*.38,.125,seed%3?'#9b927a':'#828c7a');
-    for(let j=0;j<2;j++)pane(x-w*.23,lo+.094+j*.038,back+.007,w*.38,.007,redwood);
-    pane(x+w*.20,lo+.031,back+.034,w*.43,.058,'#857861');
-    pane(x+w*.20,lo+.062,back+.036,w*.47,.008,warm);
+    if(!serviceCounter){
+      pane(x-w*.23,lo+.112,back+.004,w*.38,.125,seed%3?'#9b927a':'#828c7a');
+      for(let j=0;j<2;j++)pane(x-w*.23,lo+.094+j*.038,back+.007,w*.38,.007,redwood);
+      pane(x+w*.20,lo+.031,back+.034,w*.43,.058,'#857861');
+      pane(x+w*.20,lo+.062,back+.036,w*.47,.008,warm);
+    }
+    illumination=.065;
     const entrance=seed%4===0;
     if(entrance)doors(x,w,z,lo,hi-lo);
     else{
@@ -93,6 +98,7 @@ export function ferryGlazing(parent:THREE.Group){
   }
   function finish(){
     const geo=new THREE.BufferGeometry();
+    geo.setAttribute('signLight',new THREE.Uint8BufferAttribute(light,3,true));
     geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
     geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));geo.setIndex(ix);geo.computeVertexNormals();
     const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.82}));

@@ -50,7 +50,9 @@ test('aerial Pier 7 pairs stand on the timber deck and the night glows sit insid
   assert.equal(lamps.pier.length,29);
   for(const [z,x0,x1] of lamps.pier)for(const x of [x0,x1])assert.ok(insideBuilding(x,z,pier.p));
   let k=0;
-  for(const mesh of root.children){
+  const legacyCount=lamps.curb.length+lamps.inland.length+lamps.pier.length*2;
+  const historicRows=root.children.slice(0,legacyCount);
+  for(const mesh of historicRows){
     const heads=mesh.name.startsWith('Twin')?2:1;
     if(mesh.name.startsWith('Pier 7')){
       mesh.geometry.computeBoundingBox();
@@ -64,10 +66,9 @@ test('aerial Pier 7 pairs stand on the timber deck and the night glows sit insid
       assert.ok(h && h.distance<.024,'each halo must illuminate its matching physical lantern');
     }
   }
-  assert.equal(k,halos.length);
-  assert.equal(halos.length/3,225);
-  const triangles=root.children.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0);
-  const original=root.children.filter((_,i)=>i<67||i>=lamps.curb.length+lamps.inland.length);
+  assert.equal(k/3,225);
+  const triangles=historicRows.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0);
+  const original=historicRows.filter((_,i)=>i<67||i>=lamps.curb.length+lamps.inland.length);
   assert.ok(original.reduce((n,mesh)=>n+mesh.geometry.index.count/3,0)<40000);
   const broadway=root.children.filter((_,i)=>i>=67&&i<77||i>=77+61&&i<77+69);
   assert.equal(broadway.length,18);
@@ -100,4 +101,30 @@ test('both curb rows stand on their registered supporting surfaces, including bo
   }
   for(const id of [287051,282079,284944,281691,281690,281688,284943,281687,282992])assert.equal(grades[id],.045);
   assert.equal(grades[287068],.045);assert.equal(grades[287069],.031);
+});
+
+test('HALS plaza flags, black fountain lanterns, curb acorns and park-road standards emit at their physical heads',()=>{
+  const added=root.children.slice(146+58);
+  assert.equal(added.length,21);
+  assert.equal(halos.length/3,225+42);
+  let first=225,triangles=0;
+  for(const mesh of added){
+    const count=mesh.name.startsWith('Plaza traction')?2:mesh.name.startsWith('Park approach')?1:3;
+    triangles+=mesh.geometry.index.count/3;
+    const pos=mesh.geometry.attributes.position,emission=mesh.geometry.attributes.signLight;
+    const glass=[];
+    for(let i=0;i<pos.count;i++)if(emission.getX(i)>.86){
+      glass.push(new THREE.Vector3().fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld));
+    }
+    for(let i=0;i<count;i++){
+      const center=new THREE.Vector3().fromArray(halos,3*first++);
+      assert.ok(glass.some(p=>p.distanceTo(center)<.028),mesh.name);
+    }
+    mesh.geometry.computeBoundingBox();
+    const box=mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+    if(mesh.name.startsWith('Terrace'))assert.ok(Math.abs(box.min.y-.163)<.00001&&box.max.y-box.min.y>.91&&box.max.y-box.min.y<1.28);
+    if(mesh.name.startsWith('Fountain walk'))assert.ok(Math.abs(box.min.y-.142)<.00001);
+  }
+  assert.equal(first,267);
+  assert.ok(triangles<7000,triangles);
 });

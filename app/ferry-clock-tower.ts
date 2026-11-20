@@ -88,11 +88,12 @@ export function ferryClockTower(font:Font){
     for(let i=-17;i<=17;i++)box(.009,.009,.012,i*.019,2.495,wall+.014,shade,g);
     // Recessed green-grey center, wide ivory chapter ring, radial Roman numerals.
     disk(radius+.009,shade,wall+.012,g);
-    disk(radius,'#eee8d5',wall+.017,g,'Twenty-two foot clock dial');
+    const chapterRing=disk(radius,'#eee8d5',wall+.017,g,'Twenty-two foot clock dial');
+    chapterRing.userData.signLight=[.98,.77,.32];
     bezel(radius,.0043,wall+.022,iron,g);
     disk(radius*.687,'#6b6858',wall+.023,g);
     const dialGlass=disk(radius*.612,'#a7aa99',wall+.025,g,'Inner illuminated clock dial');
-    dialGlass.userData.signLight=[.78,.71,.51];
+    dialGlass.userData.signLight=[.83,.65,.29];
     bezel(radius*.61,.0026,wall+.028,bronze,g);
     bezel(radius*.447,.0018,wall+.029,'#d6cbb2',g);
     for(let i=0;i<60;i++){
@@ -145,11 +146,18 @@ export function ferryClockTower(font:Font){
     const dx=p.x-root.position.x,dz=p.z-root.position.z;
     const radius=Math.max(.001,Math.hypot(dx,dz));
     const outward=(dx*n.x+dz*n.z)/radius;
-    const shaft=(.55+.35*Math.max(0,outward))*(.62+.38*THREE.MathUtils.smoothstep(p.y,1.03,2.15));
-    const gallery=.29+.72*Math.max(0,-outward)+.42*Math.max(0,-n.y);
+    const shaft=(.45+.45*Math.max(0,outward))*(.90-.27*THREE.MathUtils.smoothstep(p.y,1.06,2.42));
+    const gallery=.45+1.45*Math.max(0,-outward)+.83*Math.max(0,-n.y);
     return THREE.MathUtils.lerp(shaft,gallery,THREE.MathUtils.smoothstep(p.y,2.48,2.58));
   }
-  root.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=towerUplight;});
+  const shaftLight=[1.06,1.22],galleryLight=[.97,.84];
+  root.traverse(o=>{
+    if(!(o instanceof THREE.Mesh))return;
+    o.userData.uplight=towerUplight;
+    // In HLB's west elevation photograph the limestone shaft is cooler than
+    // the lit upper galleries. The golden chapter ring is separately backlit.
+    o.userData.uplightTint=o.position.y<2.50?shaftLight:galleryLight;
+  });
   const flag=createFerryFlag();flag.position.y=top-.007;root.add(flag);
   return {root,hands,flag};
 }

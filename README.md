@@ -20,12 +20,18 @@ Build static files with `npm run build`; review that build with `npm run preview
 ## Explore
 
 - In **Custom → View**, choose **Bay Bridge drive** for the westbound upper deck into San Francisco, or **F-line streetcar** to board by the San Francisco Railway Museum, turn onto the Embarcadero, and ride north past the Ferry Building to Broadway. Each ride has its own pause button. **Return** or Escape brings you back to your waterfront view.
-- Drag to orbit and tilt. Double-click or pinch to change the focal length. On touchscreens, move two fingers vertically together to tilt. The lens stays aimed at the Ferry Building.
+- Drag to orbit and tilt. Double-click or pinch to change the focal length. On touchscreens, move two fingers vertically together to tilt.
 - The bottom-right controls zoom, return to the opening view, and pause or resume motion.
-- With the city focused, use the arrow keys to orbit and tilt, `+` and `−` to zoom, Escape to reset, and Enter to hear from a passerby.
+- With the city focused, use WASD or the arrow keys to move along the waterfront. Q and E turn, `+` and `−` zoom, and Escape returns to the Ferry Building. Press Enter to hear from a passerby or F to identify a visible ferry and its gate.
 - On touch screens, drag horizontally to orbit or pinch to change the lens. The page scrolls with one finger. Motion pauses in a hidden tab and honors the system reduced-motion preference. An explicit pause or resume is remembered.
 
 The fireboat leaves Station 35, performs its five-stream display, and returns on a two-minute animation cycle. Pausing the scene also pauses the boat and water.
+
+## Research sources and data inventory
+
+Where did the shape of the waterfront come from? The [research catalog](references/README.md) connects the modeled places to photographs, architectural drawings, surveys and historic accounts. It also counts the data shipped with the city and the original survey material we could trace. The [survey manifest](references/SURVEY-ASSETS.csv) lists individual source assets.
+
+Two [opening films](https://the-embarcadero.radiantsun9.chatgpt.site/openings/index.html) circle the Ferry Building clock in opposite directions. Choose day or night to compare them, then use **Explore this opening** to take the controls.
 
 ## Development and updates
 

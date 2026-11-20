@@ -53,6 +53,13 @@ test('both Market carriageways see the main aspect from upstream, including thei
 
 test('field derives from the scene globes, is local, and reaches the same shader on buildings, people and buses',()=>{
   const scene=createLandscape(),globes=scene.streetGlobes,field=createStreetField(globes);
+  const plazaSamples=[
+    ['Harry Bridges median',0,-4.65,150],['western carriageway',2,-5,190],
+    ['palm walk curb',3,-6,230],['brick court',3,-8.8,200],
+    ['fountain approach',6,-7.5,220],['Washington gate',12,-6,115],['northern approach',12,-9,25],
+  ];
+  for(const [label,x,z,minimum] of plazaSamples)assert.ok(channelAt(field,x,z)>=minimum,label);
+  assert.equal(channelAt(field,10,-9),0,'no invented lamp in the interior of the park');
   const visible=scene.root.getObjectByName('Waterfront streetlamp halos').geometry.getAttribute('position');
   assert.deepEqual(visible.array,Float32Array.from(globes));
   for(const row of [fixtures.curb,fixtures.inland])for(const [,x,z] of row){

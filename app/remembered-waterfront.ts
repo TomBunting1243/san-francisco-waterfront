@@ -81,9 +81,10 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   }
   function storefront(x:number,z:number,y:number,w:number,h:number,frame:string,parent:THREE.Group){
     box(w+.031,h+.033,.032,x,y,z,frame,parent);
-    box(w,h,.025,x,y,z+.021,glass,parent);
+    const glazing=box(w,h,.025,x,y,z+.021,glass,parent);
     for(const side of [-1,0,1])box(.012,h,.014,x+side*w*.305,y,z+.039,frame,parent);
     box(w,.012,.017,x,y+h*.25,z+.039,frame,parent);
+    return glazing;
   }
 
   const fountain=group('Vaillancourt Fountain',[...fountainSite]);
@@ -327,13 +328,18 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   }
   const townSide=group('Street entry',[0,0,-.714],sinbads);
   townSide.rotation.y=Math.PI;
-  storefront(-.67,0,.279,.33,.284,blueTrim,townSide);
-  storefront(.13,0,.279,.44,.265,blueTrim,townSide);
+  // Hafalia's 2015 photographs document the occupied dining room and bar.
+  // Model dim window spill onto the lateral passenger walk beside Pier 2.
+  for(const [x,w,h] of [[-.67,.33,.284],[.13,.44,.265]]){
+    const pane=storefront(x,0,.279,w,h,blueTrim,townSide);
+    pane.userData.signLight=[.36,.24,.13];
+    pane.userData.ferryWalkPool={radius:1.34,strength:.69};
+  }
   box(.222,.423,.033,.63,.228,.022,dark,townSide);
   box(.173,.239,.016,.63,.305,.042,'#70949b',townSide);
   sinbadWordmark(.174,0,.393,.022,1.25,townSide);
   const open=sign('OPEN',.050,.248,.052,.213,'#e67555',townSide);
-  open.position.x=-.67;
+  open.position.x=-.67;open.userData.signLight=[.74,.22,.12];
   box(.156,.185,.025,-.34,.121,.045,'#cbb890',townSide).rotation.x=-.12;
   box(.46,.06,.17,.58,.022,.109,'#bdb39d',townSide);
   // The 2013 entrance portrait places a life-size figure in a glazed case
@@ -364,7 +370,11 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   const pane=box(.069,.124,.001,0,.074,.025,'#c5dddd',cabinet);
   pane.name='Sinbad display glass';pane.material=new THREE.MeshStandardMaterial({color:'#c7ddda',roughness:.16,transparent:true,opacity:.12,depthWrite:false});
   pane.castShadow=false;
-  for(const x of [-.68,-.23,.23,.68])storefront(x,.434,.296,.41,.283,blueTrim,sinbads);
+  for(const x of [-.68,-.23,.23,.68]){
+    const pane=storefront(x,.434,.296,.41,.283,blueTrim,sinbads);
+    pane.userData.signLight=x<0?[.31,.22,.14]:[.23,.17,.11];
+    pane.userData.ferryWalkPool={radius:1.29,strength:.69};
+  }
   sinbadWordmark(.126,.077,.459,.448,1.14,sinbads);
   const fish=new THREE.Shape();
   fish.moveTo(-.095,-.028);fish.lineTo(-.065,0);fish.lineTo(-.095,.026);

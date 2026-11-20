@@ -197,3 +197,26 @@ test('pitched views through both west arcades see one finish from the shop floor
     assert.ok(floorViews>=24,'rays must reach the floor beyond the arches at each pitch');
   }
 });
+
+test('night glass, neon and stone retain their own colors in the baked Ferry Building',()=>{
+  const hall=ferryHall(font),tower=ferryClockTower(font),mat=new THREE.MeshStandardMaterial();
+  tower.root.position.set(hall.towerX,0,hall.towerZ);hall.root.add(tower.root);hall.root.updateMatrixWorld(true);
+  const shaft=tower.root.children.find(mesh=>mesh.isMesh&&mesh.scale.y===1.6);
+  const baked=part=>bakeRigidChunk('night sample',[part],mat).geometry.getAttribute('signLight');
+  const flood=baked(shaft);
+  assert.ok(flood.getZ(0)>flood.getX(0)*.90,'neutral roof flood preserves the blue channel in the limestone');
+  const ring=baked(tower.root.getObjectByName('Twenty-two foot clock dial'));
+  assert.ok(ring.getX(0)>2.7*ring.getZ(0),'backlit chapter ring reads gold against the cooler shaft');
+  const rooms=hall.root.getObjectsByProperty('name','East round-headed sash');
+  const occupied=rooms.filter(o=>o.userData.signLight);
+  assert.ok(occupied.length>3&&occupied.length<rooms.length/2);
+  const interior=baked(hall.root.getObjectByName('Recessed west glazing and shop interiors'));
+  const peaks=Array.from({length:interior.count},(_,i)=>interior.getX(i));
+  assert.ok(Math.max(...peaks)>.28&&Math.min(...peaks)<.02,'light originates behind darker shop and door frames');
+  for(const label of ['PORT OF','SAN FRANCISCO']){
+    const letters=hall.root.getObjectByName(label),neon=baked(letters),normal=letters.geometry.getAttribute('normal');
+    const bay=Array.from({length:normal.count},(_,i)=>i).find(i=>normal.getZ(i)>.99);
+    const city=Array.from({length:normal.count},(_,i)=>i).find(i=>normal.getZ(i)<-.99);
+    assert.ok(neon.getX(bay)>.9&&neon.getY(bay)<.15&&neon.getX(city)<neon.getX(bay)*.4);
+  }
+});

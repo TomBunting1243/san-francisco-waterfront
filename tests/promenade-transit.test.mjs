@@ -132,8 +132,11 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const ferryRider=scene.poses.getObjectByName('Ferry Building center-exit passenger').getObjectsByProperty('isMesh',true);
   const ferryTris=[...new Set(ferryRider.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
   assert.equal(ferryRider.length,4);assert.ok(ferryTris<1000);
-  assert.equal(scene.batch.instanceCount-carParts.length-visitors.length-diners.length-reader.length-station.length-ferryRider.length,69);
-  assert.ok(scene.batch.geometry.index.count/3-carTriangles-visitTriangles-dinerTriangles-readerTris-stationTris-ferryTris<6200);
+  const picnic=scene.poses.getObjectByName("Taylor's picnic diners").getObjectsByProperty('isMesh',true);
+  const picnicTris=[...new Set(picnic.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
+  assert.equal(picnic.length,16);assert.ok(picnicTris<2400);
+  assert.equal(scene.batch.instanceCount-picnic.length-carParts.length-visitors.length-diners.length-reader.length-station.length-ferryRider.length,69);
+  assert.ok(scene.batch.geometry.index.count/3-picnicTris-carTriangles-visitTriangles-dinerTriangles-readerTris-stationTris-ferryTris<6200);
   assert.ok(carTriangles<4600);
 });
 

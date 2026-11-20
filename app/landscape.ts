@@ -6,6 +6,7 @@ import {kioskCampaignMaterial} from './kiosk-campaigns.ts';
 import {billboardPrintMaterial} from './billboard-editions.ts';
 import {applyWalkPanelJoints} from './promenade-pavement.ts';
 import {ferryFleet,ferryPose} from './motion.ts';
+import {collectFerryWalkPools} from './ferry-walk-lights.ts';
 import {collectStreetGlobes,createSignalHousings} from './street-illumination.ts';
 export {createStreetIllumination} from './street-illumination.ts';
 import {buildPromenadeLighting} from './promenade-lighting.ts';
@@ -554,6 +555,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   // Buckyball at the Exploratorium, north along the Embarcadero.
   const bucky=mesh(new THREE.IcosahedronGeometry(.58,0),'#bc985d',47.26,.9,.07);bucky.material=material('#bc985d');bucky.material.wireframe=true;
   const lanterns=buildPromenadeLighting(root);
+  root.userData.ferryWalkPools=collectFerryWalkPools(root);
   const streetGlobes=collectStreetGlobes(root,lanterns);root.add(createSignalHousings());
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
@@ -936,6 +938,7 @@ export function rememberLandscape(world:ReturnType<typeof createLandscape>){
 let cityTemplate:ReturnType<typeof createLandscape>|undefined;
 export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof createLandscape>{
   const source=cityTemplate||createLandscape(),root=new THREE.Group(),waterTime={value:0};
+  root.userData.ferryWalkPools=source.root.userData.ferryWalkPools;
   const bounds=variant==='street'?new THREE.Box3(new THREE.Vector3(-62,-5,-28),new THREE.Vector3(-15,40,14)):new THREE.Box3(new THREE.Vector3(-22,-5,-32),new THREE.Vector3(32,40,22));
   const facadeClock=createFacadeClock();
   const streetGlobes:number[]=[];

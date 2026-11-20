@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type {FerryWalkPool} from './ferry-walk-lights.ts';
+import {terraceFloodAim} from './plaza-street-lights.ts';
 import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
 import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
@@ -92,28 +94,46 @@ export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
   return all;
 }
 
-export function createStreetField(globes:number[]){
+export function createStreetField(globes:number[],ferryPools:readonly FerryWalkPool[]=[]){
   const pixels=new Uint8Array(width*height*4);
-  const stamp=(x:number,y:number,z:number,r:number,channel:number,heading?:number)=>{
+  const stamp=(x:number,y:number,z:number,r:number,channel:number,heading?:number,plaza=false,strength=1)=>{
     const col=(x-minX)/pitch-.5,row=(z-minZ)/pitch-.5,bound=r/pitch;
     for(let j=Math.max(0,Math.ceil(row-bound));j<=Math.min(height-1,Math.floor(row+bound));j++){
       for(let i=Math.max(0,Math.ceil(col-bound));i<=Math.min(width-1,Math.floor(col+bound));i++){
         const dx=(i-col)*pitch,dz=(j-row)*pitch,d=Math.hypot(dx,dz)/r;
         if(d>=1)continue;
         const aim=heading===undefined?1:.45+.55*THREE.MathUtils.clamp(.5+(dx*Math.sin(heading)+dz*Math.cos(heading))/r,0,1);
-        // Give the subpixel lens center one hot texel before the amber penumbra.
-        const pool=Math.min(1,(1-d)/(1-.085/r));
-        const weight=Math.round(255*(channel===0?pool**2.2:(1-d*d)**3)*aim),idx=(j*width+i)*4;
-        if(pixels[idx+channel]>=weight)continue;
-        pixels[idx+channel]=weight;
-        if(channel===0)pixels[idx+3]=Math.round(255*THREE.MathUtils.clamp(y,0,1));
+        const idx=(j*width+i)*4;
+        if(plaza){
+          // Blend the contributions from adjacent heads into the existing
+          // single texture. A soft shoulder preserves the pedestrian-scale
+          // pool between standards without lighting the whole neighborhood.
+          const shoulder=Math.max(0,d*r-.085)/(r*.29);
+          const edge=1-THREE.MathUtils.smoothstep(d,.57,1);
+          const beam=heading===undefined||d*r<.09?1:.08+.92*THREE.MathUtils.smoothstep((dx*Math.sin(heading)+dz*Math.cos(heading))/(d*r),-.6,.8);
+          const weight=strength*beam*edge/(1+shoulder*shoulder);
+          const old=pixels[idx],add=Math.round((255-old)*weight);
+          if(!add)continue;
+          pixels[idx]=old+add;
+          pixels[idx+3]=Math.round((pixels[idx+3]*old+255*Math.min(1,Math.max(0,y))*add)/(old+add));
+        }else{
+          const pool=Math.min(1,(1-d)/(1-.085/r));
+          const weight=Math.round(255*(channel===0?pool**2.2:(1-d*d)**3)*aim);
+          if(weight<=pixels[idx+channel])continue;
+          pixels[idx+channel]=weight;
+          if(channel===0)pixels[idx+3]=Math.round(255*THREE.MathUtils.clamp(y,0,1));
+        }
       }
     }
   };
   for(let i=0;i<globes.length;i+=3){
     const [x,y,z]=[globes[i],globes[i+1],globes[i+2]];
-    stamp(x,y,z,Math.min(1.2,y*3.25),0);
+    // The Ferry/Market boulevard, public plazas, and adjacent park streets.
+    // Beyond the Mission/Washington frontage keep the established pool profile.
+    const plaza=x>=-13&&x<=15&&z< -1.65&&z>=-16;
+    stamp(x,y,z,plaza?Math.min(3.7,y*6.1):Math.min(1.2,y*3.25),0,plaza?terraceFloodAim(x,y,z):undefined,plaza);
   }
+  for(const {x,y,z,radius,strength} of ferryPools)stamp(x,y,z,radius,0,undefined,true,strength);
   for(const h of waterfrontSignals){
     const p=signalLensCenter(h);stamp(p.x,p.y,p.z,.42,1+h.axis,h.heading);
   }
@@ -169,6 +189,10 @@ const illumination=`
     if(all(greaterThan(streetUv,vec2(0.))) && all(lessThan(streetUv,vec2(1.)))){
       vec4 field=texture2D(waterfrontStreetField,streetUv);
       float lampZ=1.-smoothstep(max(.08,field.a*.84),field.a+.28,waterfrontLightPosition.y);
+      // Shielded waterfront luminaires illuminate the walk beneath the lens.
+      // Keep the corrugated top sheets of the waiting sheds and floats in shadow.
+      if(waterfrontLightPosition.z>1.41 && waterfrontLightPosition.x>-16. && waterfrontLightPosition.x<6.7)
+        lampZ=1.-smoothstep(max(.01,field.a-.045),field.a+.001,waterfrontLightPosition.y);
       float signalZ=1.-smoothstep(.24,.45,waterfrontLightPosition.y);
       float normalY=inverseTransformDirection(normal,viewMatrix).y;
       float facing=smoothstep(-.72,-.05,normalY)*(.47+.53*max(normalY,0.));
@@ -210,7 +234,7 @@ const cabIllumination=`
 /** One field lookup for nearby opaque surfaces. The same shader evaluates
  * current instance/batch coordinates for moving coats, cars and the tram. */
 export function createStreetIllumination(root:THREE.Group,globes:number[],water:THREE.Material,enableRides=false){
-  const field=createStreetField(globes),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
+  const field=createStreetField(globes,root.userData.ferryWalkPools),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
   const cabPosition={value:new THREE.Vector3()},cabDirection={value:new THREE.Vector3(0,0,-1)},cabIntensity={value:0};
   const lenses=signalLenses();root.add(lenses.mesh);
   const materials=new Set<THREE.MeshStandardMaterial>();

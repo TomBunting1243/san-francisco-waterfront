@@ -3,6 +3,7 @@ import CustomConditions, {type Ride} from './CustomConditions';
 import {loadConditions,saveConditions,type Conditions} from './conditions.ts';
 import {createRoot} from 'react-dom/client';
 import CityWorld from '../app/CityWorld';
+import {currentOpening} from '../app/cinematic-player';
 
 const darkMode = window.matchMedia('(prefers-color-scheme: dark)');
 function updatePalette() {
@@ -30,7 +31,7 @@ function StandaloneCity(){
   },[]);
   function apply(value:Conditions){setConditions(value);saveConditions(value);}
   return <main>
-    <CityWorld conditions={conditions} passerbyLines={lines} ride={ride} onRideEnd={endRide}
+    <CityWorld cinematic={currentOpening} conditions={conditions} passerbyLines={lines} ride={ride} onRideEnd={endRide}
       overlay={<CustomConditions value={conditions} change={apply} ride={ride} customButton={customButton}
         startRide={mode=>setRide({mode,paused:false})} toggleRide={()=>setRide(current=>current&&{...current,paused:!current.paused})} endRide={endRide}/>}
       fallback={<p className="standalone-fallback" role="status">The interactive city needs a browser with WebGL. You can still enjoy this view of the waterfront.</p>}/>

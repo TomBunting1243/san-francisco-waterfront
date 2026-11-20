@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {ferryWalkLens} from './ferry-walk-lights.ts';
 import {doradoBoardingFreeboard} from './dorado-ferry.ts';
 import {collectTidalParts,markTidalPart} from './tidal-berths.ts';
 import {berthThresholds} from './ferry-service.ts';
@@ -85,6 +86,16 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),delta.normalize());
     return m;
   }
+  // WETA DFTX EIS/EIR §2.3.6, p. 2-28: shielded internal fixtures throw
+  // upwards into the covered floats and gangways. Bake their indirect light
+  // on the canopy underside and the passenger path, keeping the bay dark.
+  const canopyTint=[1.01,.95];
+  const reflectedSoffit=(_p:THREE.Vector3,n:THREE.Vector3)=>1.02*Math.max(0,-n.y);
+  const reflectedPath=(_p:THREE.Vector3,n:THREE.Vector3)=>.31*Math.max(0,n.y);
+  function canopyBounce(m:THREE.Mesh,soffit=false){
+    m.userData.uplight=soffit?reflectedSoffit:reflectedPath;
+    m.userData.uplightTint=canopyTint;
+  }
   function roof(cx:number,span:number,from:number,to:number,eave:number,rise:number,parent:THREE.Group){
     const sections=8;
     const rim=(i:number,offset:number)=>{
@@ -95,7 +106,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     for(let i=0;i<sections;i++){
       const section=new THREE.Shape([rim(i,-.007),rim(i,.007),rim(i+1,.007),rim(i+1,-.007)]);
       const sheet=new THREE.ExtrudeGeometry(section,{depth:to-from,bevelEnabled:false});
-      mesh(sheet,i%3===1?'#e7e3cd':cream,0,0,from,parent).name='Rolled canopy sheet';
+      const panel=mesh(sheet,i%3===1?'#e7e3cd':cream,0,0,from,parent);
+      panel.name='Rolled canopy sheet';canopyBounce(panel,true);
     }
     for(let j=0;j<=Math.round((to-from)/.34);j++){
       const z=THREE.MathUtils.lerp(from,to,j/Math.round((to-from)/.34));
@@ -130,7 +142,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     terminal.add(gangway);
     const delta=end.clone().sub(start),length=delta.length();
     gangway.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),delta.normalize());
-    box(width,.032,length+.012,0,-.016,length/2,'#aab5ac',gangway).name='Gangway walking surface';
+    const path=box(width,.032,length+.012,0,-.016,length/2,'#aab5ac',gangway);
+    path.name='Gangway walking surface';if(covered)canopyBounce(path);
     for(const side of [-1,1]){
       const x=side*(width/2-.007);
       const upright=covered?.223:.063;
@@ -148,10 +161,22 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     box(width*.92,.008,.027,0,.004,.015,yellow,gangway);
     if(covered){
       roof(0,width*1.07,.023,length-.024,.226,.036,gangway);
+      // Indirect lamps sit inside the canopy above the side chord. The
+      // source is visible along the aisle while its casing shields the bay.
+      for(let j=0;j<4;j++){
+        const z=length*(j+.32)/4,x=(j%2===0?-1:1)*(width/2-.017);
+        const fixture=box(.017,.010,.055,x,.210,z,'#e4e0d0',gangway);
+        ferryWalkLens(fixture,'Gangway shielded luminaire',.66,.82);
+      }
       const shoreZ=Math.min(...plate.p.map(p=>p[1])),tip=Math.max(...plate.p.map(p=>p[1]));
       // E's canopy eave also covers the inclined passenger path at the high sill.
       const canopyHeight=gate==='E'?.292:.234;
       roof(cx,.51,shoreZ+.083,tip-.17,deckY+canopyHeight,.073,landing);
+      for(let j=0;j<5;j++){
+        const z=THREE.MathUtils.lerp(shoreZ+.16,tip-.25,j/4);
+        const fixture=box(.018,.010,.066,cx+(j%2===0?.224:-.224),deckY+canopyHeight-.018,z,'#e4e0d0',landing);
+        ferryWalkLens(fixture,'Floating canopy shielded luminaire',.76,.85);
+      }
       for(const side of [-1,1]){
         // Leave the turn from the E gangway to its east-side ramp unobstructed.
         const firstPost=shoreZ+(gate==='E'&&side>0?.22:.14);
@@ -183,7 +208,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
         const sill=waterSurface.level+freeboard;
         const rampStart=new THREE.Vector3(rampX,deckY-.006,stopZ-1.79);
         const rampEnd=new THREE.Vector3(rampX,sill-.006,stopZ);
-        link(rampStart,rampEnd,.012,'#aab4ad',landing,.123).name='Adjustable vessel boarding ramp';
+        const ramp=link(rampStart,rampEnd,.012,'#aab4ad',landing,.123);
+        ramp.name='Adjustable vessel boarding ramp';canopyBounce(ramp);
         for(const offset of [-.057,.057]){
           const rail=new THREE.Vector3(offset,.065,0);
           // The outer E1 rail ends before the transverse turn onto the brow.
@@ -195,7 +221,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
             box(.008,.065,.008,at.x+offset,at.y+.0325,at.z,steel,landing);
           }
         }
-        box(.177,.012,.126,stopX-side*.065,sill-.006,stopZ,'#b4b8ab',landing).name='Vessel boarding threshold';
+        const threshold=box(.177,.012,.126,stopX-side*.065,sill-.006,stopZ,'#b4b8ab',landing);
+        threshold.name='Vessel boarding threshold';canopyBounce(threshold);
         box(.022,.003,.127,stopX+side*.012,sill+.0015,stopZ,yellow,landing);
       }
     }else{
@@ -203,6 +230,23 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
         const cap=deckY-depth, toe=waterSurface.level-.32;
         cylinder(.031,cap-toe,x,(cap+toe)/2,z,'#778681',landing).name='Golden Gate hydraulic support';
         box(.108,.053,.123,x,cap-.012,z,'#8c9a92',landing);
+      }
+      // The District's open hydraulic platforms have no overhead canopy.
+      // Mount the shielded path lights on the inside of existing rails.
+      // The specific hardware and spacing are inferred from terminal night
+      // photographs and the as-built ramp outline, not a luminaire schedule.
+      const rails=plate.p;
+      for(let j=1;j<rails.length;j++){
+        const [ax,az]=rails[j-1],[bx,bz]=rails[j],run=Math.hypot(bx-ax,bz-az);
+        if(run<.47)continue;
+        const count=Math.ceil(run/.58);
+        for(let k=0;k<count;k++){
+          const t=(k+.5)/count,x=ax+(bx-ax)*t,z=az+(bz-az)*t;
+          if(Math.hypot(x-stopX,z-stopZ)<.14||Math.hypot(x-to[0],z-to[1])<.12)continue;
+          const fixture=box(.012,.008,.047,x,deckY+.056,z,'#cdd3c6',landing);
+          fixture.rotation.y=Math.atan2(bx-ax,bz-az);
+          ferryWalkLens(fixture,'Open boarding rail luminaire',.54,.72);
+        }
       }
       const stopSign=stopX>cx?1:-1;
       for(let i=0;i<5;i++){
@@ -212,7 +256,12 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
       box(.053,.056,.395,stopX+.042*stopSign,waterSurface.level+.012,stopZ,'#6b7e79',landing);
       box(.086,.063,.395,stopX+.026*stopSign,deckY+.018,stopZ,'#7e887a',landing);
-      box(.091,.009,.13,stopX-stopSign*.069,deckY+.004,stopZ,yellow,landing);
+      const threshold=box(.091,.009,.13,stopX-stopSign*.069,deckY+.004,stopZ,yellow,landing);
+      threshold.name='Hydraulic boarding threshold';
+      threshold.userData.uplight=(_p:THREE.Vector3,n:THREE.Vector3)=>.19*Math.max(0,n.y);
+      // The last guard section next to the loading opening lights the sill.
+      const edge=box(.015,.010,.045,stopX+.026*stopSign,deckY+.049,stopZ+.12,'#cdd3c6',landing);
+      ferryWalkLens(edge,'Open boarding rail luminaire',.56,.75);
     }
     // Keep the handrail outside the two threshold passages and out of the cutouts
     // at each transverse walkway used to board either side of the float.
@@ -292,6 +341,10 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
         for(let post=0;post<=spans;post++){
           const upright=at(THREE.MathUtils.lerp(guardStart,stop,post/spans),apronY+.039,.025);
           box(.008,.078,.008,upright.x,upright.y,upright.z,'#607f86',guard);
+          if(upright.x> -2.2&&upright.x< -1.4&&upright.z>6.15&&upright.z<8.24&&post%2===0){
+            const lens=box(.012,.013,.038,upright.x-.008,apronY+.060,upright.z,'#d9dfd1',guard);
+            ferryWalkLens(lens,'Outer Golden Gate approach rail light',.79,.78);
+          }
         }
       }
       guardStart=Math.max(guardStart,resume);
@@ -308,6 +361,33 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
   }
   // Steuart Tower's aerial shows a long corrugated gable, with detached low kiosk roofs.
   // The water and waiting room photographs show the red lattice above the concrete posts.
+  // Existing-condition plan, sheet 11: both ② symbols on the apron.
+  // Register their centers against the B and E gate hinges and alignment.
+  for(const [x,z] of [[-6.10,3.70],[-6.31,2.35]]){
+    cylinder(.015,.56,x,apronY+.28,z,'#657574',terminal);
+    box(.080,.023,.052,x,apronY+.567,z,'#788581',terminal);
+    const lamp=box(.066,.006,.040,x,apronY+.552,z,'#e8e1ce',terminal);
+    ferryWalkLens(lamp,'Ferry Plaza pedestrian light',1.65,.88);
+  }
+  // The contractor records the completed E–G passenger-queue canopies;
+  // sheet 11 locates their lateral run along the land side of the hinges.
+  // The remembered Pier 2 dining room occupies the middle of E–F. Keep
+  // the two short approach shelters outside its roof and street entrance.
+  for(const [x0,x1,bays] of [[-14.00,-11.40,6],[-10.99,-10.72,1],[-8.61,-8.40,1]]){
+    const z=1.97,group=new THREE.Group();group.name='South Basin waiting canopy';terminal.add(group);
+    const w=(x1-x0)/bays;
+    for(let i=0;i<bays;i++){
+      const x=x0+w*(i+.5);
+      box(w-.010,.010,.30,x,apronY+.289,z,'#a9bab7',group);
+      box(.012,.017,.314,x0+w*i,apronY+.278,z,'#788b8c',group);
+      if(i%2===0){
+        box(.015,.275,.016,x,apronY+.1375,z-.121,'#7e9190',group);
+        const lamp=box(.104,.006,.014,x,apronY+.281,z+.020,'#e6e1ce',group);
+        ferryWalkLens(lamp,'Queuing canopy downlight',1.00,.84);
+      }
+    }
+    for(const side of [-1,1])box(x1-x0,.020,.012,(x0+x1)/2,apronY+.276,z+side*.15,'#849292',group);
+  }
   const waiting=new THREE.Group();waiting.name='Golden Gate Ferry Terminal waiting shelter';
   waiting.position.set(-2.236,0,4.408);waiting.rotation.y=-.119;
   terminal.add(waiting);
@@ -357,6 +437,8 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
       }
     }
     link(at(-.342,eave-.037,z),at(.342,eave-.037,z),.010,red,waiting);
+    const lamp=box(.113,.008,.023,.094,eave-.046,z,'#e7e2d2',waiting);
+    ferryWalkLens(lamp,'Golden Gate waiting shelter luminaire',.99,.88);
   }
   // Longitudinal purlins and glazing sit beneath the canopy and keep the bays open.
   for(const x of [-.205,0,.205]){

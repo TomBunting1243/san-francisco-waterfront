@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11171a">
+  <title>Waterfront openings · San Francisco</title>
+  <link rel="stylesheet" href="./room.css">
+  <script type="module" src="./room.js"></script>
+</head>
+<body>
+  <main>
+    <header><h1>Waterfront openings</h1><span class="location">San Francisco</span></header>
+    <video controls playsinline muted preload="metadata" width="1280" height="720" src="./city-to-bridge.mp4"
+      poster="./city-to-bridge.webp" aria-label="City to Bay Bridge, day">
+      Your browser cannot play this film. <a href="./city-to-bridge.mp4">Open the movie file</a>.
+    </video>
+    <div class="controls">
+      <fieldset disabled>
+        <legend>Camera direction</legend>
+        <div class="choices">
+          <label><input type="radio" name="opening" value="bridge" aria-label="City to Bay Bridge" checked><span>City <i aria-hidden="true">→</i> Bay Bridge</span></label>
+          <label><input type="radio" name="opening" value="skyline" aria-label="Bay Bridge to city"><span>Bay Bridge <i aria-hidden="true">→</i> City</span></label>
+        </div>
+      </fieldset>
+      <fieldset disabled>
+        <legend>Light</legend>
+        <div class="choices">
+          <label><input type="radio" name="film" value="day" checked><span>Day</span></label>
+          <label><input type="radio" name="film" value="night"><span>Night</span></label>
+        </div>
+      </fieldset>
+      <a class="enter" href="../?opening=bridge&amp;film=day">Explore this opening <span aria-hidden="true">↗</span></a>
+    </div>
+    <p class="error" role="status" hidden>This film couldn’t load. <a href="./city-to-bridge.mp4">Open the movie file</a>.</p>
+  </main>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {addPlazaStreetLights} from './plaza-street-lights.ts';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
 import gradeData from '../public/data/promenade-light-grades.json' with {type:'json'};
 const grades:Record<string,number>=gradeData;
@@ -110,5 +111,20 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
       setOrigin(x,z,.060,0);pedestal(true,3.8-.83*.82);lantern(0,3.8,true);finish('Pier 7 iron lantern');
     }
   }
+  // These five active SFPUC traction-pole pins carry twin acorns in the
+  // HALS 2021 survey. The bronze plaza floods are a separate installation.
+  // Mount the crossarm transversely as drawn on sheet 4.
+  for(const [x,z,yaw] of [[.8039,-6.2693,0],[1.8534,-6.1706,-.10],
+    [2.9043,-6.0028,-.19],[3.9791,-5.7823,-.20],[5.0524,-5.5607,-.20]]){
+    setOrigin(x,z,.045,yaw+Math.PI/2);
+    rings([[0,.16],[.16,.16],[.22,.105],[6.36,.078],[6.44,.080]],iron,8);
+    for(const side of [-1,1]){
+      const offset=(h:number)=>side*.49*Math.min(1,(h-5.89)/.42);
+      rings([[5.89,.05],[6.10,.048],[6.32,.072]],cast,6,offset);
+      lantern(side*.49,7.15,false);
+    }
+    finish('Plaza traction standard with twin acorns');
+  }
+  addPlazaStreetLights(root,halos);
   return halos;
 }

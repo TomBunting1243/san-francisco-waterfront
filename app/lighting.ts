@@ -76,9 +76,13 @@ export function directSunVisibility(altitude:number,cloud:number,fog:number){
   return clamp(altitude/3)*clamp((.98-cloud)/.30)*(1-fog)**2;
 }
 
+export function waterfrontSun(date:Date){
+  const {altitude,azimuth}=getPosition(date,37.7955,-122.3937);
+  return {altitude,azimuth,night:clamp((5-altitude)/14)};
+}
+
 export function pacificLighting(date = new Date()) {
-  const { altitude, azimuth } = getPosition(date,37.7955,-122.3937);
-  const night=clamp((5-altitude)/14);
+  const {altitude,azimuth,night}=waterfrontSun(date);
   const parts=pacificClock.formatToParts(date);
   const hours=Number(parts.find(p=>p.type==='hour')!.value),minutes=Number(parts.find(p=>p.type==='minute')!.value);
   return {

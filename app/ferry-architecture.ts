@@ -1,3 +1,5 @@
+import {ferryWalkLens} from './ferry-walk-lights.ts';
+import {taylorCounter,taylorTerrace} from './taylors-refresher.ts';
 import {ferryPatios} from './ferry-patios.ts';
 import {ferryGlazing} from './ferry-portico-glazing.ts';
 import {ferryEntryX,ferryHallFloor,ferryTowerZ,ferryTreads} from './ferry-portico-access.ts';
@@ -81,7 +83,14 @@ export function ferryHall(font:Font) {
   }
   function sash(g:THREE.Group,x:number,base:number,w:number,h:number,z:number,style:'small'|'bay'|'end'){
     const tint=style==='bay'?'#5d7374':deep;
-    extrude(roundWindow(w,h),.012,tint,x,base,z,g).name=style==='bay'?'East round-headed sash':'Round-headed sash';
+    const glazing=extrude(roundWindow(w,h),.012,tint,x,base,z,g);
+    glazing.name=style==='bay'?'East round-headed sash':'Round-headed sash';
+    // The Pier 1 photograph resolves individual lit rooms behind the arches
+    // and bright end windows. The particular occupied rooms are inferred.
+    if(style!=='small'){
+      const room=Math.round((x+width/2)/(width/23));
+      if(style==='end'||room%5===2||room%7===3)glazing.userData.signLight=[.42,.31,.18];
+    }
     const r=w/2,spring=h-r,frame=style==='bay'?'#81918a':'#a8aa9d';
     for(const fraction of style==='bay'?[-.72,-.36,0,.36,.72]:[-.62,0,.62]){
       const pane=spring+r*Math.sqrt(1-fraction*fraction);
@@ -94,10 +103,11 @@ export function ferryHall(font:Font) {
     box(w+.016,.015,.022,x,base-.006,z+.016,ashlar,g);
   }
   function storefront(g:THREE.Group,x:number,w:number,lo:number,h:number,z:number,finish:string){
-    box(w,h,.018,x,lo+h/2,z,finish,g);
+    const glazing=box(w,h,.018,x,lo+h/2,z,finish,g);
     for(const i of [-.37,-.19,0,.19,.37])box(.010,h,.019,x+i*w,lo+h/2,z+.013,'#8e9c92',g);
     box(w,.011,.014,x,lo+h*.70,z+.019,'#a6aa97',g);
     box(w,.036,.018,x,lo+.017,z+.015,'#8e8e7e',g);
+    return glazing;
   }
 
   // The ground-floor breezeway remains open between plazas. Its floor and mezzanine
@@ -139,7 +149,18 @@ export function ferryHall(font:Font) {
       // The arcaded walk extends along the facade; the tenant frontage is
       // visible beyond the arch, not installed between its granite jambs.
       const gallery=a<0?i>=7:i<10,z=gallery?-.430:-.226;
-      shops.shop(x,pitch*.96,z,i);
+      const taylors=centerX-x>=4.27&&centerX-x<=5.88;
+      const serviceCounter=taylors&&Math.abs(centerX-x-5.47)<pitch/2;
+      shops.shop(x,pitch*.96,z,i,taylors,serviceCounter);
+      if(taylors){
+        // The remembered Taylor’s dining room opens onto the picnic tables.
+        // Treat the arch mouth as an area source for the escaping shop light.
+        const aperture=new THREE.Object3D();
+        aperture.name="Taylor's dining-room light aperture";
+        if(serviceCounter)street.add(taylorCounter(x,z,pitch));
+        aperture.position.set(x,.27,-.014);
+        aperture.userData.ferryWalkPool={radius:1.49,strength:.81};street.add(aperture);
+      }
       if(gallery){
         box(pitch,.013,.40,x,.354,-.224,'#939382',street);
         if(i%3===1)box(.029,.009,.029,x,.337,-.196,'#dfd3af',street).userData.signLight=[.35,.24,.13];
@@ -234,6 +255,7 @@ export function ferryHall(font:Font) {
   const walk=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(pavement,3));
   walk.computeVertexNormals();
   mesh(walk,'#c9c5b3',0,0,0).name='Embarcadero forecourt pavement';
+  mesh(taylorTerrace(),'#ffffff',0,0,0).name='North café paving and south approach';
 
   // The restored bay-side elevation has 23 round-headed office windows above
   // a rectangular arcade with independent iron columns and recessed shops.
@@ -257,10 +279,53 @@ export function ferryHall(font:Font) {
       }
       box(.405,.039,.021,towerX-centerX,.365,-.173,'#87958a',bay).name='Central breezeway transom';
     }else{
-      storefront(bay,x,bayPitch*.95,.105,.277,-.176,i%5===4?'#708176':'#586d66');
+      const worldX=centerX+x;
+      const slantedDoor=worldX>=4.17&&worldX<5.88;
+      const glazing=storefront(bay,x,bayPitch*.95,.105,.277,-.176,slantedDoor?'#405956':i%5===4?'#708176':'#586d66');
+      const dining=worldX>=1.63&&worldX<3.27||worldX>=4.17&&worldX<5.88;
+      const coffee=worldX>=-4.26&&worldX< -3.61;
+      // Dyer's Hog Island night elevation shows
+      // flush downlights. Continue the softer public walk beneath the same
+      // soffit between frontages; only the photographed dining rooms glow.
+      if(dining){
+        // Recess the room behind the existing sash. Vary individual pools of
+        // interior light behind the glass; the lower privacy screen stays cool.
+        glazing.position.z-=.022;
+        glazing.userData.signLight=[.13,.12,.085];
+        for(const side of [-1,1]){
+          const inset=x+side*bayPitch*.22;
+          const wall=box(bayPitch*.37,.105,.005,inset,.255,-.181,'#888478',bay);
+          wall.userData.signLight=side===1&&i%2===0?[.41,.28,.15]:[.27,.19,.12];
+          const lamp=box(.038,.023,.009,inset,.288,-.172,'#e0d6bb',bay);
+          lamp.userData.signLight=[.79,.62,.40];
+          if(slantedDoor){
+            const screen=box(bayPitch*.39,.081,.007,inset,.162,-.165,'#91a9a0',bay);
+            screen.userData.signLight=[.12,.16,.14];
+          }
+        }
+      }
+      const lens=mesh(new THREE.CylinderGeometry(.013,.013,.003,10),'#e9dfc7',x,.371,-.027,bay);
+      ferryWalkLens(lens,'East arcade recessed downlight',.81,dining?.89:coffee?.57:.50,true);
       if(i%4===1||i%5===3)box(bayPitch*.91,.025,.036,x,.307,-.155,'#939e90',bay);
     }
   }
+  // Koeppel describes an exterior bay-side entrance. Hayler's 2013 photo
+  // shows a small white transfer on clear glass and a silver vertical pull.
+  // The exact door leaf within the northeast frontage is reconstructed.
+  const doorMark=new THREE.Group();doorMark.name='The Slanted Door';
+  const entryBayX=-width/2+Math.ceil((4.17-left)/bayPitch-.5)*bayPitch+bayPitch/2;
+  doorMark.position.set(entryBayX-bayPitch*.09,.188,-.153);bay.add(doorMark);
+  const transfer=.024;
+  for(const [word,width,y] of [['THE',.24,.0049],['SLANTED',1,0],['DOOR',.55,-.0049]] as const){
+    const geo=new THREE.ShapeGeometry(font.generateShapes(word,1),2);
+    geo.computeBoundingBox();const bounds=geo.boundingBox!;
+    const scale=transfer*width/(bounds.max.x-bounds.min.x);
+    geo.translate(-(bounds.min.x+bounds.max.x)/2,-(bounds.min.y+bounds.max.y)/2,0);
+    const ink=mesh(geo,'#bdc8c0',0,y,.001,doorMark);
+    ink.scale.setScalar(scale);ink.name='The Slanted Door '+word;
+  }
+  box(.0018,.027,.002,transfer*.93,-.021,.002,'#aab6b0',doorMark);
+  box(.051,.002,.003,0,.044,0,'#909d95',doorMark);
   const columnGeo=new THREE.CylinderGeometry(.012,.017,.249,8);
   for(let i=0;i<=bayCount;i++){
     const x=-width/2+i*bayPitch;
@@ -278,7 +343,9 @@ export function ferryHall(font:Font) {
     box(width+.10,.015,.076,0,y-.028,.008,'#b1b4a8',g);
     // The water table terminates at the through door; its moulding cannot
     // run across the central walking surface.
-    for(const [a,b] of [[-width/2-.04,-.26],[.26,width/2+.04]])
+    // The northwest café also opens directly onto the arcade floor.
+    const end=g===street?centerX-4.30:-width/2-.04;
+    for(const [a,b] of [[end,-.26],[.26,width/2+.04]])
       box(b-a,.025,.063,(a+b)/2,.104,.028,'#d1c9b8',g);
     for(let x=-width/2+.10;x<width/2;x+=g===street?.134:.174){
       box(.039,.014,.041,x,y-.048,.042,'#dad8ca',g);
@@ -439,9 +506,15 @@ export function ferryHall(font:Font) {
     // Both finishes belong to the same extrusion. A second copy of the caps
     // used to fall inside one depth-buffer step at normal orbit distances.
     const normals=words.getAttribute('normal');
-    const colors=new Float32Array(normals.count*3);
+    const colors=new Float32Array(normals.count*3),neon=new Uint8Array(normals.count*3);
     const face=new THREE.Color('#b95e50'),returns=new THREE.Color('#87594f');
-    for(let i=0;i<normals.count;i++)(normals.getZ(i)>.99?face:returns).toArray(colors,i*3);
+    for(let i=0;i<normals.count;i++){
+      const nz=normals.getZ(i);
+      (nz>.99?face:returns).toArray(colors,i*3);
+      // Direct bay-facing neon; the back and painted returns pick up red spill.
+      neon.set(nz>.99?[242,29,11]:nz<-.99?[78,10,5]:[107,14,5],i*3);
+    }
+    words.setAttribute('signLight',new THREE.BufferAttribute(neon,3,true));
     words.setAttribute('color',new THREE.BufferAttribute(colors,3));
     words.userData.paintVertices=true;
     const sign=mesh(words,'#ffffff',x,.025,.009,waterfrontSign);sign.name=label;
@@ -461,17 +534,22 @@ export function ferryHall(font:Font) {
   // HLB's restoration lights the west entry pedestals, paired columns, arches
   // and entablature. The recessed glazed openings retain their darker centers.
   // https://hlblighting.com/project/san-francisco-ferry-building/
-  function hallUplight(p:THREE.Vector3,n:THREE.Vector3){
+  function hallUplight(p:THREE.Vector3,n:THREE.Vector3,west:boolean){
     // HLB's light falls on the stone jambs and cornices; recesses behind
     // the front colonnade receive less light than the outward-facing stone.
-    const west=p.z<streetZ+.12;
     const side=west?-1:1;
     const column=west&&Math.abs(p.x-towerX)<porticoWidth/2&&p.z<streetZ-.09;
     const height=THREE.MathUtils.smoothstep(p.y,.075,.27)*(1-THREE.MathUtils.smoothstep(p.y,.97,1.08));
     const incidence=.25+.66*Math.max(0,n.z*side)+.28*Math.max(0,-n.y);
-    return height*incidence*(column?.96:west?.65:.40);
+    const entablature=west?THREE.MathUtils.smoothstep(p.y,.83,.92)*.23:0;
+    return height*(incidence*(column?.96:west?.65:.40)+entablature);
   }
-  for(const side of [street,bay])side.traverse(o=>{if(o instanceof THREE.Mesh)o.userData.uplight=o.name==='Recessed west glazing and shop interiors'?()=>.078:hallUplight;});
+  for(const side of [street,bay]){
+    const incident=(p:THREE.Vector3,n:THREE.Vector3)=>hallUplight(p,n,side===street);
+    side.traverse(o=>{
+      if(o instanceof THREE.Mesh&&!o.geometry.hasAttribute('signLight'))o.userData.uplight=incident;
+    });
+  }
   return {root,towerX,towerZ};
 }
 

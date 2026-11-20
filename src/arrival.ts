@@ -1,5 +1,10 @@
 import './city.css';
 import './standalone.css';
+import './cinematic.css';
+import {currentOpening,startCinematicOpening} from '../app/cinematic-player';
+import type {FilmEdition} from '../app/cinematic-edition';
+const edition=(window as Window&{waterfrontFilmEdition?:FilmEdition}).waterfrontFilmEdition;
+startCinematicOpening(edition);
 import {attachClockArrival,finishClockArrival} from '../app/clock-arrival';
 import {pacificLighting} from '../app/lighting';
 import {cityDate} from '../app/city-conditions';
@@ -20,6 +25,7 @@ if (window.WebGL2RenderingContext) {
   void import('../app/landscape').catch(() => {});
 }
 void import('./main').catch(() => {
+  currentOpening?.unavailable();
   replaced.disconnect();
   detachPoster();finishClockArrival();
   const loader = document.querySelector('.world-loading');

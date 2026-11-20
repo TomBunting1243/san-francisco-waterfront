@@ -122,6 +122,8 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
     const {r,g,b} = mesh.material.color;
     const paint = mesh.material.vertexColors || geometry.userData.paintVertices ? geometry.attributes.color : undefined;
     const light = mesh.userData.signLight as [number,number,number]|undefined;
+    const uplightTint=mesh.userData.uplightTint as readonly [number,number]|undefined;
+    const greenLight=uplightTint?.[0]??.82,blueLight=uplightTint?.[1]??.59;
     const uplight=mesh.userData.uplight as ((p:THREE.Vector3,n:THREE.Vector3)=>number)|undefined;
     // Streetlamp glass emits across the physical lens, including head-on close views.
     const glass=geometry.getAttribute('signLight');
@@ -187,8 +189,8 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
       normal.fromBufferAttribute(n,i).applyNormalMatrix(normalMatrix);
       const j=base+i*3,irradiance=uplight(point,normal);
       signLights[j]=Math.min(255,colors[j]*irradiance);
-      signLights[j+1]=Math.min(255,colors[j+1]*irradiance*.82);
-      signLights[j+2]=Math.min(255,colors[j+2]*irradiance*.59);
+      signLights[j+1]=Math.min(255,colors[j+1]*irradiance*greenLight);
+      signLights[j+2]=Math.min(255,colors[j+2]*irradiance*blueLight);
     }
     const sourceIndices=geometry.index?.array;
     if(sourceIndices){

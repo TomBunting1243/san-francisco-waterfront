@@ -66,17 +66,21 @@ test('outdoor tables follow documented storefronts and leave the passenger route
   const {ferryPose}=await import('../app/motion.ts');
   const layout=ferryPatios();layout.updateMatrixWorld(true);
   const tables=layout.children.map(o=>new THREE.Box3().setFromObject(o)),counts=new Map();
-  const mappedFrontages=new Map([['Arquet',[4.17,5.88]],['Hog Island Oyster Co.',[1.63,3.27]],
-    ['Red Bay Coffee',[-4.26,-3.61]],["Gott's Roadside",[4.27,5.88]]]);
+  const mappedFrontages=new Map([['The Slanted Door',[4.17,5.88]],['Hog Island Oyster Co.',[1.63,3.27]],
+    ['Red Bay Coffee',[-4.26,-3.61]],["Taylor's Automatic Refresher",[4.27,5.88]]]);
   for(const [i,table] of layout.children.entries()){
     const name=table.name.replace(' outdoor table',''),[lo,hi]=mappedFrontages.get(name);
     counts.set(name,(counts.get(name)??0)+1);
     assert.ok(tables[i].min.x>lo&&tables[i].max.x<hi);
-    assert.ok(name==="Gott's Roadside"?tables[i].max.z< -1.70:tables[i].min.z>1.64&&tables[i].max.z<2.17);
+    if(name==='The Slanted Door'){
+      assert.ok(tables[i].min.z>1.48&&tables[i].min.z<1.51);
+      assert.ok(tables[i].max.z<1.601,'furniture stays behind arcade columns');
+      assert.ok(tables[i].min.x>4.58,'keep the entrance clear');
+    }else assert.ok(name==="Taylor's Automatic Refresher"?tables[i].min.z> -1.568&&tables[i].max.z< -1.37:tables[i].min.z>1.64&&tables[i].max.z<2.17);
     assert.ok(tables.slice(0,i).every(t=>!t.intersectsBox(tables[i])));
     assert.ok(ferryConnections.every(c=>Math.hypot(table.position.x-c.from[0],table.position.z-c.from[1])>.42));
   }
-  assert.deepEqual(Object.fromEntries(counts),{'Arquet':12,'Hog Island Oyster Co.':5,'Red Bay Coffee':3,"Gott's Roadside":6});
+  assert.deepEqual(Object.fromEntries(counts),{'The Slanted Door':6,'Hog Island Oyster Co.':5,'Red Bay Coffee':3,"Taylor's Automatic Refresher":6});
   const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');
   const stallBounds=s.roofs.filter(m=>m[14]>-3).map(m=>{
     const [x,,z]=position(m);
