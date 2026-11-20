@@ -51,7 +51,7 @@ import {createServiceFerry,serviceFerryPaint,updatePyxisBoardingDoor} from './se
 import {ferryClockAt,vessels} from './ferry-service.ts';
 import {createDaySailer} from './sailing.ts';
 import {baySurfaceGeometry,vignetteBaySurfaceGeometry,configureBayWater,marineDistanceFog} from './bay-water.ts';
-import {bakeBlockGroups,bakeRigidChunk,freezeBakedArchitecture} from './city-blocks.ts';
+import {bakeBlockGroups,bakeRigidChunk,freezeBakedArchitecture,retireBakedMeshes} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
@@ -722,7 +722,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const illuminatedArchitecture=architectureMaterial.clone();
   for(const chunk of architectureChunks)if(chunk.geometry.hasAttribute('signLight'))chunk.material=illuminatedArchitecture;
   root.add(...architectureChunks);
-  staticMeshes.forEach(o=>{o.parent?.remove(o);o.geometry.dispose();});
+  retireBakedMeshes(staticMeshes);
   // Keep each moving object intact while batching its own small components.
   const ferryPaint=serviceFerryPaint;
   bakePccBody(tram,streetcar.glazing,streetcar.lamp);

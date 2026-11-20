@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
-import {bakeBlockGroups,bakeBlocks,bakeRigidChunk,freezeBakedArchitecture} from '../app/city-blocks.ts';
+import {bakeBlockGroups,bakeBlocks,bakeRigidChunk,freezeBakedArchitecture,retireBakedMeshes} from '../app/city-blocks.ts';
 
 test('baking preserves native material vertex paint while unpainted materials keep their own tint',()=>{
   const panel=new THREE.PlaneGeometry(1,1);
@@ -195,4 +195,22 @@ test('deadline pauses keep synchronous district order, material, buffers and bou
     }
   }
   assert.deepEqual(bakeBlockGroups([],material,()=>assert.fail('empty bake checked deadline')).next(),{value:[],done:true});
+});
+
+test('batch retirement preserves sibling arrays, nested attachments and native observer order',()=>{
+  for(const observed of [false,true]){
+    const root=new THREE.Group(),left=new THREE.Group(),right=new THREE.Group();
+    const outer=new THREE.Mesh(),inner=new THREE.Mesh(),last=new THREE.Mesh();
+    const socket=new THREE.Group();outer.add(inner,socket);root.add(left,outer,right,last);
+    const original=root.children,events=[];
+    if(observed){
+      root.addEventListener('childremoved',e=>events.push([e.child,root.children.slice()]));
+      inner.geometry.addEventListener('dispose',()=>events.push(['disposed',outer.children.slice()]));
+    }
+    retireBakedMeshes([outer,inner,last]);
+    assert.equal(root.children,original);assert.deepEqual(root.children,[left,right]);
+    assert.equal(outer.parent,null);assert.equal(inner.parent,null);assert.equal(last.parent,null);
+    assert.deepEqual(outer.children,[socket]);assert.equal(socket.parent,outer);
+    if(observed)assert.deepEqual(events,[[outer,[left,right,last]],['disposed',[socket]],[last,[left,right]]]);
+  }
 });

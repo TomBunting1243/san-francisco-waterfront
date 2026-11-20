@@ -14,9 +14,9 @@ Follow the research behind the city, from the Ferry Building’s clock and arcad
 
 | Measure | Recorded amount |
 |---|---:|
-| Cited publication, image, data and source URLs | 645 |
+| Cited publication, image, data and source URLs | 646 |
 | Survey asset URLs | 2,028 (5 also directly cited) |
-| Distinct URLs across both registers | 2,668 |
+| Distinct URLs across both registers | 2,669 |
 | Shipped geographic JSON files | 34 files · 9,044,438 bytes |
 | Other shipped data JSON (portrait, wordmark, radar palette, tides and timetables) | 5 files · 54,918 bytes |
 | Measured input files in the [asset register](SURVEY-ASSETS.csv) | 2,028 files · 514,926,384 bytes |
@@ -83,7 +83,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Data and services](#data-and-services) · 51
 - [Reports and technical documents](#reports-and-technical-documents) · 92
 - [Licenses and credits](#licenses-and-credits) · 5
-- [Additional published sources](#additional-published-sources) · 214
+- [Additional published sources](#additional-published-sources) · 215
 
 ### Photographs and imagery
 
@@ -163,7 +163,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Federal Reserve opening photographs](https://fraser.stlouisfed.org/files/docs/historical/frbsf/federalreservenotes/frnotes_frbsf_198303.pdf) · fraser.stlouisfed.org — [market architecture](../app/market-architecture.ts#L198) · [Lower Market and the inland skyline](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-and-the-inland-skyline)
 - [Chaplin’s 2007 interior and meal photographs](https://gastronomyblog.com/2007/07/21/taylors-automatic-refresher/) · gastronomyblog.com — [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [California NAIP imagery service](https://gis.wildlife.ca.gov/images/rest/services/Base_Remote_Sensing/NAIP_2022/ImageServer) · gis.wildlife.ca.gov — [Waterfront surveys](../THIRD-PARTY-NOTICES.md#waterfront-surveys) · [roof finishes](../public/data/roof-finishes.json#L1) · [blocks](../public/data/survey-blocks.json#L1) · [Measured research inputs](../references/RESEARCH-SOURCES.md#measured-research-inputs) · [160 Spear](../references/RESEARCH-SOURCES.md#160-spear) · [455 Market](../references/RESEARCH-SOURCES.md#455-market) · [Central rooflines and materials](../references/WATERFRONT-REFERENCE-AUDIT.md#central-rooflines-and-materials) · [Rincon Center, Spear Street and Maritime Plaza](../references/WATERFRONT-REFERENCE-AUDIT.md#rincon-center-spear-street-and-maritime-plaza) · [roof finishes](../scripts/import-roof-finishes.py#L23) · [survey blocks](../scripts/import-survey-blocks.py#L186)
-- [HLB restoration and Nic Lehoux / Tom Paiva photograph](https://hlblighting.com/project/san-francisco-ferry-building/) · hlblighting.com — [ferry architecture](../app/ferry-architecture.ts#L536) · [ferry clock tower](../app/ferry-clock-tower.ts#L143) · [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
+- [HLB restoration and Nic Lehoux / Tom Paiva photograph](https://hlblighting.com/project/san-francisco-ferry-building/) · hlblighting.com — [ferry architecture](../app/ferry-architecture.ts#L538) · [ferry clock tower](../app/ferry-clock-tower.ts#L143) · [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [Paul Dyer’s Hog Island photo](https://hogislandoysters.com/wp-content/uploads/2021/10/Paul-Dyer.jpg) · hogislandoysters.com — [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [Hog Island’s San Francisco patio photograph](https://hogislandoysters.com/wp-content/uploads/2024/04/Oyster-Socials-Hog-Island-SF-2024.pdf) · hogislandoysters.com — [Restaurant frontage and ferry lighting](../references/RESEARCH-SOURCES.md#restaurant-frontage-and-ferry-lighting)
 - [Geri Koeppel's 2015 patio photograph](https://hoodline.com/2015/04/port-files-suit-to-evict-sinbad-s/) · hoodline.com — [Remembered waterfront](../references/WATERFRONT-REFERENCE-AUDIT.md#remembered-waterfront)
@@ -426,7 +426,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [USGS 2023 lidar](https://www.fisheries.noaa.gov/inport/item/73386) · fisheries.noaa.gov — [Elevation data](../THIRD-PARTY-NOTICES.md#elevation-data) · [sue bierman](../app/sue-bierman.ts#L10) · [plaza survey](../public/data/plaza-survey.json#L1) · [100 Pine](../references/RESEARCH-SOURCES.md#100-pine) · [The Ferry plazas and the foot of Market](../references/WATERFRONT-REFERENCE-AUDIT.md#the-ferry-plazas-and-the-foot-of-market) · [Central rooflines and materials](../references/WATERFRONT-REFERENCE-AUDIT.md#central-rooflines-and-materials) · [Trees, planting sites and curb lines](../references/WATERFRONT-REFERENCE-AUDIT.md#trees-planting-sites-and-curb-lines) · [Lower Market, California and Drumm](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-california-and-drumm) · [Don Chee Way, Steuart and the museum stop](../references/WATERFRONT-REFERENCE-AUDIT.md#don-chee-way-steuart-and-the-museum-stop) · [plaza survey](../scripts/import-plaza-survey.py#L269)
 - [WETA fleet](https://www.sfbayferry.com/meet-our-fleet/) · sfbayferry.com — [Ferry Routes](../references/RESEARCH-SOURCES.md#ferry-routes) · [Bay Bridge, SoMa approach and ferries](../references/WATERFRONT-REFERENCE-AUDIT.md#bay-bridge-soma-approach-and-ferries) · [Ferries at the downtown terminal](../references/WATERFRONT-REFERENCE-AUDIT.md#ferries-at-the-downtown-terminal)
 - [Port historic inventory](https://www.sfport.com/files/2022-12/EmbarcaderoRegisterNominationSec7.pdf) · sfport.com — [pier five](../app/pier-five.ts#L12) · [Historic Piers 1½, 3 and 5](../references/WATERFRONT-REFERENCE-AUDIT.md#historic-piers-1½-3-and-5)
-- [Port inventory, p. 147](https://www.sfport.com/media/9230/download) · sfport.com · [page=147](https://www.sfport.com/media/9230/download#page=147) — [ferry architecture](../app/ferry-architecture.ts#L575) · [ferry market platform](../app/ferry-market-platform.ts#L11) · [rincon restaurants](../app/rincon-restaurants.ts#L19) · [Ferry Terminal platforms and the Market crossing](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-terminal-platforms-and-the-market-crossing)
+- [Port inventory, p. 147](https://www.sfport.com/media/9230/download) · sfport.com · [page=147](https://www.sfport.com/media/9230/download#page=147) — [ferry architecture](../app/ferry-architecture.ts#L577) · [ferry market platform](../app/ferry-market-platform.ts#L11) · [rincon restaurants](../app/rincon-restaurants.ts#L19) · [Ferry Terminal platforms and the Market crossing](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-terminal-platforms-and-the-market-crossing)
 
 ### Reports and technical documents
 
@@ -542,7 +542,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [harbor conditions · api.tidesandcurrents.noaa.gov](https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&units=metric&time_zone=gmt&format=json&application=WaterfrontCity) · api.tidesandcurrents.noaa.gov — [harbor conditions](../app/harbor-conditions.ts#L7)
 - [Architect’s project](https://archengine.com/360-spear-1) · archengine.com — [360 Spear](../references/RESEARCH-SOURCES.md#360-spear)
 - [Arquitectonica](https://arquitectonica.com/architecture/project/the-infinty-san-francisco/) · arquitectonica.com — [November architecture and signs](../references/WATERFRONT-REFERENCE-AUDIT.md#november-architecture-and-signs)
-- [ferry architecture · artandarchitecture-sf.com](https://artandarchitecture-sf.com/light-cannons-at-the-ferry-building.html) · artandarchitecture-sf.com — [ferry architecture](../app/ferry-architecture.ts#L576)
+- [ferry architecture · artandarchitecture-sf.com](https://artandarchitecture-sf.com/light-cannons-at-the-ferry-building.html) · artandarchitecture-sf.com — [ferry architecture](../app/ferry-architecture.ts#L578)
 - [east span · asbi-assoc.org](https://asbi-assoc.org/project/san-francisco-oakland-bay-bridge-new-east-span-skyway-san-francisco-and-oakland-california/) · asbi-assoc.org — [east span](../app/east-span.ts#L135)
 - [50 California exterior](https://betterbuildingssolutioncenter.energy.gov/showcase-projects/shorenstein-properties-50-california-street) · betterbuildingssolutioncenter.energy.gov — [Lower Market and the inland skyline](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-and-the-inland-skyline)
 - [Koeppel’s 2019 visit](https://brokeassstuart.com/p/is-the-slanted-door-still-worth-the-hype) · brokeassstuart.com — [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
@@ -609,7 +609,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [market historic frontages · presidiobay.com](https://presidiobay.com/projects/88-spear-street-san-francisco-office/) · presidiobay.com — [market historic frontages](../app/market-historic-frontages.ts#L162)
 - [Four Seasons hotel renovation announcement](https://press.fourseasons.com/content/fourseasons_pressroom/printView.html?pageToPrint=%2Fcontent%2Ffourseasons_pressroom%2Fen%2Fnews%2Fembarcadero%2F2022%2Fguest_room_renovatio) · press.fourseasons.com — [California Center](../references/RESEARCH-SOURCES.md#california-center)
 - [JLL Market Center listing and brochure](https://property.jll.com/listings/market-center-555-market-st-san-francisco) · property.jll.com — [Market Plaza](../references/RESEARCH-SOURCES.md#market-plaza)
-- [Lighting supplier](https://radius-displays.com/projects/san-francisco-bus-shelters/) · radius-displays.com — [promenade transit](../app/promenade-transit.ts#L76) · [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail)
+- [Lighting supplier](https://radius-displays.com/projects/san-francisco-bus-shelters/) · radius-displays.com — [promenade transit](../app/promenade-transit.ts#L77) · [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail)
 - [downtown roofs · s3-us-west-2.amazonaws.com](https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/) · s3-us-west-2.amazonaws.com — [downtown roofs](../scripts/import-downtown-roofs.py#L31)
 - [bay relief · s3.amazonaws.com](https://s3.amazonaws.com/elevation-tiles-prod/terrarium/) · s3.amazonaws.com — [bay relief](../scripts/import-bay-relief.mjs#L11)
 - [Bay Water Trail’s Pier 40 profile](https://sfbaywatertrail.org/trailhead/pier-40/) · sfbaywatertrail.org — [South Beach to China Basin](../references/WATERFRONT-REFERENCE-AUDIT.md#south-beach-to-china-basin)
@@ -705,6 +705,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Assessment Appeals Board, item 39](https://www.sfgov.org/aab/meeting/B1/event/033126B1PHCPM) · sfgov.org — [California Center](../references/RESEARCH-SOURCES.md#california-center)
 - [SFMTA accessible boarding](https://www.sfmta.com/getting-around/accessibility/muni-accessibility/muni-access-guide/access-historic-streetcars) · sfmta.com — [steuart junction](../app/steuart-junction.ts#L127) · [Don Chee Way, Steuart and the museum stop](../references/WATERFRONT-REFERENCE-AUDIT.md#don-chee-way-steuart-and-the-museum-stop) · [Washington Street and PCC 1051](../references/WATERFRONT-REFERENCE-AUDIT.md#washington-street-and-pcc-1051)
 - [SFMTA illustrated guide to bicycle racks](https://www.sfmta.com/getting-around/bike/bikes-muni) · sfmta.com — [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail)
+- [SFMTA fare validation](https://www.sfmta.com/getting-around/muni/fares/proof-payment) · sfmta.com — [promenade transit](../app/promenade-transit.ts#L267) · [Market Center, Rincon Hill and downtown tower elevations](../references/WATERFRONT-REFERENCE-AUDIT.md#market-center-rincon-hill-and-downtown-tower-elevations)
 - [folsom portal · www.sfmta.com](https://www.sfmta.com/media/43628/download?inline=) · sfmta.com — [folsom portal](../app/folsom-portal.ts#L9)
 - [Route description and schedule](https://www.sfmta.com/routes/2-sutter) · sfmta.com — [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail) · [Market Center, Rincon Hill and downtown tower elevations](../references/WATERFRONT-REFERENCE-AUDIT.md#market-center-rincon-hill-and-downtown-tower-elevations)
 - [SFMTA California route](https://www.sfmta.com/routes/california-cable-car) · sfmta.com — [Lower Market and the inland skyline](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-and-the-inland-skyline)

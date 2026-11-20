@@ -217,6 +217,27 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   return chunk;
 }
 
+/** Retire the construction meshes after their final bake. Compact each sibling
+ * array once, preserving the order and identity of the surviving objects. */
+export function retireBakedMeshes(parts:readonly THREE.Mesh[]){
+  // Three's EventDispatcher creates _listeners on first subscription. When
+  // observed, use native removals so callbacks see each intermediate hierarchy.
+  if(parts.some(p=>'_listeners' in p||'_listeners' in p.geometry||(p.parent&&'_listeners' in p.parent))){
+    for(const part of parts){part.removeFromParent();part.geometry.dispose();}
+    return;
+  }
+  const parents=new Set<THREE.Object3D>();
+  for(const part of parts){
+    if(part.parent){parents.add(part.parent);part.parent=null;}
+    part.geometry.dispose();
+  }
+  for(const parent of parents){
+    const children=parent.children;let kept=0;
+    for(const child of children)if(child.parent===parent)children[kept++]=child;
+    children.length=kept;
+  }
+}
+
 /** Finished block meshes have fixed local transforms. The emptied authoring
  * groups keep their names, hierarchy and coordinate spaces for lookup. */
 export function freezeBakedArchitecture(root:THREE.Object3D,chunks:THREE.Mesh[],moving:ReadonlySet<THREE.Object3D>){

@@ -36,6 +36,40 @@ test('passengers pass through actual open coach doors at the curb and travel bet
   assert.equal(sheltered.children.length,2);assert.equal(bare.children.length,1);assert.equal(bare.position.y,.045);
 });
 
+test('the Steuart rider waits for the arriving coach, taps at the reader and clears the open front door',()=>{
+  const scene=createPromenadeTransit(),coach=scene.poses.getObjectByName('2 Sutter coach 1');
+  const rider=scene.poses.getObjectByName('Boarding passenger'),hand=rider.getObjectByName('Hand holding a Clipper card');
+  const set=phase=>{scene.update(phase-7);scene.poses.updateMatrixWorld(true);};
+  const localFeet=()=>coach.worldToLocal(rider.position.clone());
+  set(-8);assert.ok(rider.visible);
+  const waiting=rider.position.clone();
+  for(const phase of [-6,-2,-.001,0,.001,1.9]){
+    set(phase);assert.ok(rider.visible&&rider.position.distanceTo(waiting)<1e-6);
+  }
+  assert.ok(Math.abs(busPose(-.001).yaw-busPose(0).yaw)<.0001);
+  set(23.3);assert.ok(rider.visible);
+  // Find actual painted card vertices, then raycast from the aisle onto the
+  // validator rather than checking only the animation's hand target.
+  const box=new THREE.Box3(),p=hand.geometry.attributes.position,c=hand.geometry.attributes.color;
+  const blue=new THREE.Color('#7bb5c5'),color=new THREE.Color(),v=new THREE.Vector3();
+  for(let i=0;i<p.count;i++){
+    color.fromBufferAttribute(c,i);
+    if(Math.abs(color.r-blue.r)+Math.abs(color.g-blue.g)+Math.abs(color.b-blue.b)>1.5/255)continue;
+    box.expandByPoint(coach.worldToLocal(hand.localToWorld(v.fromBufferAttribute(p,i))));
+  }
+  assert.ok(!box.isEmpty());
+  const center=box.getCenter(new THREE.Vector3());
+  const ray=new THREE.Raycaster(coach.localToWorld(center.clone().setZ(.43)),new THREE.Vector3(0,0,-1).applyQuaternion(coach.quaternion));
+  const reader=ray.intersectObject(coach.children[0])[0];
+  assert.ok(reader&&coach.worldToLocal(reader.point.clone()).distanceTo(center)<.006);
+  set(24.2);assert.ok(hand.rotation.x>1);
+  set(26.79);assert.ok(rider.visible&&localFeet().x<2.25&&localFeet().z<.50);
+  const eye=localFeet().setY(1.7);
+  const obstruction=new THREE.Raycaster(coach.localToWorld(eye.clone().setZ(3)),new THREE.Vector3(0,0,-1).applyQuaternion(coach.quaternion));
+  assert.ok(coach.worldToLocal(obstruction.intersectObject(coach.children[0])[0].point.clone()).z>1.20);
+  set(26.81);assert.equal(rider.visible,false);
+});
+
 test('Market terminal rider reads the timetable, returns to the bench and sits with planted feet',()=>{
   const scene=createPromenadeTransit(),actor=scene.poses.getObjectByName('Market terminal timetable reader');
   const market=scene.poses.getObjectByName('Steuart and Market sheltered terminal');
@@ -90,6 +124,12 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const pole=scene.poses.getObjectByName('2 Sutter terminal at Steuart and Don Chee');
   const down=new THREE.Vector3(0,-1,0);
   const surface=(point,meshes)=>new THREE.Raycaster(new THREE.Vector3(point.x,.12,point.z),down,0,.13).intersectObjects(meshes,false)[0]?.point.y;
+  for(let phase=-31.99;phase<1.95;phase+=.25){
+    scene.update(phase-7);
+    assert.ok(board.visible);
+    const y=surface(board.position,ground);
+    assert.ok(y!==undefined&&Math.abs(y-board.position.y)<.0009,'supported incoming rider at '+phase);
+  }
   for(let phase=2.5;phase<22;phase+=.125){
     scene.update(phase-7);
     const local=coach.worldToLocal(board.position.clone());
@@ -135,7 +175,7 @@ test('front boarding follows supported paving, passes the exiting rider and reac
   const picnic=scene.poses.getObjectByName("Taylor's picnic diners").getObjectsByProperty('isMesh',true);
   const picnicTris=[...new Set(picnic.map(p=>p.geometry))].reduce((n,g)=>n+g.index.count/3,0);
   assert.equal(picnic.length,16);assert.ok(picnicTris<2400);
-  assert.equal(scene.batch.instanceCount-picnic.length-carParts.length-visitors.length-diners.length-reader.length-station.length-ferryRider.length,69);
+  assert.equal(scene.batch.instanceCount-picnic.length-carParts.length-visitors.length-diners.length-reader.length-station.length-ferryRider.length,70);
   assert.ok(scene.batch.geometry.index.count/3-picnicTris-carTriangles-visitTriangles-dinerTriangles-readerTris-stationTris-ferryTris<6200);
   assert.ok(carTriangles<4600);
 });

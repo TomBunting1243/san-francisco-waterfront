@@ -336,10 +336,10 @@ export function ferryHall(font:Font) {
   box(width+.06,.037,.195,0,.391,-.055,ashlar,bay).name='Cantilevered east arcade soffit';
   box(width,.018,.053,0,.422,.023,pale,bay);
   box(width+.021,.018,.044,0,.602,.013,'#b4b8aa',bay);
-  const copingDepth=.084,copingCenter=.010;
+  const copingDepth=.084,copingCenter=.010,copingHeight=.045,streetCopingY=.94;
   for(const g of [street,bay]){
-    const y=g===street?.94:.90;
-    box(width+.12,.045,copingDepth,0,y,copingCenter,pale,g).name='Long arcade coping';
+    const y=g===street?streetCopingY:.90;
+    box(width+.12,copingHeight,copingDepth,0,y,copingCenter,pale,g).name='Long arcade coping';
     box(width+.10,.015,.076,0,y-.028,.008,'#b1b4a8',g);
     // The water table terminates at the through door; its moulding cannot
     // run across the central walking surface.
@@ -397,7 +397,9 @@ export function ferryHall(font:Font) {
   const entryL=towerX-porticoWidth/2,entryR=towerX+porticoWidth/2;
   cutStrip(entryL,entryR,porticoZ+.005,entryDeck,roofWest,entryDeck,'#92918a');
   cutStrip(entryL,entryR,porticoZ+.005,.976,roofWest,.976,'#aca99a',true);
-  cutStrip(entryL,entryR,roofWest,entryDeck,roofWest,westDeck,'#888b82');
+  // The stone coping already forms the lower part of this exposed step.
+  // Butt the portico flashing to its top on both shoulders of the tower.
+  cutStrip(entryL,entryR,roofWest,entryDeck,roofWest,streetCopingY+copingHeight/2,'#888b82');
   cutStrip(roofL,roofR,roofWest,westDeck,firstEave,westDeck,'#848982');
   cutStrip(roofL,roofR,firstEave,westDeck,firstEave,roofs[0].low,'#7c8078');
   for(const x of [left,right]){

@@ -99,6 +99,24 @@ test('both ends of the Ferry hall have one roof surface and a closed eave on all
   }
 });
 
+test('both portico roof shoulders have a single exposed face from the lower deck to the upper deck',()=>{
+  const {root,towerX}=ferryHall(font);
+  root.updateMatrixWorld(true);
+  const street=root.getObjectByName('Embarcadero arcade and portico');
+  const coping=street.getObjectByName('Long arcade coping');
+  const cheek=new THREE.Box3().setFromObject(coping);
+  const roof=root.getObjectByName('Ferry hall joined roof and portico');
+  const finishes=bakeRigidChunk('Portico roof shoulder',[coping,roof],new THREE.MeshStandardMaterial());
+  for(const dx of [-1.14,-.67,.67,1.14])for(const y of [.925,.945,cheek.max.y-.0005,cheek.max.y+.0005,.995]){
+    const target=new THREE.Vector3(towerX+dx,y,cheek.max.z);
+    for(const yaw of [-.5,.4]){
+      const towardRoof=new THREE.Vector3(yaw,-.48,-1).normalize();
+      const ray=new THREE.Raycaster(target.clone().addScaledVector(towardRoof,-.1),towardRoof,.09998,.10002);
+      assert.equal(ray.intersectObject(finishes).length,1,'exposed faces at '+target.toArray());
+    }
+  }
+});
+
 test('the baked Ferry roof closes the portico, fits the clock shaft and carries both sign racks',async()=>{
   const {createLandscape}=await import('../app/landscape.ts');
   const world=createLandscape(),hall=ferryHall(font);

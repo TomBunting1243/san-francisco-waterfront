@@ -57,8 +57,9 @@ export function busPose(time:number){
   // measured against the Steuart curb. Keep the coach aligned during dwell.
   const u=clamp(1-distance/(22*scale)),blend=u*u*(3-2*u)*scale;
   const c=Math.cos(stopHeading),s=Math.sin(stopHeading);
+  const yaw=blend>0?pose.yaw+(blend/scale)*Math.atan2(Math.sin(stopHeading-pose.yaw),Math.cos(stopHeading-pose.yaw)):pose.yaw;
   return {x:pose.x+blend*(longitudinalOffset*c+kerbOffset*s),
-    z:pose.z+blend*(kerbOffset*c-longitudinalOffset*s),yaw:pose.yaw,t,stopped:t<=layover};
+    z:pose.z+blend*(kerbOffset*c-longitudinalOffset*s),yaw,t,stopped:t<=layover};
 }
 
 // Shared surveyed stop and canopy transforms. Offsets are metres in the stop frame.
@@ -261,6 +262,12 @@ function coach(){
   // inside the door sweep while the coach is underway.
   a.box(4.59,thresholdHeight+.006,.78,1.09,.012,.89,'#858c87');
   a.box(4.59,thresholdHeight+.015,1.20,1.09,.008,.052,'#d1ad54');
+  // SFMTA riders tap and hold when boarding. The front reader faces the
+  // entering passenger. Its mounting dimensions are a modeled approximation.
+  // https://www.sfmta.com/getting-around/muni/fares/proof-payment
+  a.box(4.91,.96,.21,.052,1.20,.052,steel);
+  a.box(4.91,1.60,.246,.168,.224,.062,'#384847');
+  a.box(4.91,1.606,.281,.126,.146,.012,'#80a79d');
   const door=new StreetAssembly();door.box(0,1.52,0,.578,2.29,.061,ink);
   for(const h of [1.12,2.10])door.box(0,h,.04,.42,.82,.018,glass);
   const leaf=door.bake('Coach folding door leaf');
@@ -298,18 +305,19 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
     }
     poses.add(group);return {group,leaves};
   });
-  const alight=streetPassenger('#90778a','#bb9277'),board=streetPassenger('#58867d','#c69c80');
+  const alight=streetPassenger('#90778a','#bb9277'),board=streetPassenger('#58867d','#c69c80','card');
   poses.add(alight.root,board.root);alight.root.name='Alighting passenger';board.root.name='Boarding passenger';
   board.root.scale.setScalar(scale);alight.root.scale.setScalar(scale);
   const terminal=busPose(0),forward=new THREE.Vector2(Math.cos(terminal.yaw),-Math.sin(terminal.yaw)),right=new THREE.Vector2(-forward.y,forward.x);
-  function passenger(actor:typeof board,along:number,across:number,t:number,walking:boolean,heading:number){
+  function passenger(actor:typeof board,along:number,across:number,t:number,walking:boolean,heading:number,grip=0){
     const x=terminal.x+scale*(along*forward.x+across*right.x),z=terminal.z+scale*(along*forward.y+across*right.y);
     // Low-floor threshold leads down to the surveyed sidewalk.
     const kerb=.040644;
     const walk=THREE.MathUtils.lerp(kerb,.045,clamp((across-1.60)/.34));
-    const sill=.031+scale*(thresholdHeight+(along>3?.012:0));
+    const onRamp=along>=4.045&&along<=5.135&&across>=.335;
+    const sill=.031+scale*(thresholdHeight+(onRamp?.012:0));
     actor.root.position.set(x,THREE.MathUtils.lerp(walk,sill,clamp((1.50-across)/.25)),z);
-    actor.root.rotation.y=terminal.yaw+heading;actor.stride(t,walking);
+    actor.root.rotation.y=terminal.yaw+heading;actor.stride(t,walking,grip);
   }
   const paint=material??model.body.material.clone();
   const {batch,sync}=batchTraffic(poses,paint,'Batched Muni vehicles, passengers and street furniture');
@@ -373,18 +381,32 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
       group.position.set(pose.x,.031,pose.z);group.rotation.y=pose.yaw;
       const opening=pose.stopped?Math.min(clamp((t-1)/1.3),clamp((29-t)/1.3)):0;
       for(const {pivot,side} of leaves)pivot.rotation.y=-side*opening*1.46;
+      // Follow a rider along the surveyed sidewalk while the coach is still
+      // approaching. They wait clear of the curb, then join the doorway.
+      const incoming=t-period;
+      if(incoming>=-32){
+        const walk=clamp((incoming+32)/17);
+        board.root.visible=true;
+        passenger(board,-24+19.79*walk,3.90,incoming,walk<1,Math.PI/2);
+      }
       if(!pose.stopped)continue;
       if(t>=2.5&&t<15){
         alight.root.visible=true;
         const cross=clamp((t-2.5)/2.5),along=clamp((t-5)/10);
         passenger(alight,-1.93-along*10,.80+cross*2.09,t,true,t<5?0:-Math.PI/2);
       }
-      if(t>=2&&t<22){
+      if(t<26.8){
         board.root.visible=true;
         const approach=clamp((t-2)/12),cross=clamp((t-17.5)/4.5);
         // Pass the exiting rider on the sidewalk side, then turn to the front door.
         const lane=clamp((approach-.55)/.45);
-        passenger(board,4.59-(1-approach)*8.8,3.90-lane-2.10*cross,t,t<14||t>=17.5,t<14?Math.PI/2:Math.PI);
+        const settle=THREE.MathUtils.smoothstep(t,22,22.65);
+        const turn=THREE.MathUtils.smoothstep(t,23.65,24.45);
+        const aisle=clamp((t-24.1)/2.7);
+        const grip=THREE.MathUtils.smoothstep(t,22.65,23.12)-THREE.MathUtils.smoothstep(t,23.54,24.04);
+        const heading=Math.PI/2*(1+THREE.MathUtils.smoothstep(t,13.45,14.6)+turn);
+        const walking=(t>2&&t<14)||(t>=17.5&&t<22.65)||t>=24.1;
+        passenger(board,4.59-(1-approach)*8.8-2.36*aisle,3.90-lane-2.10*cross-.32*settle,t,walking,heading,grip);
       }
     }
     sync();
