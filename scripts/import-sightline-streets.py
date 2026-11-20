@@ -9,6 +9,7 @@ import math
 import sys
 from pathlib import Path
 
+from chestnut_markings import mark_chestnut
 from shapely import set_precision
 from shapely.affinity import affine_transform
 from shapely.geometry import LineString, Point, Polygon, box, shape
@@ -167,7 +168,8 @@ for i,road in enumerate(fallback):
     line=LineString(road['p'])
     if line.intersection(area).length>.0001:
         remaining[str(i)]=[coordinates(l) for l in parts(line.difference(area),'LineString') if l.length>.01]
-out=dict(sources=['SFMTA right-of-way streetblocks 6 and curbs 1','SF Public Works tkzw-k3nq','OpenStreetMap contributors, ODbL'],street=polygons(street),sidewalk=polygons(sidewalk),
+out=dict(sources=['SFMTA right-of-way streetblocks 6 and curbs 1','SF Public Works tkzw-k3nq','OpenStreetMap contributors, ODbL','San Francisco 2024 8 cm orthophoto, Chestnut lane markings'],street=polygons(street),sidewalk=polygons(sidewalk),
     curb=polygons(kerb.buffer(.012,quad_segs=1).intersection(paved)),bars=bars,rails=rails,trees=trees,remaining=remaining,gradeAxis=axis,outerTracks=outer_tracks,pierWalkEdge=pier_edge,pierRoadEdge=pier_road_edge,pierWalk=polygons(pier_walk))
+out['street'],out['chestnutPaint']=mark_chestnut(out['street'])
 output.write_text(json.dumps(out,separators=(',',':'))+'\n')
 print({k:len(v) for k,v in out.items()})

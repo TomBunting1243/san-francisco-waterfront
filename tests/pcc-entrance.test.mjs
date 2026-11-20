@@ -185,3 +185,37 @@ test('folding-door rubber edges and window trim have a single visible face on bo
     }
   }
 });
+
+test('saloon door headers, jambs and stair nosings each expose one finished surface',()=>{
+  const interior=createRideInteriors();interior.show('tram');interior.root.updateMatrixWorld(true);
+  const cab=interior.root.getObjectByName('1051 split windshield and sill');
+  const along=pccFrontLeafWidth*2,right=1.506,scale=.06;
+  // Sample the fixed sheet metal independently of the moving doors.
+  const hits=(x,y,z,dir,range=.002)=>new THREE.Raycaster(
+    new THREE.Vector3(x,y,z).multiplyScalar(scale),dir,0,range*scale
+  ).intersectObject(cab,false);
+  const across=new THREE.Vector3(1,0,0),down=new THREE.Vector3(0,-1,0);
+  let double=0,missing=0;
+  for(const center of [pccCabDoorZ,pccCabDoorZ+pccExitSpacing]){
+    for(let i=0;i<97;i++){
+      const z=center-along+(i+.431)*2*along/97;
+      for(const y of [.3137,.3961,.4128,.5317,.5546]){
+        const n=hits(right-.001,y,z,across).length;
+        double+=Number(n>1);missing+=Number(n===0);
+      }
+    }
+    for(const z of [center+along+.0147,...(center===pccCabDoorZ?[]:[center-along-.0147])]){
+      for(const y of [-.8799,-.2631,.3534,.5309]){
+        const n=hits(right-.001,y,z,across).length;
+        double+=Number(n>1);missing+=Number(n===0);
+      }
+    }
+    for(const [i,tread] of pccTreads.entries()){
+      // The contrasting safety strip forms the outer 29 mm of the tread.
+      const n=hits(right-.21*i-.0193,tread-2.15+.006,center+.1137,down,.012).length;
+      double+=Number(n>1);missing+=Number(n===0);
+    }
+  }
+  interior.dispose();
+  assert.deepEqual({double,missing},{double:0,missing:0});
+});

@@ -1,3 +1,5 @@
+import {reliefCover} from './relief-cover.ts';
+import {addWaterfrontPlaza,isWaterfrontPlazaFootprint} from './north-quay-inland.ts';
 import {setPackedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
 import {oaklandContainerCranes} from './oakland-cranes.ts';
@@ -44,7 +46,7 @@ function decodeGrid(grid: Grid) {
   // A relief vertex is immutable, including the tidal and downtown adjustments.
   // Keep the exact double used by the renderer. All three grids total 856 KiB.
   const groundY=new Float64Array(meters.length).fill(NaN);
-  return { ...grid, meters, groundY, east: grid.west + grid.step * (grid.cols - 1), north: grid.south + grid.step * (grid.rows - 1) };
+  return { ...grid, meters, groundY, parks:reliefCover(grid,data.cover), coasts:reliefCover(grid,data.coasts), east: grid.west + grid.step * (grid.cols - 1), north: grid.south + grid.step * (grid.rows - 1) };
 }
 
 type HeightGrid = ReturnType<typeof decodeGrid>;
@@ -94,24 +96,6 @@ export function bayReliefElevation(longitude: number, latitude: number) {
     elevation(grid, grid.west + col * grid.step, grid.south + row * grid.step, col, row));
 }
 
-function polygon(positions: Location[]) {
-  const west = Math.min(...positions.map(p => p[0])), east = Math.max(...positions.map(p => p[0]));
-  const south = Math.min(...positions.map(p => p[1])), north = Math.max(...positions.map(p => p[1]));
-  return { positions, west, east, south, north };
-}
-
-function contains({positions, west, east, south, north}: ReturnType<typeof polygon>, lng: number, lat: number) {
-  if (lng < west || lng > east || lat < south || lat > north) return false;
-  let inside = false;
-  for (let i = 0, j = positions.length - 1; i < positions.length; j = i++) {
-    const [lx, ly] = positions[i], [rx, ry] = positions[j];
-    if ((ly > lat) !== (ry > lat) && lng < (rx - lx) * (lat - ly) / (ry - ly) + lx) inside = !inside;
-  }
-  return inside;
-}
-
-const coasts = data.coasts.map(polygon);
-const parks = data.cover.map(polygon);
 const [islandGrid] = detailed.slice(-1);
 
 function surfaceVertex(grid: HeightGrid, col: number, row: number) {
@@ -120,7 +104,7 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
   const meters = elevation(grid, lng, lat, col, row);
   let y = waterSurface.level + meters * scale;
   if (inGrid(islandGrid, lng, lat)) {
-    y = coasts.some(coast => contains(coast, lng, lat)) ? Math.max(shoreHeight, y) : Math.min(y, waterSurface.level - .18);
+    y = grid.coasts[row*grid.cols+col] ? Math.max(shoreHeight, y) : Math.min(y, waterSurface.level - .18);
   } else if (meters <= 0) {
     y = Math.min(y, waterSurface.level - .18);
   }
@@ -197,12 +181,12 @@ const marsh = new THREE.Color('#84968b'), coastColor = new THREE.Color('#a9ad95'
 const plain = new THREE.Color('#8a9f88'), slope = new THREE.Color('#698c79');
 const summit = new THREE.Color('#a3a989'), built = new THREE.Color('#a29e93');
 const park = new THREE.Color('#77956f');
-function landColor({lng, lat, meters, x, z}: ReturnType<typeof surfaceVertex>, color: THREE.Color) {
+function landColor({lng, lat, meters, x, z}: ReturnType<typeof surfaceVertex>, color: THREE.Color, inPark:number) {
   const variation = (Math.sin(x * .022 + z * .088) * Math.cos(x * .113 - z * .017) + 1) * .5;
   color.copy(plain).lerp(slope, variation * .65);
   color.lerp(summit, THREE.MathUtils.smoothstep(meters, 140, 320) * .65);
   color.lerp(marsh, (1 - THREE.MathUtils.smoothstep(meters, 0, 14)) * .58);
-  if (parks.some(area => contains(area, lng, lat))) color.lerp(park, .80);
+  if (inPark) color.lerp(park, .80);
   else {
     // Muted lowland tones behind the separately mapped neighborhoods.
     const westCity=(1-THREE.MathUtils.smoothstep(lng,-122.389,-122.377))*
@@ -217,7 +201,7 @@ function landColor({lng, lat, meters, x, z}: ReturnType<typeof surfaceVertex>, c
   return color;
 }
 
-function terrain(grid: HeightGrid, material: THREE.Material) {
+function* terrain(grid: HeightGrid, material: THREE.Material, shouldYield:()=>boolean) {
   const vertices = new Float32Array(grid.cols * grid.rows * 3);
   const colors = new Float32Array(vertices.length);
   const indices: number[] = [];
@@ -228,11 +212,14 @@ function terrain(grid: HeightGrid, material: THREE.Material) {
   const cuts=surveyedCoastalCells(grid.name),nearshore=new ColoredTriangles();
   const shoreTint=new THREE.Color(),tintA=new THREE.Color(),tintB=new THREE.Color(),tintC=new THREE.Color();
   for (let i = 0; i < grid.cols * grid.rows; i++) {
+    if(i%1024===0&&shouldYield())yield;
     const point = surfaceVertex(grid, i % grid.cols, Math.floor(i / grid.cols));
     vertices.set([point.x, point.y, point.z], i * 3);
-    landColor(point, color).toArray(colors, i * 3);
+    landColor(point, color, grid.parks[i]).toArray(colors, i * 3);
+    grid.groundY[i]=point.y;
   }
   for (let row = 0; row < grid.rows - 1; row++) {
+    if(row%4===0&&shouldYield())yield;
     for (let col = 0; col < grid.cols - 1; col++) {
       const lng = grid.west + (col + .5) * grid.step, lat = grid.south + (row + .5) * grid.step;
       if (applicableGrid(lng, lat) !== grid) continue;
@@ -340,37 +327,42 @@ function spatialBatches(name: string, material: THREE.Material) {
 
 const facadeColors = ['#c3b6a2', '#a9aba0', '#b0a594', '#b3b7a8', '#c5b6a9'].map(color => new THREE.Color(color));
 const roofColors = ['#9b9186', '#a49f95', '#9da49d', '#b29b8d'].map(color => new THREE.Color(color));
-function neighborhoods(material: THREE.Material) {
+function* neighborhoods(material: THREE.Material, shouldYield:()=>boolean) {
   const buildings = spatialBatches('North Beach, Bernal Heights and island buildings', material);
   const skyline = spatialBatches('Downtown Oakland skyline', material);
   const skylineFacade = new THREE.Color('#9ba6aa'), skylineRoof = new THREE.Color('#a1a0a0');
-  data.buildings.forEach(([meters, footprint, district], i) => {
+  for(const [i,[meters,footprint,district]] of data.buildings.entries()){
+    if(i%64===0&&shouldYield())yield;
     const points = ring(footprint);
-    if (points.length < 3 || Math.abs(THREE.ShapeUtils.area(points)) < .025) return;
+    if (points.length < 3 || Math.abs(THREE.ShapeUtils.area(points)) < .025) continue;
     const x = points.reduce((sum, p) => sum + p.x, 0) / points.length;
     const z = points.reduce((sum, p) => sum + p.y, 0) / points.length;
     const ground = bayReliefGround(x, z);
-    if (ground < waterSurface.level + .08) return;
+    if (ground < waterSurface.level + .08) continue;
     const oakland = district === 'oakland';
     const triangles = (oakland ? skyline : buildings).at(x, z);
     const roofY = ground + meters * scale;
     const wallColor = oakland ? skylineFacade : facadeColors[i % facadeColors.length];
     const roofColor = oakland ? skylineRoof : roofColors[i % roofColors.length];
-    const floors = points.map(p => Math.min(ground - .10, bayReliefGround(p.x, p.y) - .09));
-    for (let n = 0; n < points.length; n++) {
-      const next = (n + 1) % points.length;
-      const a = points[n], b = points[next];
-      triangles.vertex(a.x, floors[n], a.y, wallColor);
-      triangles.vertex(b.x, floors[next], b.y, wallColor);
-      triangles.vertex(b.x, roofY, b.y, wallColor);
-      triangles.vertex(a.x, floors[n], a.y, wallColor);
-      triangles.vertex(b.x, roofY, b.y, wallColor);
-      triangles.vertex(a.x, roofY, a.y, wallColor);
+    const waterfrontPlaza=isWaterfrontPlazaFootprint(...footprint[0]);
+    if(waterfrontPlaza)addWaterfrontPlaza(triangles,points,ground,roofY,bayReliefGround);
+    else {
+      const floors = points.map(p => Math.min(ground - .10, bayReliefGround(p.x, p.y) - .09));
+      for (let n = 0; n < points.length; n++) {
+        const next = (n + 1) % points.length;
+        const a = points[n], b = points[next];
+        triangles.vertex(a.x, floors[n], a.y, wallColor);
+        triangles.vertex(b.x, floors[next], b.y, wallColor);
+        triangles.vertex(b.x, roofY, b.y, wallColor);
+        triangles.vertex(a.x, floors[n], a.y, wallColor);
+        triangles.vertex(b.x, roofY, b.y, wallColor);
+        triangles.vertex(a.x, roofY, a.y, wallColor);
+      }
     }
     for (const face of THREE.ShapeUtils.triangulateShape(points, [])) {
       for (const index of [face[0], face[2], face[1]]) triangles.vertex(points[index].x, roofY, points[index].y, roofColor);
     }
-  });
+  }
   return [buildings.group(), skyline.group()];
 }
 
@@ -404,11 +396,12 @@ function outsidePavement(trail:PathPoint[],outline:PathPoint[]){
   return remaining;
 }
 
-function streets(material: THREE.Material) {
+function* streets(material: THREE.Material, shouldYield:()=>boolean) {
   const streets = spatialBatches('Mapped hill streets and park paths', material);
   const paved = new THREE.Color('#838c88'), trail = new THREE.Color('#b5ad91');
   const cells=new Map<string,PavedStrip[]>();
-  for(const walking of [false,true])for (const [kind, line] of data.paths) {
+  for(const walking of [false,true])for (const [i,[kind,line]] of data.paths.entries()) {
+    if(i%32===0&&shouldYield())yield;
     const foot = kind === 'footway' || kind === 'path' || kind === 'steps';
     if(walking!==foot)continue;
     const width = foot ? .055 : kind === 'motorway' || kind === 'primary' ? .36 : kind === 'service' ? .11 : .23;
@@ -545,7 +538,7 @@ function airplane(material: THREE.MeshStandardMaterial) {
   return model;
 }
 
-export function createBayRelief() {
+export function* bayReliefStages(shouldYield:()=>boolean) {
   const root = new THREE.Group();
   root.name = 'San Francisco Bay relief';
   const horizon = { value: new THREE.Color('#e2dfcc').convertLinearToSRGB() };
@@ -596,8 +589,10 @@ export function createBayRelief() {
   root.add(oaklandContainerCranes(bayReliefPosition,bayReliefGround,masonry));
   const concrete = material({color:'#e4dac2'}, 110);
   const slit = material({color:'#657579'}, 110);
-  root.add(...grids.map(grid => terrain(grid, ground)));
-  root.add(islandShore(ground), ...neighborhoods(masonry), streets(ground));
+  for(const grid of grids)root.add(yield* terrain(grid,ground,shouldYield));
+  root.add(islandShore(ground));
+  root.add(...yield* neighborhoods(masonry,shouldYield));
+  root.add(yield* streets(ground,shouldYield));
   root.add(coitTower(concrete, slit));
   const aircraftPaint = material({ color:'#d1d9d8', emissive:'#b8c6cf', emissiveIntensity:.10,
     transparent:true, depthWrite:false }, 160);
@@ -619,4 +614,11 @@ export function createBayRelief() {
     }
   }
   return { root, update };
+}
+
+export function createBayRelief(){
+  const stages=bayReliefStages(()=>false);
+  let next=stages.next();
+  while(!next.done)next=stages.next();
+  return next.value;
 }

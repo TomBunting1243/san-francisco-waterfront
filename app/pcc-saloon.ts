@@ -65,32 +65,25 @@ export function addPccSaloon(g:CabGeometry){
   // The cab and both exits share the model's side elevation. Each tread
   // replaces the cabin floor across its own well.
   const wellCenters=[pccCabDoorZ,pccCabDoorZ+pccExitSpacing];
-  const half=2*pccFrontLeafWidth,lip=right,inside=lip-.84;
+  const half=2*pccFrontLeafWidth,lip=right,inside=lip-.84,jamb=.035;
   const sideSpans=[[front,wellCenters[0]-half],[wellCenters[0]+half,wellCenters[1]-half],[wellCenters[1]+half,back]];
   for(const [a,b] of sideSpans)if(b>a)g.level(floor,left,right,a,b,'#53564a',.44);
   for(const z of wellCenters){
     const start=z-half,end=z+half;
     g.level(floor,left,inside,start,end,'#53564a',.44);
     // Fixed lintel and jambs meet the head and hinges of the moving leaves.
-    g.side(right,.38-2.15+2.08,.555,start,end,'#c3c2a4',.66);
-    for(const [a,b] of [[start-.035,start],[end,end+.035]]){
-      g.side(right,floor,.555,Math.max(front,a),b,'#a9ab95',.66);
+    g.side(right,.38-2.15+2.08,.554,start,end,'#c3c2a4',.66);
+    for(const [a,b] of [[start-jamb,start],[end,end+jamb]]){
+      if(b>front)g.side(right,floor,.554,Math.max(front,a),b,'#a9ab95',.66);
     }
     for(const side of [start,end])g.cross(side,inside,lip,.38-2.15,floor,'#72816b',.58);
     for(const [k,h] of pccTreads.entries()){
       const edge=lip-.21*k,y=h-2.15;
-      g.level(y,edge-.21,edge,start,end,'#767a67',.70);
-      g.level(y+.002,edge-.029,edge,start,end,'#beb496',.82);
+      g.level(y,edge-.21,edge-.029,start,end,'#767a67',.70);
+      g.level(y,edge-.029,edge,start,end,'#beb496',.82);
       g.side(edge,k?pccTreads[k-1]-2.15:y-.06,y,start,end,'#515d50',.52);
     }
   }
-  const sidePanel=(x:number,lo:number,hi:number,a:number,b:number,tint:string,light:number)=>{
-    if(x<0||lo>.32){g.side(x,lo,hi,a,b,tint,light);return;}
-    for(const [u,v] of sideSpans){
-      const start=Math.max(a,u),end=Math.min(b,v);
-      if(end>start)g.side(x,lo,hi,start,end,tint,light);
-    }
-  };
   // Transverse ribs follow the formed roof between the clerestory and center spine.
   const arch=[[left-center,.586],[-1.15,.75],[-.95,.87],[-.55,.953],[0,.979],[.55,.953],[.95,.87],[1.15,.75],[right-center,.586]];
   for(let j=1;j<arch.length;j++){
@@ -114,23 +107,36 @@ export function addPccSaloon(g:CabGeometry){
   }
   const cards=['#8b643f','#53716d','#a37159','#777f61'];
   for(const [x,inward] of [[left,1],[right,-1]]){
-    sidePanel(x,floor,-.47,front,back,'#7b907a',.66);
-    sidePanel(x+inward*.005,-.49,-.464,front,back,'#b7b29b',.66);
-    for(const [a,b] of (inward<0?sideSpans:[[front,back]])){
-      if(b<=a)continue;
+    // Skin the wall only between jambs. Construct each upper window as a
+    // single aperture with chamfered corners, including bays cut by a door.
+    const spans=inward>0?[[front,back]]:sideSpans.filter(([a,b])=>a<b)
+      .map(([a,b])=>[a+jamb,b===back?b:b-jamb]);
+    g.side(x,.554,.604,front,back,cream,.66);
+    for(const [a,b] of spans){
+      g.side(x,floor,-.49,a,b,'#7b907a',.66);
+      g.side(x,-.49,-.464,a,b,'#b7b29b',.66);
+      g.side(x,.30,.397,a,b,'#c3c2a4',.66);
       rail([x+inward*.03,-.195,a],[x+inward*.03,-.195,b],.014);
     }
-    sidePanel(x,.30,.397,front,back,'#c3c2a4',.66);sidePanel(x,.554,.604,front,back,cream,.66);
     for(let i=0;i<12;i++){
       const z=front+i*1.16;
-      sidePanel(x,-.47,.59,z,z+.046,'#b8bba3',.66);
-      sidePanel(x,.395,.555,z+.044,z+.21,cream,.66);
-      sidePanel(x,.395,.555,z+.966,z+1.16,cream,.66);
-      // Chamfered corners in rolled enamel, leaving real openings for the upper lights.
-      for(const [edge,dir] of [[z+.21,1],[z+.966,-1]]){
-        for(const [y,sy] of [[.395,1],[.555,-1]]){
-          const corner:CabPoint=[x,y,edge];
-          g.panel(corner,[x,y+sy*.033,edge],[x,y+sy*.011,edge+dir*.015],[x,y,edge+dir*.043],cream,.80);
+      for(const [a,b] of spans){
+        const panel=(lo:number,hi:number,y:number,top:number,tint:string)=>{
+          const l=Math.max(a,z+lo),r=Math.min(b,z+hi);
+          if(l<r)g.side(x,y,top,l,r,tint,.66);
+        };
+        panel(0,.046,-.464,.30,'#b8bba3');
+        panel(0,.21,.397,.554,cream);panel(.966,1.16,.397,.554,cream);
+        for(const [edge,dir] of [[.21,1],[.966,-1]]){
+          for(const [lo,hi,depthA,depthB] of [[0,.015,.033,.011],[.015,.043,.011,0]]){
+            const u=z+edge+dir*lo,v=z+edge+dir*hi;
+            const l=Math.max(a,Math.min(u,v)),r=Math.min(b,Math.max(u,v));
+            if(l>=r)continue;
+            const depth=(s:number)=>depthA+(depthB-depthA)*(s-u)/(v-u);
+            for(const [y,sign] of [[.397,1],[.554,-1]]){
+              g.panel([x,y,l],[x,y+sign*depth(l),l],[x,y+sign*depth(r),r],[x,y,r],cream,.66);
+            }
+          }
         }
       }
       if(i%3!==0){

@@ -141,3 +141,26 @@ test('the median bough before the Ferry Building clears the rigid PCC through th
     }
   }
 });
+
+test('the warning strip is set into each platform and bench posts meet the backrest',()=>{
+  for(const [i,dir,high,end] of [[0,1,2.887,3.039],[1,-1,-3.327,-3.479]]){
+    const mesh=platforms.children[i];
+    for(const f of [.12,.45,.86]){
+      const x=high+(end-high)*f,rail=trackAt(x,trackCenterlines[i]).z;
+      const y=streetcarTrack.railTop+34*.0254*.06;
+      for(const [offset,tint] of [[.083,'a49b8c'],[.088,'b5a065'],[.106,'b5a065'],[.114,'a49b8c']]){
+        const r=new T.Raycaster(new T.Vector3(x,y+.003,rail+dir*offset),down,0,.004);
+        const hits=r.intersectObject(mesh);
+        assert.equal(hits.length,1,'one exposed platform surface at '+[x,offset]);
+        assert.ok(Math.abs(hits[0].point.y-y)<1e-6);
+        const pigment=new T.Color().fromBufferAttribute(mesh.geometry.attributes.color,hits[0].face.a);
+        assert.ok(Math.abs(pigment.r-new T.Color('#'+tint).r)<.003);
+      }
+    }
+  }
+  const mesh=platforms.children[0];
+  for(const [x,z,side] of [[1.256307,-3.316298,-1],[1.468807,-3.312102,1]]){
+    const r=new T.Raycaster(new T.Vector3(x,.111304,z+side*.001),new T.Vector3(0,0,-side),0,.0018);
+    assert.equal(r.intersectObject(mesh).length,1,'single backrest finish');
+  }
+});

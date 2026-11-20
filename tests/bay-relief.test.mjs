@@ -1,12 +1,48 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { bayReliefElevation, bayReliefGround, bayReliefPosition, createBayRelief } from '../app/bay-relief.ts';
+import { bayReliefElevation, bayReliefGround, bayReliefPosition, bayReliefStages, createBayRelief } from '../app/bay-relief.ts';
+import { reliefCover } from '../app/relief-cover.ts';
+import survey from '../public/data/bay-relief.json' with {type:'json'};
 import { bridgeLayout, bridgePoint } from '../app/bridge-layout.ts';
 import { waterSurface } from '../app/water-surface.ts';
 
 const relief = createBayRelief();
 relief.root.updateMatrixWorld(true);
+
+test('yielding each terrain checkpoint preserves every geometry buffer and scene transform',()=>{
+  const stages=bayReliefStages(()=>true);
+  let step=stages.next(),count=0;
+  while(!step.done){assert.equal(step.value,undefined);count++;step=stages.next();}
+  const gridStages=survey.grids.reduce((n,g)=>n+Math.ceil(g.cols*g.rows/1024)+Math.ceil((g.rows-1)/4),0);
+  assert.equal(count,gridStages+Math.ceil(survey.buildings.length/64)+2*Math.ceil(survey.paths.length/32));
+  const baseline=[],staged=[];
+  relief.root.traverse(o=>baseline.push(o));
+  step.value.root.traverse(o=>staged.push(o));
+  assert.equal(staged.length,baseline.length);
+  for(const [i,a] of baseline.entries()){
+    const b=staged[i];
+    assert.equal(b.name,a.name);
+    assert.equal(b.children.length,a.children.length);
+    assert.equal(b.type,a.type);
+    assert.deepEqual(b.position.toArray(),a.position.toArray());
+    assert.deepEqual(b.quaternion.toArray(),a.quaternion.toArray());
+    assert.deepEqual(b.scale.toArray(),a.scale.toArray());
+    if(!a.geometry)continue;
+    assert.deepEqual(b.geometry.boundingBox,a.geometry.boundingBox);
+    assert.deepEqual(b.geometry.boundingSphere,a.geometry.boundingSphere);
+    assert.deepEqual(b.geometry.drawRange,a.geometry.drawRange);
+    assert.deepEqual(b.geometry.groups,a.geometry.groups);
+    assert.deepEqual(b.geometry.index?.array,a.geometry.index?.array);
+    assert.deepEqual(Object.keys(b.geometry.attributes),Object.keys(a.geometry.attributes));
+    for(const [name,attribute] of Object.entries(a.geometry.attributes)){
+      const other=b.geometry.attributes[name];
+      assert.equal(other.itemSize,attribute.itemSize);
+      assert.equal(other.normalized,attribute.normalized);
+      assert.deepEqual(other.array,attribute.array);
+    }
+  }
+});
 
 test('Bay relief shares the downtown and Bay Bridge survey scale', () => {
   assert.deepEqual(bayReliefPosition(-122.39348, 37.79554), [0, 0]);
@@ -108,4 +144,42 @@ test('the East Bay shoreline preserves its port peninsulas, tidal entrance and h
   const dry=[[-122.309,37.786],[-122.312,37.803],[-122.332,37.784]];
   for(const p of wet)assert.ok(bayReliefGround(...bayReliefPosition(...p))<waterSurface.level,'chart water '+p);
   for(const p of dry)assert.ok(bayReliefGround(...bayReliefPosition(...p))>waterSurface.level,'chart land '+p);
+});
+
+
+function ringReference(points){
+  const xs=points.map(p=>p[0]), ys=points.map(p=>p[1]);
+  const west=Math.min(...xs),east=Math.max(...xs),south=Math.min(...ys),north=Math.max(...ys);
+  return (x,y)=>{
+    if(x<west||x>east||y<south||y>north)return false;
+    let inside=false;
+    for(let i=0,j=points.length-1;i<points.length;j=i++){
+      const [ax,ay]=points[i],[bx,by]=points[j];
+      if((ay>y)!==(by>y)&&x<(bx-ax)*(y-ay)/(by-ay)+ax)inside=!inside;
+    }
+    return inside;
+  };
+}
+
+test('scanline cover matches the original eastward ray at every park and coast grid vertex',()=>{
+  for(const grid of survey.grids){
+    for(const [name,rings] of [['parks',survey.cover],['coasts',survey.coasts]]){
+      const contains=rings.map(ringReference),expected=new Uint8Array(grid.cols*grid.rows);
+      for(let row=0;row<grid.rows;row++)for(let col=0;col<grid.cols;col++){
+        const x=grid.west+col*grid.step,y=grid.south+row*grid.step;
+        expected[row*grid.cols+col]=Number(contains.some(inside=>inside(x,y)));
+      }
+      assert.deepEqual(reliefCover(grid,rings),expected,grid.name+' '+name);
+    }
+  }
+});
+
+test('mask unions overlapping rings and clips half-open edges at exact grid coordinates',()=>{
+  const grid={west:0,south:0,step:1,cols:5,rows:5};
+  const left=[[-1,0],[3,0],[3,3],[-1,3],[-1,0]];
+  const right=[[2,1],[2,4],[5,4],[5,1]];
+  const expected=['11100','11111','11111','00111','00000'].join('');
+  assert.equal(reliefCover(grid,[[],left,right,left]).join(''),expected);
+  const diamond=[[2,0],[4,2],[2,4],[0,2]];
+  assert.equal(reliefCover(grid,[diamond]).join(''),['00000','01100','11110','01100','00000'].join(''));
 });

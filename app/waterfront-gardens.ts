@@ -10,6 +10,8 @@ import {sfMap,center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
 import {harryBridgesGround,marketAxis,westMarketGround} from './curb-survey.ts';
 import {plazaTreeRecords,addSurveyedTree,treePavingHeight} from './plaza-survey.ts';
+import {bayReliefGround} from './bay-relief.ts';
+import {waterfrontPlazaTrees} from './north-quay-inland.ts';
 import {northQuayPalms} from './north-quay-palms.ts';
 import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
@@ -127,6 +129,12 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     const y=northWaterfrontGrade(x)+.014;
     addSurveyedTree(mesh,root,{id,p:[x,z],heightM,crownM,palm:true,supplemental:false},
       x,y,z,true,'Phoenix canariensis',dbh*.0254*.03);
+    treeAnchors.push({id,x,y,z});
+  }
+  for(const [id,x,z,heightM,crownM] of waterfrontPlazaTrees){
+    const lawn=id<0,y=lawn?bayReliefGround(x,z)+.017:northWaterfrontGrade(x)+.014;
+    addSurveyedTree(mesh,root,{id,p:[x,z],heightM,crownM,palm:false,supplemental:false},
+      x,y,z,false,lawn?'':'Platanus x hispanica');
     treeAnchors.push({id,x,y,z});
   }
   // Two broadleaf rows on Harry Bridges Plaza are absent from the OSM extract.

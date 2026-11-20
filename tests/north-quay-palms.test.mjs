@@ -12,7 +12,7 @@ test('both surveyed Chestnut palm rows sit on median paving and clear the street
   addSurveyBlocks(geo=>{const mesh=new T.Mesh(geo);road.add(mesh);return mesh;});
   const pavement=road.getObjectByName('Northern Embarcadero street and pier approaches');
   const ray=new T.Raycaster(new T.Vector3(),new T.Vector3(0,-1,0));
-  const stems=gardens.treeAnchors.filter(a=>a.x>=81&&a.x<93.5&&a.z>-8&&a.z<-3);
+  const stems=gardens.treeAnchors.filter(a=>a.x>=81&&a.x<93.5&&trackCenterlines.some(line=>Math.abs(a.z-trackAt(a.x,line).z)<.4));
   assert.deepEqual(stems.map(a=>a.id),[132106,132087,132107,132088,132108,132089,132109,132090,132110]);
   for(const [id,x,z,height,,dbh] of northQuayPalms){
     const tree=gardens.root.getObjectByName('Surveyed tree '+id);

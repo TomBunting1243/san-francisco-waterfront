@@ -88,12 +88,15 @@ function shelter(s:Site){
   const lip=.082,back=dir===1?.327:.325;
   for(let i=1;i<stages.length;i++){
     const lo=stages[i-1],hi=stages[i],y0=ground(s,lo),y1=ground(s,hi);
+    const third=(back-lip)/3;
+    // The tactile strip replaces one band of the high landing at the same grade.
+    const bands=lo===s.high?[lip,lip+.002,lip+.027,lip+third,lip+2*third,back]:[lip,lip+third,lip+2*third,back];
     // Subdivide the surface beneath the soffit downlights so their small
     // pools survive baking without a per-fragment lamp array or extra draw.
     const pieces=Math.ceil(Math.abs(hi-lo)/.085);
     for(let n=0;n<pieces;n++){
       const x=lo+(hi-lo)*n/pieces,next=lo+(hi-lo)*(n+1)/pieces;
-      for(let k=0;k<3;k++)top(x,next,lip+(back-lip)*k/3,lip+(back-lip)*(k+1)/3,ground(s,x),ground(s,next),stone);
+      for(let k=1;k<bands.length;k++)top(x,next,bands[k-1],bands[k],ground(s,x),ground(s,next),lo===s.high&&k===2?'#b5a065':stone);
     }
     for(const d of [lip,back]){
       const p=pose(lo,d,y0),q=pose(hi,d,y1),u=pose(hi,d,grade-.003),v=pose(lo,d,grade-.003);
@@ -102,9 +105,6 @@ function shelter(s:Site){
   }
   const end=s.end,head=ground(s,end);
   panels.quad(pose(end,lip,head),pose(end,back,head),pose(end,back,grade-.003),pose(end,lip,grade-.003),'#968c7b');
-  // The raised accessible landing has its own short warning strip. Ordinary
-  // boarding and the plaza end stay open across their full walking width.
-  top(s.high,end,lip+.002,lip+.027,head+.00032,head+.00032,'#b5a065');
   const lowLevel=curb,span=s.roof[1]-s.roof[0],bays=8,depth=canopyDepth;
   const roofY=(f:number)=>lowLevel+.273-.091*Math.pow(f,2.65);
   const shell=(u:number,f:number,drop=0):FacadePoint=>{
@@ -144,7 +144,8 @@ function shelter(s:Site){
     for(let j=0;j<3;j++)a.box(p[0],curb+.027,p[2]+dir*(j-1)*.008,.117,.003,.006,'#6f7b77');
     for(const dx of [-.041,.041]){
       a.box(p[0]+dx,curb+.013,p[2],.004,.026,.018,rail);
-      a.box(p[0]+dx,curb+.035,p[2]+dir*.013,.004,.035,.003,rail);
+      const bottom=.0175,backrestBottom=.045-.011/2;
+      a.box(p[0]+dx,curb+(bottom+backrestBottom)/2,p[2]+dir*.013,.004,backrestBottom-bottom,.003,rail);
     }
     a.box(p[0],curb+.045,p[2]+dir*.013,.117,.011,.003,'#78847d');
   }

@@ -20,7 +20,7 @@ export {updateFerryFlag,ferryFlagFlutterRate} from './ferry-flag.ts';
 export {setFerryClockTime} from './ferry-clock-tower.ts';
 import {downtownBuilding,applyDowntownGlazing,bindFacadeClock,createFacadeClock} from './downtown-buildings.ts';
 import {addSurveyShore,seawallAt} from './survey-shore.ts';
-import {bayReliefBankHeight,createBayRelief} from './bay-relief.ts';
+import {bayReliefBankHeight,bayReliefStages} from './bay-relief.ts';
 import {createSalesforceTower,createTransamericaPyramid} from './skyline-towers.ts';
 import {marketArchitecture} from './market-architecture.ts';
 import {createSouthBeach} from './south-beach.ts';
@@ -928,7 +928,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     const target=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),hitMaterial);target.position.set(x,y,z);target.userData.landmark=name;root.add(target);hitTargets.push(target);
   }
   if(shouldYield())yield 6;
-  const relief=createBayRelief();root.add(relief.root);
+  const reliefStages=bayReliefStages(shouldYield);
+  let part=reliefStages.next();
+  while(!part.done){yield 6;part=reliefStages.next();}
+  const relief=part.value;root.add(relief.root);
   const boardingBrows=createBoardingBrows(ferries.length);
   root.add(boardingBrows.mesh);
   ferries.forEach((boat,i)=>{

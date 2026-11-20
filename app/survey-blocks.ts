@@ -41,7 +41,10 @@ class Tile {
     this.indices.push(i,i+1,i+2,i,i+2,i+3);
   }
   top(plan:Plan,height:number,color:string,grade?:(x:number)=>number){
-    const [outer,...holes]=plan.map(r=>r.map(([x,z])=>new THREE.Vector2(x,-z)));
+    // The graded quay includes centimetre-scale paint clipped to the curb.
+    // Triangulate its final Float32 corners so thin faces retain their winding.
+    const [outer,...holes]=plan.map(r=>r.map(([x,z])=>grade?
+      new THREE.Vector2(Math.fround(x),-Math.fround(z)):new THREE.Vector2(x,-z)));
     const faces=THREE.ShapeUtils.triangulateShape(outer,holes);
     const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height+(grade?grade(x):0),-y]);
     const i=this.vertices(points,color);
@@ -137,6 +140,10 @@ function addSightlineStreets(mesh:Surface){
       const tile=plan[0][0][0]>0?quay:market;
       tile.top(plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
     }
+  }
+  const markingColors={cycle:'#739983',lane:'#e3dfcb',yellow:'#d9bb79'} as const;
+  for(const key of ['cycle','lane','yellow'] as const){
+    for(const plan of extensions.chestnutPaint[key])quay.top(plan,0,markingColors[key],northWaterfrontGrade);
   }
   // The Port-side promenade meets the bay edge of the street curb. Its
   // perimeter and the street facets were cut together by the importer.

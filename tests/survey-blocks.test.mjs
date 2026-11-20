@@ -137,7 +137,12 @@ test('the two distal streets retain surveyed walks, trees, tracks and continuous
   const {northWaterfrontGrade,streetPose,trackAt,trackCenterlines,waterfrontRailTop}=await import('../app/streets.ts');
   const market=group.getObjectByName('Market Street beyond Montgomery');
   const quay=group.getObjectByName('Northern Embarcadero street and pier approaches');
-  assert.ok(market&&quay&&(market.geometry.index.count+quay.geometry.index.count)/3<6000);
+  const corridors=group.children.filter(m=>m.name.startsWith('Market Street beyond Montgomery')||m.name.startsWith('Northern Embarcadero street and pier approaches'));
+  assert.equal(corridors.length,2,'both surveyed corridors draw as one mesh each');
+  // Current geometry uses 3,491 triangles for Market and 3,130 for the quay,
+  // including its asphalt cutouts. Allow under 1% headroom independently.
+  assert.ok(market.geometry.index.count/3<=3520,'Market survey triangle budget');
+  assert.ok(quay.geometry.index.count/3<=3155,'north quay survey triangle budget');
   const down=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
   const surfaces=(m,x,z)=>{
     down.ray.origin.set(x,8,z);

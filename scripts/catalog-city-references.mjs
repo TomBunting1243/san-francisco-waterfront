@@ -140,7 +140,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
  // a 3DEP octree member or a raster tile is an address within its source dataset.
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
-const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov'};
+const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com'};
 const members=new Map(),assetURLs=new Set();
 let assetBytes=0;
 for(const line of registry){
@@ -160,7 +160,7 @@ const text=[
  '- [Waterfront reference audit](WATERFRONT-REFERENCE-AUDIT.md) — landmark-by-landmark evidence, survey methods and reconstruction limits.',
  '- [Angler storefront record](ANGLER-FRONTAGE.md) — the architectural elevation, operator photographs and finished sidewalk.',
  '- [Additional field and archive sources](RESEARCH-SOURCES.md) — retained research citations, measured survey input and gaps.',
- '- [Exact survey downloads](SURVEY-ASSETS.csv) — public LiDAR octree IDs, orthophoto tile coordinates and original imagery requests with their measured sizes.',
+ '- [Exact survey downloads](SURVEY-ASSETS.csv) — public LiDAR octree IDs, orthophoto tile coordinates, original imagery requests and architectural photographs with their measured sizes.',
  '- [Attribution and licenses](../THIRD-PARTY-NOTICES.md) — map data, elevation products, font and adapted artwork.',
  '', '## Scale of the inputs','',
  '| Measure | Recorded amount |','|---|---:|',
