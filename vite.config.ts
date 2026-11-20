@@ -1,3 +1,4 @@
+import {packCoordinateSurveys} from './scripts/pack-coordinate-surveys.ts';
 import {packUrbanContext} from './scripts/pack-urban-context.ts';
 import {resolve} from 'node:path';
 import {build,defineConfig,type Plugin} from 'vite';
@@ -22,4 +23,4 @@ function openingHead():Plugin{
   };
 }
 
-export default defineConfig({plugins:[react(),packBayRelief(),packUrbanContext(),openingHead()],base:'./'});
+export default defineConfig({plugins:[react(),packBayRelief(),packUrbanContext(),packCoordinateSurveys(),openingHead()],base:'./'});

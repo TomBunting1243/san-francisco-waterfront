@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
 import {northWaterfrontGrade,streetPose} from './streets.ts';
+import {pier2931Walk} from './north-quay-promenade.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
 import {streetVehicleNose} from './street-vehicles.ts';
@@ -124,20 +125,38 @@ const pierPassage=outAndBack(curve([
   [16.487,-1.944],[16.515,-1.86],[16.515,-1.55],[16.515,-1.25],
   [16.49,-1.13],[16.42,-1.075],[16.30,-1.062],[15.88,-1.062],[15.42,-1.062],
 ],.06,false),.039,.065);
-const passageHalf=pierPassage.getLength()/2,slowTime=.85,lookTime=4.2;
-const passageLeg=passageHalf/pedestrianPace+slowTime,passagePeriod=passageLeg*2+lookTime;
-function passageVisitor(time:number,index:number){
-  const phase=THREE.MathUtils.euclideanModulo(time+passagePeriod*(index===0?.37:.84),passagePeriod);
-  const standing=phase>=passageLeg&&phase<passageLeg+lookTime;
-  const returning=phase>=passageLeg+lookTime;
-  const legTime=returning?phase-passageLeg-lookTime:Math.min(phase,passageLeg);
+const slowTime=.85,lookTime=4.2;
+// Ease into a short look at the destination, then follow the other side back.
+function visitingWalk(line:THREE.CatmullRomCurve3,time:number,startPhase:number){
+  const half=line.getLength()/2,leg=half/pedestrianPace+slowTime,period=leg*2+lookTime;
+  const phase=THREE.MathUtils.euclideanModulo(time+period*startPhase,period);
+  const standing=phase>=leg&&phase<leg+lookTime;
+  const returning=phase>=leg+lookTime;
+  const legTime=returning?phase-leg-lookTime:Math.min(phase,leg);
   let distance=pedestrianPace*(legTime-slowTime/2);
   if(legTime<slowTime)distance=.5*pedestrianPace*legTime**2/slowTime;
-  else if(legTime>passageLeg-slowTime)distance=passageHalf-.5*pedestrianPace*(passageLeg-legTime)**2/slowTime;
-  const progress=(distance+(returning?passageHalf:0))/(2*passageHalf);
-  const p=pierPassage.getPointAt(progress),d=pierPassage.getTangentAt(progress);
-  const glance=standing?.70*Math.sin(Math.PI*(phase-passageLeg)/lookTime):0;
-  return {x:p.x,z:p.z,y:pierOneHalfPassageHeight(p.x,p.z),heading:Math.atan2(d.z,d.x)+glance,standing};
+  else if(legTime>leg-slowTime)distance=half-.5*pedestrianPace*(leg-legTime)**2/slowTime;
+  const progress=(distance+(returning?half:0))/(2*half);
+  const p=line.getPointAt(progress),d=line.getTangentAt(progress);
+  const glance=standing?Math.sin(Math.PI*(phase-leg)/lookTime):0;
+  return {x:p.x,z:p.z,y:p.y,heading:Math.atan2(d.z,d.x),glance,standing};
+}
+function passageVisitor(time:number,index:number){
+  const {x,z,heading,glance,standing}=visitingWalk(pierPassage,time,index===0?.37:.84);
+  return {x,z,y:pierOneHalfPassageHeight(x,z),heading:heading+.70*glance,standing};
+}
+// People walk between the two historic portals on the Port's apron. The
+// surveyed curb is continuous across the jog between the two building fronts.
+const pierWalk=outAndBack(gradedPath([82.98,84,86,88,90.205].map(x=>{
+  const {curbZ,y}=pier2931Walk(x)!;
+  return [x,y,curbZ+.225];
+})),.050);
+const pierVisitorPhases=[.05,.28,.57,.86];
+function northPierVisitor(time:number,index:number){
+  const {x,z,heading,glance,standing}=visitingWalk(pierWalk,time,pierVisitorPhases[index]);
+  const {wallZ,y}=pier2931Walk(x)!;
+  const toSign=Math.atan2(wallZ-z,90.205-x)-heading;
+  return {x,z,y,heading:heading+glance*Math.atan2(Math.sin(toSign),Math.cos(toSign)),standing};
 }
 
 type Walk={line:THREE.CatmullRomCurve3;count:number}|{pose:(time:number,index:number)=>ReturnType<typeof along>;count:number};
@@ -147,7 +166,7 @@ const passage:Walk={pose:passageVisitor,count:2};
 const cityRoutes:Walk[]=[
   {line:rinconWalkers,count:12}, {line:ferry,count:10},
   {line:pierSeven,count:10}, {line:northShore,count:8}, {line:southShore,count:10},
-  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, crossing, shoppers, passage,
+  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {pose:northPierVisitor,count:pierVisitorPhases.length}, crossing, shoppers, passage,
 ];
 const streetRoutes=[cityRoutes[0],cityRoutes[5],cityRoutes[6],{line:southShore,count:5}];
 const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],crossing,shoppers,passage];

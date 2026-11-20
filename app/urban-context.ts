@@ -1,3 +1,4 @@
+import {addNorthQuayFront,northQuayFront} from './north-quay-bulkhead.ts';
 import {urbanStreamBytes} from './urban-stream.ts';
 import {indexedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
@@ -132,9 +133,12 @@ class Footprint {
     const faces=Earcut.triangulate(facePoints,faceHoles);
     for(let i=0;i<count;i++)surface.vertex(points[i*2],top,points[i*2+1],roof);
     for(let i=0;i<faces.length;i+=3)surface.triangle(start+faces[i+2],start+faces[i+1],start+faces[i]);
+    const bulkhead=x===72?northQuayFront(points[0],points[1]):undefined;
+    if(bulkhead)addNorthQuayFront(surface,bulkhead.south);
     for(let r=0;r<rings;r++){
       const first=r?ends[r-1]:0,end=ends[r];
       for(let i=first;i<end;i++){
+        if(bulkhead&&i>=bulkhead.first&&i<=bulkhead.last)continue;
         const j=i+1===end?first:i+1,ax=points[i*2],az=points[i*2+1],bx=points[j*2],bz=points[j*2+1];
         const width=Math.max(1,Math.round(Math.hypot(bx-ax,bz-az)/bays));
         const lowA=bottom?base+bottom:ground[i]-.05,lowB=bottom?base+bottom:ground[j]-.05;

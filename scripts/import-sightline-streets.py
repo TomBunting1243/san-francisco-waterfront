@@ -58,11 +58,12 @@ def records(name):
             yield f['properties'],geom if geom.is_valid else geom.buffer(0)
 
 rows=unary_union([g for p,g in records('row.geojson') if p['LAYER'].strip() in ('STREETS','Streets_Pedestri','PRIVATE','') and p['ST_TYPE'].strip() not in ('PLZ','TUNL')])
-curbs=[]; islands=[]
+curbs=[]; islands=[]; port_curb=None
 for p,g in records('curbs.geojson'):
     if p['INT_Z']==0 and p['STATUS']=='Active':
         edge=set_precision(g,.001)
         curbs.append(edge)
+        if p['OBJECTID']==3851628:port_curb=edge
         if p['CBB_TYPE']=='ISL':
             islands.append(edge)
 kerb=unary_union(curbs)
@@ -71,6 +72,23 @@ walk=unary_union(blocks+list(polygonize(unary_union(islands))))
 paved=rows.intersection(area)
 street=paved.difference(walk)
 sidewalk=paved.intersection(walk)
+# The 2024 aerial resolves a broad concrete promenade between this long
+# unclosed block face and the two Pier 29–31 bulkhead survey parts. It crosses
+# the edge of the ROW polygons, so use the building foot as its inner limit.
+bay_edge=port_curb.buffer(.012,quad_segs=1).intersection(box(80.97,-6,91.94,-1))
+sections={80.97,83.62,91.94,*[x for x in stations if 80.97<x<91.94]}
+for poly in parts(bay_edge,'Polygon'):
+    sections.update(round(x,3) for x,_ in poly.exterior.coords)
+pier_edge=[]; pier_road_edge=[]
+for x in sorted(sections):
+    section=bay_edge.intersection(LineString([(x,-6),(x,-1)]))
+    if section.is_empty:continue
+    pier_edge.append([x,round(section.bounds[3],3)])
+    pier_road_edge.append([x,round(section.bounds[1],3)])
+pier_wall=[[80.97,-2.19],[83.62,-2.666],[83.62,-2.77],[91.94,-4.36]]
+pier_walk=Polygon([*pier_edge,*reversed(pier_wall)])
+street=street.difference(pier_walk)
+sidewalk=sidewalk.difference(pier_walk)
 def polygons(geom):
     out=[]
     pieces=[]
@@ -150,6 +168,6 @@ for i,road in enumerate(fallback):
     if line.intersection(area).length>.0001:
         remaining[str(i)]=[coordinates(l) for l in parts(line.difference(area),'LineString') if l.length>.01]
 out=dict(sources=['SFMTA right-of-way streetblocks 6 and curbs 1','SF Public Works tkzw-k3nq','OpenStreetMap contributors, ODbL'],street=polygons(street),sidewalk=polygons(sidewalk),
-    curb=polygons(kerb.buffer(.012,quad_segs=1).intersection(paved)),bars=bars,rails=rails,trees=trees,remaining=remaining,gradeAxis=axis,outerTracks=outer_tracks)
+    curb=polygons(kerb.buffer(.012,quad_segs=1).intersection(paved)),bars=bars,rails=rails,trees=trees,remaining=remaining,gradeAxis=axis,outerTracks=outer_tracks,pierWalkEdge=pier_edge,pierRoadEdge=pier_road_edge,pierWalk=polygons(pier_walk))
 output.write_text(json.dumps(out,separators=(',',':'))+'\n')
 print({k:len(v) for k,v in out.items()})

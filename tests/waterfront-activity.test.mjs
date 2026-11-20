@@ -388,3 +388,38 @@ test('every skateboard crosses a pedestrian travel segment during a different pa
   }
   assert.equal(crossed.size,plazaSkaterCount);
 });
+
+test('four visitors pass each other on the graded promenade and pause facing the Pier 31 portal',async()=>{
+  const {addSurveyBlocks}=await import('../app/survey-blocks.ts');
+  const {pier2931Walk}=await import('../app/north-quay-promenade.ts');
+  const surfaces=new THREE.Group();
+  addSurveyBlocks(geometry=>{
+    const mesh=new THREE.Mesh(geometry);
+    surfaces.add(mesh);
+    return mesh;
+  });
+  const pavement=surfaces.getObjectByName('Northern Embarcadero street and pier approaches');
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.02);
+  const ids=Array.from({length:waterfrontWalkerCount()},(_,i)=>i)
+    .filter(i=>pier2931Walk(waterfrontWalker(0,i).x));
+  assert.equal(ids.length,4);
+  const visits=ids.map(()=>({south:false,sign:false,north:false}));
+  for(let frame=0;frame<=760;frame++){
+    const poses=ids.map(i=>waterfrontWalker(frame*.32,i));
+    for(const [i,p] of poses.entries()){
+      const apron=pier2931Walk(p.x);
+      assert.ok(p.z>apron.curbZ+.12&&p.z<apron.wallZ-.12,'clear of curb and façade');
+      for(const q of poses.slice(i+1))assert.ok(Math.hypot(p.x-q.x,p.z-q.z)>.083,'shoulder room for passing');
+      if(p.x<83.05)visits[i].south=true;
+      if(p.x>90.15)visits[i].north=true;
+      if(p.standing&&Math.sin(p.heading)>.95)visits[i].sign=true;
+      if(frame%11)continue;
+      for(const foot of [-.010,.010]){
+        ray.ray.origin.set(p.x+Math.sin(p.heading)*foot,p.y+.012,p.z-Math.cos(p.heading)*foot);
+        const floor=ray.intersectObject(pavement)[0];
+        assert.ok(floor&&Math.abs(floor.point.y-p.y)<.0007,'both feet follow the physical apron');
+      }
+    }
+  }
+  for(const visit of visits)assert.ok(visit.south&&visit.sign&&visit.north);
+});

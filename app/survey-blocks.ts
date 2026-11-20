@@ -138,6 +138,22 @@ function addSightlineStreets(mesh:Surface){
       tile.top(plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
     }
   }
+  // The Port-side promenade meets the bay edge of the street curb. Its
+  // perimeter and the street facets were cut together by the importer.
+  for(const plan of extensions.pierWalk)quay.top(plan,.018,'#c9c7b9',northWaterfrontGrade);
+  // Give the formerly flat survey curb an exposed stone face toward the
+  // roadway. The top and bottom share its measured grade stations.
+  for(let i=1;i<extensions.pierRoadEdge.length;i++){
+    const [a,z]=extensions.pierRoadEdge[i-1],[b,w]=extensions.pierRoadEdge[i];
+    const h=northWaterfrontGrade(a),k=northWaterfrontGrade(b);
+    quay.quad([a,h,z],[a,h+.018,z],[b,k+.018,w],[b,k,w],'#a5a293');
+  }
+  // Close the two short ends against the adjoining ROW surface.
+  for(const [index,back] of [[0,-2.19],[extensions.pierWalkEdge.length-1,-4.36]]){
+    const [x,z]=extensions.pierRoadEdge[index],y=northWaterfrontGrade(x);
+    const [front,wall]=index===0?[back,z]:[z,back];
+    quay.quad([x,y,front],[x,y+.018,front],[x,y+.018,wall],[x,y,wall],'#a5a293');
+  }
   // OSM F-line center tracks. Both running rails and their gauge meet the
   // detailed track exactly where its importer clipped the lower corridor.
   for(const [,path] of extensions.rails as [number,number[][]][]){

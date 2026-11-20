@@ -10,6 +10,8 @@ import {sfMap,center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
 import {harryBridgesGround,marketAxis,westMarketGround} from './curb-survey.ts';
 import {plazaTreeRecords,addSurveyedTree,treePavingHeight} from './plaza-survey.ts';
+import {northQuayPalms} from './north-quay-palms.ts';
+import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
 
 type Building={id:number;p:number[][];h:number;minH?:number};
@@ -120,6 +122,12 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
       const atRincon=x> -43&&x< -24.8&&z> -3;
       tree(x,z,localGrade??y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
     }
+  }
+  for(const [id,x,z,heightM,crownM,dbh] of northQuayPalms){
+    const y=northWaterfrontGrade(x)+.014;
+    addSurveyedTree(mesh,root,{id,p:[x,z],heightM,crownM,palm:true,supplemental:false},
+      x,y,z,true,'Phoenix canariensis',dbh*.0254*.03);
+    treeAnchors.push({id,x,y,z});
   }
   // Two broadleaf rows on Harry Bridges Plaza are absent from the OSM extract.
   // 2024 imagery locates every well. Two unresolved heights use their measured row neighbors.
