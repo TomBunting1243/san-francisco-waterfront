@@ -29,6 +29,10 @@ Local precipitation samples use the Iowa Environmental Mesonet NEXRAD national c
 
 “Alex-karp.jpg” by Benamischarfstein (https://commons.wikimedia.org/wiki/File:Alex-karp.jpg) is licensed under Creative Commons Attribution-ShareAlike 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). The cropped, duotone portrait in public/data/approach-karp.json is adapted from that photograph and distributed under the same license.
 
+## Fraunces
+
+The city's controls use Fraunces by the Fraunces Project Authors under the SIL Open Font License 1.1. [Typeface project](https://github.com/undercasetype/Fraunces) · [License text](public/fonts/Fraunces-OFL.txt)
+
 ## Helvetiker / MAGENTA font
 
 Copyright (c) 2004 by MAGENTA Ltd. All Rights Reserved.

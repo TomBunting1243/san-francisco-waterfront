@@ -39,8 +39,8 @@ export function createMarketPaving(){
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(surface,2));geo.setIndex(indices);geo.computeVertexNormals();
-  // Where a surveyed slab reaches under its narrow curb cap, the cap wins
-  // the coplanar depth test without moving the walking surface.
+  // The island slabs end at the physical curb shoulders. Retain the existing
+  // material depth bias at the joins with the surrounding approach pavement.
   const material=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.93,polygonOffset:true,polygonOffsetUnits:1});
   material.onBeforeCompile=shader=>{
     shader.vertexShader='varying vec2 marketPaving;\n'+shader.vertexShader.replace('#include <uv_vertex>','#include <uv_vertex>\nmarketPaving=uv;');

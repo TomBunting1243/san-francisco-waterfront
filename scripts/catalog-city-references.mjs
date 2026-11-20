@@ -109,6 +109,7 @@ const units={
  'promenade-transit':'inbound:inbound route vertices outbound:outbound route vertices','radar-palette':'colors:radar color bins',
  'rincon-curb-edge':'wells:tree wells','roof-finishes':'finishes:roof finish records','roof-pitches':'pitches:pitched roof records',
  'sf-waterfront':'buildings:building features roads:road features piers:pier features art:art records',
+ 'sightline-streets':'street:road polygons sidewalk:sidewalk polygons curb:curb polygons bars:crossing stripes trees:tree records',
  'south-beach':'buildings:building features docks:dock features roads:road features','steuart-junction':'curves:track curves',
  'survey-blocks':'buildings:building features outsideRoads:road segments','survey-shore':'piles:pile positions decks:deck outlines',
  'surveyed-shopfronts':'$:storefront records','transbay-crossings':'sites:crossing sites','tree-wells':'$:tree-well records',

@@ -6,7 +6,7 @@ type Level=[y:number,halfWidth:number,halfDepth:number,recessWidth:number,recess
 type XY=[number,number];
 type XYZ=[number,number,number];
 const feet=.3048*.06;
-export const bridgeAnchorageStations={land:15.64-890*feet,w1:15.64,w4:bridgeLayout.anchor} as const;
+export const bridgeAnchorageStations={land:15.64-890*feet,w1:15.64,w4:bridgeLayout.anchor,w7:bridgeLayout.length} as const;
 
 /** HAER CA-32 sheet 11 and archival views 26, 150, 170 and 203. */
 export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:number,upper:number){
@@ -144,11 +144,53 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
     }
   }
 
+  // HAER CA-32, sheet 11: a steel bent leans toward the island on a
+  // concrete abutment. Each cable turns 37 degrees into its own rock tunnel.
+  const w7=set('Yerba Buena Island W7 rock anchorage',bridgeAnchorageStations.w7);
+  body([
+    [.39,.978,.55,.385,.09],[1.72,.962,.52,.379,.104],[1.74,.937,.50,.375,.114],
+    [2.59,.911,.47,.359,.117],[2.61,.886,.45,.357,.130],[lower-.11,.85,.42,.344,.126],
+  ],w7,'W7 concrete abutment');
+  box(1.73,.105,.86,0,lower-.104,0,'#acafa3',w7,'W7 lower deck seat');
+  const saddleY=4.85,fall=Math.tan(37*Math.PI/180);
+  for(const side of [-1,1]){
+    const x=side*.75;
+    const foot:XYZ=[x,lower-.113,-.23],head:XYZ=[x,saddleY-.066,0];
+    const dy=head[1]-foot[1],dz=head[2]-foot[2],height=Math.hypot(dy,dz);
+    const bent=box(.113,height,.149,x,(foot[1]+head[1])/2,(foot[2]+head[2])/2,
+      steel,w7,'W7 inclined steel cable bent');
+    bent.rotation.x=Math.atan2(dz,dy);
+    box(.182,.084,.27,x,lower-.088,-.228,bearing,w7,'W7 bent base plate');
+
+    // The 1936 saddle photograph shows a ribbed casting open around the cable.
+    // Two shaped cheeks follow the change in cable angle over the bearing.
+    const cheek=new THREE.Shape();
+    cheek.moveTo(-.17,-.076);cheek.lineTo(-.17,.01);cheek.lineTo(-.05,.031);
+    cheek.lineTo(.05,.022);cheek.lineTo(.19,-.095);cheek.lineTo(.19,-.15);
+    cheek.lineTo(.075,-.13);cheek.closePath();
+    box(.117,.040,.21,x,saddleY-.044,-.026,bearing,w7,'W7 saddle bed');
+    const casting=new THREE.ExtrudeGeometry(cheek,{depth:.013,bevelEnabled:false});
+    for(const edge of [-1,1]){
+      const face=mesh(casting,bearing,x+edge*.052,saddleY,0,w7);
+      face.rotation.y=-Math.PI/2;face.name='W7 cast saddle cheek';
+      for(const z of [-.12,-.061,-.002,.057,.116]){
+        const top=saddleY+.022-Math.max(0,z-.027)*fall,depth=.085;
+        box(.019,depth,.010,x+edge*.059,top-depth/2,z,'#96a39e',w7,'W7 saddle stiffener');
+      }
+    }
+    const length=2.18;
+    link([x,saddleY,0],[x,saddleY-length*fall,length],.027,'#516d79',w7,'W7 cable into rock anchorage');
+    // The exposed backstay disappears into the concrete shoulder chamber.
+    box(.235,.99,1.65,x,upper-.395,1.625,concrete,w7,'W7 concrete cable chamber');
+    box(.251,.044,1.69,x,upper+.102,1.625,'#b1b3a6',w7,'W7 chamber coping');
+    box(.27,.80,1.78,x,lower-.40,1.59,concrete,w7,'W7 rock tunnel entrance');
+  }
+
   // The main cables crest over W1, then descend under the land spans into the
   // gravity chamber. The 890 ft separation leaves the two pieces legible.
   for(const x of [-.75,.75]){
     const entry=land.position.z+1.64;
     link([x,.71,entry],[x,4.85,w1.position.z],.027,'#536e7b',bridge,'Continuous land cable tail');
   }
-  return {land,w1,w4};
+  return {land,w1,w4,w7};
 }

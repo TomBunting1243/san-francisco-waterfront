@@ -86,8 +86,9 @@ const ramps=data.ramps.map(road=>{
   const [tx,tz]=road.points[highwayStart?road.points.length-1:0];
   const mainGrade=westConnect.has(road.name)?westGrade:eastGrade;
   const y0=gradeAt(mainGrade,sz)-.026;
-  const y1=approachGround(tx,tz)+.09;
+  // The Fremont slip joins the surveyed street surface inside the core.
   const fremont=road===fremontRoad;
+  const y1=fremont ? .031 : approachGround(tx,tz)+.09;
   const knots=fremont?fremontKnots(road.points):measured(road.points),length=knots.at(-1)!.s;
   const ramp=axis(knots,(s,z)=>{
     const t=highwayStart?s/length:1-s/length;
@@ -99,6 +100,7 @@ const ramps=data.ramps.map(road=>{
 });
 
 const fremont=ramps[data.ramps.indexOf(fremontRoad)].ramp;
+export const fremontExitDistance=fremontFork+fremont.length;
 export function westboundExitPose(distance:number){
   const onRamp=distance>=fremontFork;
   const at=onRamp?fremont.sample(distance-fremontFork):main[0].sample(distance);

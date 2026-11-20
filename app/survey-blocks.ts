@@ -1,3 +1,4 @@
+import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {addFolsomPortal,folsomPavement} from './folsom-portal.ts';
 import {addRinconCurbEdge} from './rincon-curb-edge.ts';
 import {addDonCheeVent} from './don-chee-vent.ts';
@@ -7,13 +8,17 @@ import {addTransbayCrossings} from './transbay-crossings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
+import extensions from '../public/data/sightline-streets.json' with {type:'json'};
 
 type Plan=number[][][];
 type Vertex=[number,number,number];
 type Surface=(geometry:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Front={plan:Plan;parapets:Plan[]};
 const fronts:Record<string,Front>=survey.fronts;
-export const outsideSurveyRoads=survey.outsideRoads;
+const remaining:Record<string,number[][][]>=extensions.remaining;
+export const outsideSurveyRoads=survey.outsideRoads.flatMap((road,i)=>
+  (remaining[i]??[road.p]).map(p=>({...road,p})));
+
 const heights:Record<string,number>=survey.heights;
 export function surveyedHeight(id:number){return heights[id];}
 
@@ -35,10 +40,10 @@ class Tile {
     const i=this.vertices([a,b,c,d],paint);
     this.indices.push(i,i+1,i+2,i,i+2,i+3);
   }
-  top(plan:Plan,height:number,color:string){
+  top(plan:Plan,height:number,color:string,grade?:(x:number)=>number){
     const [outer,...holes]=plan.map(r=>r.map(([x,z])=>new THREE.Vector2(x,-z)));
     const faces=THREE.ShapeUtils.triangulateShape(outer,holes);
-    const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height,-y]);
+    const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height+(grade?grade(x):0),-y]);
     const i=this.vertices(points,color);
     for(const [a,b,c] of faces){
       const cut=height>=.025&&height<=.06?stationPavingCut(points[a],points[b],points[c]):undefined;
@@ -121,7 +126,62 @@ export function addSurveyFront(mesh:Surface,id:number,height:number){
   return true;
 }
 
+// From the ferry tower, the Market canyon and the north quay both lead out
+// of the detailed waterfront survey. Continue the same measured curb/ROW
+// surfaces only along those two corridors. One static batch per corridor.
+function addSightlineStreets(mesh:Surface){
+  const market=new Tile(),quay=new Tile();
+  for(const kind of ['street','sidewalk','curb','bars'] as const){
+    const [height,color]=kind==='bars'?[.034,'#d6d0b9']:pavement[kind];
+    for(const plan of extensions[kind]){
+      const tile=plan[0][0][0]>0?quay:market;
+      tile.top(plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
+    }
+  }
+  // OSM F-line center tracks. Both running rails and their gauge meet the
+  // detailed track exactly where its importer clipped the lower corridor.
+  for(const [,path] of extensions.rails as [number,number[][]][]){
+    for(let i=1;i<path.length;i++){
+      const [ax,az]=path[i-1],[bx,bz]=path[i],length=Math.hypot(bx-ax,bz-az);
+      if(length===0)continue;
+      const nx=(bz-az)/length,nz=(ax-bx)/length;
+      for(const sign of [-1,1]){
+        const offset=sign*1.435*.06/2,half=.068*.06/2;
+        const edge=(x:number,z:number,d:number):Vertex=>[x+nx*d,.062,z+nz*d];
+        market.quad(edge(ax,az,offset-half),edge(bx,bz,offset-half),edge(bx,bz,offset+half),edge(ax,az,offset+half),'#a9aaa0');
+      }
+    }
+  }
+  // Public Works fixes each trunk center and DBH. A low-poly crown retains
+  // the cadence of the avenue without adding draw calls or individual leaves.
+  const crown=new THREE.IcosahedronGeometry(1,0).getAttribute('position');
+  const leaves=['#71865e','#7e9067','#778b6d','#889774'];
+  for(const [id,x,z,dbh] of extensions.trees){
+    const h=.06*Math.min(12.5,Math.max(3.5,3+Math.sqrt(dbh||9)*1.45));
+    const r=Math.max(.007,dbh*.0254*.03),base=.045;
+    for(let side=0;side<4;side++){
+      const t=side*Math.PI/2,u=t+Math.PI/2;
+      const trunk=(angle:number,y:number):Vertex=>[x+r*Math.cos(angle),y,z+r*Math.sin(angle)];
+      market.quad(trunk(t,base),trunk(t,base+h*.55),trunk(u,base+h*.55),trunk(u,base),'#847965');
+    }
+    const radius=h*(.24+(id%5)*.012),phase=id%31;
+    const dx=Math.cos(phase)*radius,dz=Math.sin(phase)*radius;
+    for(let i=0;i<crown.count;i+=3){
+      const corners:Vertex[]=[];
+      for(let j=i;j<i+3;j++){
+        const u=crown.getX(j),v=crown.getZ(j);
+        corners.push([x+u*dx-v*dz,base+h*(.68+.32*crown.getY(j)),z+u*dz+v*dx]);
+      }
+      const index=market.vertices(corners,leaves[id%leaves.length]);
+      market.indices.push(index,index+1,index+2);
+    }
+  }
+  mesh(market.geometry(),'#ffffff',0,0,0).name='Market Street beyond Montgomery';
+  mesh(quay.geometry(),'#ffffff',0,0,0).name='Northern Embarcadero street and pier approaches';
+}
+
 export function addSurveyBlocks(mesh:Surface){
+  addSightlineStreets(mesh);
   const tiles=new Map<string,Tile>();
   function tileAt(x:number,z:number){
     const key=Math.floor(x/12)+','+Math.floor(z/12);

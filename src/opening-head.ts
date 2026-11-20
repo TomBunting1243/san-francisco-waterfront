@@ -11,6 +11,7 @@ if(edition){
   (window as Window&{waterfrontFilmEdition?:FilmEdition}).waterfrontFilmEdition=edition;
   root.dataset.openingPhase='film';
   root.dataset.openingFilm=edition.palette;
+  root.dataset.openingShot=edition.shot;
   const network=(navigator as Navigator&{connection?:{saveData?:boolean}}).connection;
   const saveData=network?.saveData||matchMedia('(prefers-reduced-data: reduce)').matches;
   // The custom property is consumed by the compiled stylesheet under assets/.

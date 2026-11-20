@@ -27,6 +27,37 @@ test('The Southern Pacific entrance faces Market and only the three street sides
   assert.ok(windows.length>600);
 });
 
+test('One Market has three deep entry vaults, two side roundels and an open clock balustrade',()=>{
+  const {root}=model(132238425),market=root.getObjectByName('Market Street elevation');
+  const step=Math.hypot(4.891,.725)/15;
+  function firstHit(point,direction){
+    const start=market.localToWorld(new THREE.Vector3(...point));
+    const dir=new THREE.Vector3(...direction).transformDirection(market.matrixWorld);
+    const hit=new THREE.Raycaster(start,dir).intersectObject(root,true)[0];
+    assert.ok(hit,'missing surface from '+point);
+    return market.worldToLocal(hit.point);
+  }
+  for(const bay of [-1,0,1]){
+    for(const angle of [-.13,.13]){
+      const z=firstHit([bay*step,.19,.16],[angle,0,-1]).z;
+      assert.ok(z<-.12&&z>-.15,'door must be set behind the street wall at bay '+bay);
+    }
+    const crown=firstHit([bay*step,.2,-.07],[0,1,0]).y;
+    assert.ok(crown>.45&&crown<.48,'a curved soffit spans each portal');
+    assert.ok(Math.abs(firstHit([bay*step,.13,-.07],[0,-1,0]).y-.047)<.00001);
+  }
+  const roundels=market.getObjectsByProperty('name','Vestibule roundel');
+  assert.deepEqual(roundels.map(m=>Math.round(m.position.x/step)),[-1,1]);
+  const columns=market.getObjectsByProperty('name','Market vestibule column');
+  assert.equal(columns.length,4);
+  const halfTablet=step*.58,railRun=step*(3.55-1.16)/2;
+  for(const side of [-1,1]){
+    const spindleX=side*(halfTablet+railRun*1.5/12);
+    assert.ok(firstHit([spindleX,.59,.14],[0,0,-1]).z>.1);
+    assert.ok(firstHit([spindleX+side*railRun/24,.59,.14],[0,0,-1]).z<.06);
+  }
+});
+
 test('Rays from above resolve the low open court, raised atrium and isolated service tower',()=>{
   const {root}=model(132238425),axis=root.children[0];
   function heightAt(u,v){

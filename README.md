@@ -19,7 +19,8 @@ Build static files with `npm run build`; review that build with `npm run preview
 
 ## Explore
 
-- In **Custom → View**, choose **Bay Bridge drive** for the westbound upper deck into San Francisco, or **F-line streetcar** to board by the San Francisco Railway Museum, turn onto the Embarcadero, and ride north past the Ferry Building to Broadway. Each ride has its own pause button. **Return** or Escape brings you back to your waterfront view.
+- In **Custom → View**, choose **Bay Bridge drive** to ride west from Yerba Buena Island, exit at Fremont, and follow Howard to the waterfront. The car continues past the Ferry Building and Pier 27 to Chestnut. Choose **F-line streetcar** to ride from the San Francisco Railway Museum past the Ferry Building to Broadway.
+- In either passenger seat, drag to look around. Use the zoom buttons, plus and minus keys, scroll wheel, or pinch to adjust the lens from 1× to 4×. Pause lets you linger. **Return** or Escape brings you back to your waterfront view.
 - Drag to orbit and tilt. Double-click or pinch to change the focal length. On touchscreens, move two fingers vertically together to tilt.
 - The bottom-right controls zoom, return to the opening view, and pause or resume motion.
 - With the city focused, use WASD or the arrow keys to move along the waterfront. Q and E turn, `+` and `−` zoom, and Escape returns to the Ferry Building. Press Enter to hear from a passerby or F to identify a visible ferry and its gate.

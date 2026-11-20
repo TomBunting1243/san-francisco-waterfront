@@ -79,39 +79,36 @@ export function bakeTreeBatches(meshes:PaintedMesh[],material:THREE.MeshStandard
 // A supported multi-draw extension submits all surviving tiles in one call.
 export function createTreeDraw(tiles:TreeBatch[],material:THREE.Material){
   if(!tiles.length)return undefined;
-  const compact=tiles.map(t=>{
-    if(t.low===t.high)return t.high;
-    const index=t.low.index!.array,vertices=t.high.getAttribute('position').count;
-    // The source indices already occupy a dense interval. Keep both directions
-    // of the first-use remap without building a hash table for every tile.
-    const remap=new Uint32Array(vertices),used=new Uint32Array(vertices),indices=new Uint32Array(index.length);
-    let count=0;
-    for(let i=0;i<index.length;i++){
-      const old=index[i];
-      if(!remap[old]){used[count]=old;remap[old]=++count;}
-      indices[i]=remap[old]-1;
-    }
-    const geometry=new THREE.BufferGeometry();
-    for(const [name,source] of Object.entries(t.high.attributes)){
-      const attr=source as THREE.BufferAttribute,dim=attr.itemSize;
-      const array=new (attr.array.constructor as THREE.TypedArrayConstructor)(count*dim);
-      for(let fresh=0;fresh<count;fresh++){
-        const old=used[fresh]*dim;
-        for(let k=0;k<dim;k++)array[fresh*dim+k]=attr.array[old+k];
-      }
-      geometry.setAttribute(name,new THREE.BufferAttribute(array,dim,attr.normalized));
-    }
-    geometry.setIndex(new THREE.BufferAttribute(indices,1));
-    geometry.boundingBox=t.high.boundingBox;geometry.boundingSphere=t.high.boundingSphere;
-    return geometry;
-  });
-  const geometries=tiles.flatMap((t,i)=>compact[i]===t.high?[t.high]:[t.high,compact[i]]);
-  const batch=new THREE.BatchedMesh(tiles.length,geometries.reduce((sum,g)=>sum+g.getAttribute('position').count,0),
-    geometries.reduce((sum,g)=>sum+g.index!.count,0),material);
+  let vertices=0,indices=0;
+  for(const tile of tiles){
+    vertices+=tile.high.getAttribute('position').count;
+    indices+=tile.high.index!.count;
+    if(tile.low!==tile.high)indices+=tile.low.index!.count;
+  }
+  const batch=new THREE.BatchedMesh(tiles.length,vertices,indices,material);
   batch.name='Waterfront trees';batch.castShadow=batch.receiveShadow=true;batch.sortObjects=false;
-  for(const [i,t] of tiles.entries()){
-    const fine=batch.addGeometry(t.high),coarse=compact[i]===t.high?fine:batch.addGeometry(compact[i]);
-    t.draw={batch,instance:batch.addInstance(fine),fine,coarse};t.mesh.geometry=t.high;
+
+  // Both LODs index the same original corners. BatchedMesh adds its current
+  // vertex start to each incoming index. A zero-vertex first entry reserves
+  // only the fine index range; the coarse entry fills that same vertex start.
+  // Native bounds, draw ranges and geometry IDs stay distinct for each LOD.
+  const fineIndices=new THREE.BufferGeometry(),coarseVertices=new THREE.BufferGeometry();
+  for(const [name,attribute] of Object.entries(tiles[0].high.attributes)){
+    fineIndices.setAttribute(name,new THREE.BufferAttribute(attribute.array.subarray(0,0),attribute.itemSize,attribute.normalized));
+  }
+  for(const tile of tiles){
+    let fine:number,coarse:number;
+    if(tile.high===tile.low){
+      fine=coarse=batch.addGeometry(tile.high);
+    }else{
+      fineIndices.index=tile.high.index;
+      fineIndices.boundingBox=tile.high.boundingBox;fineIndices.boundingSphere=tile.high.boundingSphere;
+      fine=batch.addGeometry(fineIndices);
+      coarseVertices.attributes=tile.high.attributes;coarseVertices.index=tile.low.index;
+      coarseVertices.boundingBox=tile.high.boundingBox;coarseVertices.boundingSphere=tile.high.boundingSphere;
+      coarse=batch.addGeometry(coarseVertices);
+    }
+    tile.draw={batch,instance:batch.addInstance(fine),fine,coarse};tile.mesh.geometry=tile.high;
   }
   batch.computeBoundingBox();batch.computeBoundingSphere();
   return batch;

@@ -250,7 +250,14 @@ function oneMarket(b:Building,font:Font){
 
   // Street cornice and wings are about 43.5 m above grade. Only the setback
   // rooftop housings and the hipped central tower reach the higher survey returns.
-  mass(0,0,wide,deep,0,deck,'#b7ada0','Lower court and street base');
+  // Bliss & Faville's section cuts a vaulted vestibule behind the three
+  // central Market arches. Reserve its depth in the street base itself.
+  const entryWidth=wide*3/15,entryLeft=(wide-entryWidth)/2,entryRight=entryLeft+entryWidth;
+  const entryDepth=.142,entryTop=.54;
+  mass(0,0,entryLeft,deep,0,deck,'#b7ada0','Spear side of Market base');
+  mass(entryRight,0,wide,deep,0,deck,'#b7ada0','Steuart side of Market base');
+  mass(entryLeft,entryDepth,entryRight,deep,0,deck,'#b7ada0','Market vestibule rear wall');
+  mass(entryLeft,0,entryRight,entryDepth,entryTop,deck,'#b7ada0','Market vestibule lintel');
   mass(0,0,wide,1.76,deck,eave,brick,'Market wing');
   mass(0,1.76,.96,deep,deck,eave,brick,'Spear wing');
   mass(4.04,1.76,wide,deep,deck,eave,brick,'Steuart wing');
@@ -304,9 +311,16 @@ function oneMarket(b:Building,font:Font){
     [facade(wide,deep/2,Math.PI/2,'Steuart Street elevation'),deep,12,false]
   ] as const){
     const step=len/bays;
-    box(len,.54,.048,0,.27,.018,limestone,face);
+    if(market){
+      const wing=(len-entryWidth)/2;
+      for(const side of [-1,1])box(wing,.54,.048,side*(entryWidth+wing)/2,.27,.018,limestone,face);
+    }else box(len,.54,.048,0,.27,.018,limestone,face);
     for(const [y,h,d] of [[.036,.055,.068],[.553,.04,.10],[1.955,.038,.081],[2.005,.06,.09],[2.48,.06,.086],[2.55,.062,.137],[2.603,.042,.175]]){
-      box(len+.026,h,d,0,y,.025,cream,face);
+      if(market&&y===.036){
+        const wing=(len+.026-entryWidth)/2;
+        for(const side of [-1,1])box(wing,h,d,side*(entryWidth+wing)/2,y,.025,cream,face);
+        box(entryWidth,.022,entryDepth+.059,0,.036,(.059-entryDepth)/2,cream,face,'Market vestibule floor');
+      }else box(len+.026,h,d,0,y,.025,cream,face);
     }
     // Six punched-window rows sit between the two-story arcade and giant order.
     const coords:number[]=[],colors:number[]=[];
@@ -319,7 +333,17 @@ function oneMarket(b:Building,font:Font){
     for(let j=0;j<bays;j++){
       const x=(j+.5)*step-len/2,entrance=market&&Math.abs(j-7)<=1;
       const arch=new THREE.Shape();arch.moveTo(-r,.047);arch.lineTo(r,.047);arch.lineTo(r,stem);arch.absarc(0,stem,r,0,Math.PI,false);arch.closePath();
-      mesh(new THREE.ShapeGeometry(arch,12),entrance?'#3e4847':'#626f70',x,0,.046,face,entrance?'Market entrance arch':'Retail arcade opening');
+      if(entrance){
+        // Extrude only the stone around the opening. The curve forms the
+        // soffit all the way back to the inner entrance, including oblique views.
+        const surround=new THREE.Shape();
+        surround.moveTo(-step/2,.047);surround.lineTo(-r,.047);surround.lineTo(-r,stem);
+        surround.absarc(0,stem,r,Math.PI,0,true);surround.lineTo(r,.047);
+        surround.lineTo(step/2,.047);surround.lineTo(step/2,entryTop);
+        surround.lineTo(-step/2,entryTop);surround.closePath();
+        const vault=new THREE.ExtrudeGeometry(surround,{depth:entryDepth+.046,bevelEnabled:false,curveSegments:10});
+        mesh(vault,limestone,x,0,-entryDepth,face,'Market entrance arch');
+      }else mesh(new THREE.ShapeGeometry(arch,12),'#626f70',x,0,.046,face,'Retail arcade opening');
       mesh(new THREE.TorusGeometry(r+.006,.009,4,14,Math.PI),cream,x,stem,.054,face);
       for(const side of [-1,1]){
         box(.017,.313,.028,x+side*(r+.005),.192,.052,cream,face);
@@ -327,8 +351,17 @@ function oneMarket(b:Building,font:Font){
       }
       box(.027,.037,.025,x,stem+r,.058,cream,face);
       if(entrance){
-        box(r*1.47,.22,.017,x,.166,.059,'#8e7d68',face);
-        box(r*.98,.18,.012,x,.144,.071,glass,face);
+        // The photographed side doors have inset bronze-toned surrounds and
+        // round ornaments in the vault ends. The center is a wider glazed entry.
+        const back=-entryDepth+.004,central=j===7,doorW=r*(central?1.76:1.05);
+        panel(x,.183,doorW+.025,.273,back,'#897a68');
+        panel(x,.169,doorW,.244,back+.002,central?glass:'#a18c70');
+        panel(x,.160,.006,.225,back+.004,sash);
+        panel(x,.263,doorW,.009,back+.004,sash);
+        if(!central){
+          mesh(new THREE.CircleGeometry(.037,16),'#ab9b81',x,stem+.041,back+.003,face,'Vestibule roundel');
+          panel(x,.312,doorW+.046,.012,back+.005,cream);
+        }
       }else{
         panel(x,.217,r*1.94,.026,.061,sash);panel(x,stem,r*1.94,.013,.062,sash);
         for(const dx of [-r*.46,0,r*.46])panel(x+dx,.204,.009,.306,.063,sash);
@@ -353,24 +386,47 @@ function oneMarket(b:Building,font:Font){
     for(const x of [-len/2+.023,-len/2+step,len/2-step,len/2-.023]){
       box(.024,1.36,.032,x,1.252,.008,limestone,face);
     }
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position',new THREE.Float32BufferAttribute(coords,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.computeVertexNormals();
-    geo.userData.paintVertices=true;
-    const panels=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.82}));
-    panels.name='Sash, spandrels and sills';face.add(panels);
     if(market){
       for(const y of [.567,1.267,1.976]){
         box(3*step,.032,.093,0,y,.063,cream,face);
         for(let j=-2;j<=2;j++)box(.029,.047,.05,j*step*.57,y-.028,.064,limestone,face);
       }
-      const title=new TextGeometry('SOUTHERN PACIFIC COMPANY',{font,size:.027,depth:.001,curveSegments:2});
-      title.computeBoundingBox();title.translate(-title.boundingBox!.max.x/2,0,0);
-      mesh(title,'#554f48',0,.567,.111,face);
-      mesh(new THREE.CircleGeometry(.051,20),cream,0,.636,.078,face,'Market entrance clock');
-      mesh(new THREE.TorusGeometry(.052,.007,5,20),'#6e6151',0,.636,.081,face);
-      box(.005,.032,.005,0,.651,.086,'#58594f',face);
-      box(.023,.005,.005,.009,.636,.086,'#58594f',face);
+      for(const jamb of [-1.5,-.5,.5,1.5]){
+        const x=jamb*step;
+        mesh(new THREE.CylinderGeometry(.025,.029,.272,10),cream,x,.194,.056,face,'Market vestibule column');
+        box(.067,.014,.063,x,.055,.053,limestone,face);
+        box(.071,.021,.068,x,.340,.052,cream,face);
+      }
+      // The entrance plate and Joe Mabel's Market elevation photograph show
+      // an open stone balustrade to either side of the clock's inscription.
+      const tabletWidth=step*1.16,balconyWidth=step*3.55;
+      box(balconyWidth,.015,.107,0,.562,.066,cream,face);
+      box(balconyWidth,.009,.034,0,.616,.104,cream,face);
+      box(tabletWidth,.049,.030,0,.590,.102,limestone,face);
+      for(const side of [-1,1]){
+        const run=(balconyWidth-tabletWidth)/2;
+        for(let post=0;post<=2;post++)
+          box(.023,.049,.030,side*(tabletWidth/2+(run-.014)*post/2),.590,.103,cream,face);
+        for(let spindle=0;spindle<12;spindle++)
+          panel(side*(tabletWidth/2+run*(spindle+.5)/12),.590,.007,.049,.108,sash);
+      }
+      // The incised lettering needs only its visible face on the stone tablet.
+      const title=new THREE.ShapeGeometry(font.generateShapes('SOUTHERN PACIFIC COMPANY',.025),2);
+      title.computeBoundingBox();
+      const titleBounds=title.boundingBox!;
+      title.translate(-(titleBounds.max.x+titleBounds.min.x)/2,0,0);
+      title.scale((tabletWidth-.018)/(titleBounds.max.x-titleBounds.min.x),1,1);
+      mesh(title,'#554f48',0,.578,.120,face);
+      mesh(new THREE.CircleGeometry(.051,20),cream,0,.681,.098,face,'Market entrance clock');
+      mesh(new THREE.TorusGeometry(.052,.007,5,20),'#6e6151',0,.681,.101,face);
+      box(.005,.032,.005,0,.696,.106,'#58594f',face);
+      box(.023,.005,.005,.009,.681,.106,'#58594f',face);
     }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(coords,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.computeVertexNormals();
+    geo.userData.paintVertices=true;
+    const panels=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.82}));
+    panels.name='Sash, spandrels and sills';face.add(panels);
   }
   return {root,windows};
 }

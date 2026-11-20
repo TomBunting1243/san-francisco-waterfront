@@ -68,6 +68,53 @@ test('native multi-draw keeps spatial culling, independent camera LOD and shadow
   draw.dispose();
 });
 
+test('fine and coarse draws share one vertex range and retain every corner, bound and ray hit',()=>{
+  const tiles=bakeTreeBatches([...plant(0,'#819764'),...plant(12,'#507a42'),...plant(24,'#638452')],material);
+  // A tile that needs no simplification uses one draw ID between two pairs.
+  tiles[1].low=tiles[1].high;
+  const draw=createTreeDraw(tiles,material),packed=draw.geometry;
+  const camera=new THREE.OrthographicCamera(-2,2,2,-2,.1,20);
+  let start=0,vertex=0;
+  for(const tile of tiles){
+    const {fine,coarse,instance}=tile.draw;
+    for(const id of new Set([fine,coarse])){
+      const source=id===fine?tile.high:tile.low,range=draw.getGeometryRangeAt(id);
+      assert.equal(range.start,start);assert.equal(range.count,source.index.count);
+      start+=range.count;
+      assert.ok(draw.getBoundingBoxAt(id,new THREE.Box3()).equals(source.boundingBox));
+      assert.ok(draw.getBoundingSphereAt(id,new THREE.Sphere()).equals(source.boundingSphere));
+      for(let i=0;i<source.index.count;i++){
+        const actual=packed.index.getX(range.start+i),original=source.index.getX(i);
+        assert.equal(actual,vertex+original);
+        for(const [key,attribute] of Object.entries(source.attributes)){
+          const output=packed.attributes[key],dim=attribute.itemSize;
+          for(let c=0;c<dim;c++)assert.equal(output.array[actual*dim+c],attribute.array[original*dim+c]);
+        }
+      }
+      draw.setGeometryIdAt(instance,id);
+      const x=tile.high.boundingSphere.center.x;
+      camera.position.set(x,1,6);camera.lookAt(x,1,0);camera.updateMatrixWorld();
+      for(const submit of [
+        ()=>draw.onBeforeRender(null,null,camera,packed,material),
+        ()=>draw.onBeforeShadow(null,null,camera,camera,packed,material),
+      ]){
+        submit();assert.equal(draw._multiDrawCount,1);
+        assert.equal(draw._multiDrawStarts[0],range.start*packed.index.array.BYTES_PER_ELEMENT);
+        assert.equal(draw._multiDrawCounts[0],range.count);
+      }
+      const ray=new THREE.Raycaster(new THREE.Vector3(x,.37,3),new THREE.Vector3(0,0,-1));
+      const expected=ray.intersectObject(new THREE.Mesh(source,material));
+      const actual=ray.intersectObject(draw).filter(hit=>hit.batchId===instance);
+      assert.ok(expected.length>0);
+      assert.deepEqual(actual.map(hit=>[hit.distance,hit.point.toArray(),hit.faceIndex-range.start/3]),
+        expected.map(hit=>[hit.distance,hit.point.toArray(),hit.faceIndex]));
+    }
+    vertex+=tile.high.getAttribute('position').count;
+  }
+  assert.equal(packed.index.count,start);assert.equal(packed.attributes.position.count,vertex);
+  draw.dispose();
+});
+
 test('production renderer submits a bounded subset on the fixed desktop and phone orbits',async(t)=>{
   const {createLandscape}=await import('../app/landscape.ts');
   const {openingLens,openingYaw,openingCamera,orbitOffset}=await import('../app/camera.ts');

@@ -59,6 +59,44 @@ test('fixed-plaza pitches wrap around the south end without obstructing the ferr
   assert.ok(market.root.children.every(m=>m.isInstancedMesh&&m.visible&&m.count<=m.instanceMatrix.count&&Number.isFinite(m.boundingSphere.radius)));
   assert.ok(section(s.boxes,'artist').length>section(s.boxes,'front').length/14);
 });
+test('the Embarcadero Plaza art row stands above the lower court and clears the Market crossings',async()=>{
+  const {embarcaderoPlaza}=await import('../app/embarcadero-plaza.ts');
+  const {marketAxis}=await import('../app/curb-survey.ts');
+  const plaza=embarcaderoPlaza(),market=createFerryMarket();
+  const paved=plaza.children.filter(o=>o.name==='Granite terraces, lawns and walks'||o.name==='Halprin brick court');
+  const box=new THREE.Box3(),matrix=new THREE.Matrix4(),ray=new THREE.Raycaster();
+  const down=new THREE.Vector3(0,-1,0),footprints=[];
+  market.update(+at('2026-11-21T20:00Z'));
+  const [parts,canopies]=market.root.children;
+  canopies.geometry.computeBoundingBox();parts.geometry.computeBoundingBox();
+  for(let i=0;i<canopies.count;i++){
+    canopies.getMatrixAt(i,matrix);
+    if(matrix.elements[14]>-6)continue;
+    const footprint=canopies.geometry.boundingBox.clone().applyMatrix4(matrix);
+    assert.ok(!footprints.some(other=>other.intersectsBox(footprint)),'art pitches overlap');
+    footprints.push(footprint);
+    for(const x of [footprint.min.x,footprint.max.x])for(const z of [footprint.min.z,footprint.max.z]){
+      assert.ok(z>-10&&z< -8.25&&x>.15&&x<.85,'outside the row between the Hyatt and the plaza restroom');
+      assert.ok(x-marketAxis(z)>.92,'pitch intrudes into the Market pedestrian approach');
+      ray.set(new THREE.Vector3(x,1,z),down);
+      const top=ray.intersectObjects(paved,false)[0];
+      assert.equal(top?.object.name,'Granite terraces, lawns and walks');
+      assert.ok(Math.abs(top.point.y-.116)<.00001,'canopy corner crosses the terrace step');
+    }
+  }
+  assert.equal(footprints.length,7);
+  const feet=[];
+  for(let i=0;i<parts.count;i++){
+    parts.getMatrixAt(i,matrix);
+    if(matrix.elements[14]>-6||Math.abs(matrix.elements[5]-.13)>.00001)continue;
+    box.copy(parts.geometry.boundingBox).applyMatrix4(matrix);
+    ray.set(new THREE.Vector3(matrix.elements[12],1,matrix.elements[14]),down);
+    const floor=ray.intersectObjects(paved,false)[0];
+    assert.ok(floor&&Math.abs(floor.point.y-box.min.y)<.00001,'canopy foot meets level paving');
+    feet.push(box.min.y);
+  }
+  assert.equal(feet.length,28);
+});
 test('outdoor tables follow documented storefronts and leave the passenger routes and market aisles open',async()=>{
   const {ferryPatios}=await import('../app/ferry-patios.ts');
   const {ferryPassengerPose,ferryPassengerCount}=await import('../app/ferry-passengers.ts');
@@ -133,7 +171,7 @@ test('front plaza tables carry bouquets, produce bins and Foodwise program mater
   for(const rim of bins.filter(p=>['b99970','bd9a6a'].includes(p.color))){
     assert.ok(Math.abs((rim.y-rim.h/2)-(base.y+base.h/2))<.00001,'crate slats meet the top of the box');
   }
-  assert.equal(items(boxes,.713,-8.175).filter(p=>p.color==='465d63').length,3,'screen-printed shirts on the back rail');
+  assert.equal(items(boxes,.71,-9.87).filter(p=>p.color==='465d63').length,3,'screen-printed shirts on the back rail');
   for(const mesh of [boxes,roofs,rounds]){
     const m=new THREE.Matrix4();mesh.geometry.computeBoundingBox();
     for(let i=0;i<mesh.count;i++){
@@ -205,23 +243,6 @@ test('the baked waterfront keeps populated farmers market batches in the opening
       }
       assert.ok(frontInView>=8,batch.name+' front instances inside the '+w+'px opening');
     }
-    // Trace the colored face of the print itself. This also checks the awning,
-    // both people, the palm line and the grade between the stall and the eye.
-    const boxes=market.root.children[0],paint=new THREE.Color();
-    let printVisible=false;
-    for(let i=0;i<boxes.count;i++){
-      boxes.getColorAt(i,paint);if(paint.getHexString()!=='5c8681')continue;
-      boxes.getMatrixAt(i,matrix);
-      const aim=new THREE.Vector3().setFromMatrixPosition(matrix);
-      assert.ok(frustum.containsPoint(aim),'held print in '+w+'px opening');
-      const ray=new THREE.Raycaster(camera.position,aim.sub(camera.position).normalize());
-      const hit=ray.intersectObjects(market.root.children,false)[0];
-      assert.ok(hit?.object===boxes&&hit.instanceId===i,'open sightline below canvas');
-      ray.far=hit.distance-.001;
-      const blockers=world.architectureChunks.filter(m=>ray.ray.intersectsBox(m.geometry.boundingBox));
-      printVisible=!ray.intersectObjects(blockers,false).length;
-    }
-    assert.ok(printVisible,'visible Market Street print at '+w+'px');
     // A surveyed plaza furnishing can cover part of a tent. Rays must still
     // actually reach each program desk's canvas through the built architecture.
     const roofs=market.root.children[1];
@@ -237,6 +258,21 @@ test('the baked waterfront keeps populated farmers market batches in the opening
       assert.ok(exposed,'Program canopy at '+x+' occluded at '+w+'px');
     }
   }
+  // From the permitted row's customer aisle, the print remains visible below
+  // the awning and between the two people at the counter.
+  const boxes=market.root.children[0],paint=new THREE.Color(),prints=[];
+  for(let i=0;i<boxes.count;i++){
+    boxes.getColorAt(i,paint);if(paint.getHexString()==='5c8681')prints.push(i);
+  }
+  assert.equal(prints.length,1);
+  boxes.getMatrixAt(prints[0],matrix);
+  const aim=new THREE.Vector3().setFromMatrixPosition(matrix),eye=new THREE.Vector3(.28,.216,-8.74);
+  const printRay=new THREE.Raycaster(eye,aim.clone().sub(eye).normalize());
+  const hit=printRay.intersectObjects(market.root.children,false)[0];
+  assert.ok(hit?.object===boxes&&hit.instanceId===prints[0],'open sightline to held print');
+  printRay.far=hit.distance-.001;
+  const blockers=world.architectureChunks.filter(m=>printRay.ray.intersectsBox(m.geometry.boundingBox));
+  assert.equal(printRay.intersectObjects(blockers,false).length,0,'clear plaza aisle');
 });
 
 test('four shoppers walk separate aisles and stop within reach of goods at both neighboring counters',async()=>{
@@ -295,8 +331,7 @@ test('four shoppers walk separate aisles and stop within reach of goods at both 
   assert.ok(movingAtStart>0&&movingAtStart<frontMarketShopperCount);
 });
 
-test('Market Street displays stand on the striped grade and keep both crossing parties clear',async()=>{
-  const {westMarketGround}=await import('../app/curb-survey.ts');
+test('the print and clothing racks meet plaza grade and every display clears both crossing parties',async()=>{
   const {plazaCrossingCount,plazaCrossingPose}=await import('../app/plaza-walkers.ts');
   const {signalPeriod}=await import('../app/waterfront-signals.ts');
   const market=createFerryMarket(),matrix=new THREE.Matrix4(),objects=[];
@@ -306,11 +341,11 @@ test('Market Street displays stand on the striped grade and keep both crossing p
     batch.geometry.computeBoundingBox();
     for(let i=0;i<batch.count;i++){
       batch.getMatrixAt(i,matrix);const {elements:m}=matrix;
-      if(m[14]<-7.15||m[14]>-6.4)continue;
+      if(m[14]>-6)continue;
       const b=batch.geometry.boundingBox.clone().applyMatrix4(matrix);
       objects.push(b);
-      if(Math.abs(m[0]-.003)<1e-6&&m[5]>.1){
-        assert.ok(Math.abs(b.min.y-westMarketGround(m[12],m[14])-.00035)<.0001);
+      if(m[14]>-8.78&&m[14]<-8.32&&Math.abs(width(m)-.003)<1e-6&&m[5]>.1){
+        assert.ok(Math.abs(b.min.y-.116)<.0001);
         frameFeet++;
       }
     }
@@ -318,7 +353,6 @@ test('Market Street displays stand on the striped grade and keep both crossing p
   assert.equal(frameFeet,12,'eight awning posts and four clothes-rail uprights');
   for(let t=0;t<signalPeriod*2;t+=.125)for(let i=0;i<plazaCrossingCount;i++){
     const p=plazaCrossingPose(t,i);
-    if(p.z< -7.25||p.z> -6.3)continue;
     assert.ok(objects.every(b=>Math.hypot(Math.max(0,b.min.x-p.x,p.x-b.max.x),
       Math.max(0,b.min.z-p.z,p.z-b.max.z))>.025),'crossing shoulder clearance');
   }

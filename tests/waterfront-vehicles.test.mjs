@@ -139,9 +139,9 @@ test('both bridge roadways have five marked lanes wide enough for the traffic mo
 });
 
 
-test('the two Bay Bridge anchorages and Pier W1 have separate masses without obstructing either road deck',()=>{
+test('the Bay Bridge anchorages and Pier W1 leave both road decks clear',()=>{
   const bridge=new THREE.Group(),{lowerDeck:lower,upperDeck:upper}=bridgeLayout;
-  const {land,w1,w4}=addBridgeAnchorages(bridge,addMesh,lower,upper);
+  const {land,w1,w4,w7}=addBridgeAnchorages(bridge,addMesh,lower,upper);
   bridge.updateMatrixWorld(true);
   assert.ok(Math.abs(w1.position.z-land.position.z-890*.3048*.06)<.0001);
   assert.equal(w4.position.z,bridgeAnchorageStations.w4);
@@ -150,7 +150,7 @@ test('the two Bay Bridge anchorages and Pier W1 have separate masses without obs
     ray.set(new THREE.Vector3(x,y,z),new THREE.Vector3(0,0,dir));ray.far=far;
     return ray.intersectObjects(bridge.children,true);
   };
-  for(const anchor of [land,w1,w4]){
+  for(const anchor of [land,w1,w4,w7]){
     const {z}=anchor.position;
     for(const lane of bridgeLaneCenters)for(const offset of [-.045,0,.045]){
       for(const level of [lower,upper]){
@@ -160,6 +160,25 @@ test('the two Bay Bridge anchorages and Pier W1 have separate masses without obs
       }
     }
     assert.equal(along(0,upper+.75,z-2.2,1,4.4).length,0,anchor.name+' puts a crossbar over the upper road');
+  }
+  assert.equal(w7.position.z,bridgeLayout.length);
+  const backs=w7.getObjectsByProperty('name','W7 cable into rock anchorage');
+  const beds=w7.getObjectsByProperty('name','W7 saddle bed');
+  const chambers=w7.getObjectsByProperty('name','W7 rock tunnel entrance');
+  assert.equal(backs.length,2);assert.equal(beds.length,2);assert.equal(chambers.length,2);
+  for(const [i,cable] of backs.entries()){
+    const half=cable.geometry.parameters.height/2;
+    const crown=cable.localToWorld(new THREE.Vector3(0,-half,0)),toe=cable.localToWorld(new THREE.Vector3(0,half,0));
+    assert.ok(crown.distanceTo(new THREE.Vector3(i?.75:-.75,4.85,bridgeLayout.length))<1e-6);
+    const angle=Math.atan2(crown.y-toe.y,toe.z-crown.z);
+    assert.ok(Math.abs(angle-37*Math.PI/180)<1e-6);
+    const bed=new THREE.Box3().setFromObject(beds[i]);
+    assert.ok(bed.containsPoint(crown.clone().add(new THREE.Vector3(0,-.027,0))));
+    assert.ok(new THREE.Box3().setFromObject(chambers[i]).containsPoint(toe));
+    for(let z=0;z<2.5;z+=.10){
+      ray.set(new THREE.Vector3(0,upper+.5,w7.position.z+z),new THREE.Vector3(i?1:-1,0,0));
+      ray.far=.62;assert.equal(ray.intersectObject(w7,true).length,0,'W7 leaves both traffic shoulders open');
+    }
   }
   const inset=along(0,1.63,w1.position.z-2,1,4)[0],shoulder=along(.62,1.63,w1.position.z-2,1,4)[0];
   assert.ok(inset&&shoulder&&inset.point.z-shoulder.point.z>.14,'Pier W1 has a backed architectural recess');

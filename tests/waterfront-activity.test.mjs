@@ -6,7 +6,7 @@ import {createWaterfrontTraffic} from '../app/waterfront-traffic.ts';
 import {plazaCrossingCount,plazaCrossingPose} from '../app/plaza-walkers.ts';
 import {plazaSkaterCount,plazaSkaterPose} from '../app/plaza-skaters.ts';
 import {createLandscape,createCityVignette} from '../app/landscape.ts';
-import {harryBridgesBoundary} from '../app/curb-survey.ts';
+import {harryBridgesBoundary,marketAxis} from '../app/curb-survey.ts';
 
 test('a rebuilt waterfront keeps each set of skaters on its own single weather shader',()=>{
   function skaterPaint(){
@@ -211,7 +211,7 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
   const down=new THREE.Vector3(0,-1,0),ray=new THREE.Raycaster(),point=new THREE.Vector3();
   for(const world of [city,vignette]){
     world.root.updateMatrixWorld(true);
-    const local=[],region=new THREE.Box3(new THREE.Vector3(-1.08,.025,-5.30),new THREE.Vector3(.31,.171,-4.20));
+    const local=[],region=new THREE.Box3(new THREE.Vector3(-1.76,.025,-5.04),new THREE.Vector3(.82,.171,-4.23));
     const box=new THREE.Box3(),corners=[new THREE.Vector3(),new THREE.Vector3(),new THREE.Vector3()];
     for(const mesh of [...world.architectureChunks,world.root.getObjectByName('Market granite and herringbone promenade')]){
       if(!box.setFromObject(mesh).intersectsBox(region))continue;
@@ -225,7 +225,16 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
     const floor=new THREE.Mesh(g,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
     function assertSupport(p,label){
       ray.set(point.set(p.x,.165,p.z),down);
-      const hit=ray.intersectObject(floor)[0];assert.ok(hit&&Math.abs(hit.point.y-p.y)<.00012,label+' '+[p.x,p.y,p.z,hit?.point.y]);
+      let hit=ray.intersectObject(floor)[0];
+      // The millimetre-rounded survey has hairline joints narrower than
+      // the tread. Probe the contact patch when its center falls in a joint.
+      if(!hit)for(const offset of [-.0006,.0006]){
+        ray.set(point.set(p.x+offset,.165,p.z),down);
+        hit=ray.intersectObject(floor)[0];if(hit)break;
+      }
+      // A rigid board can straddle the six-millimetre finish transition.
+      const seam=Math.abs(Math.abs(p.x-marketAxis(p.z))-.81)<.045;
+      assert.ok(hit&&Math.abs(hit.point.y-p.y)<(seam?.000351:.00012),label+' '+[p.x,p.y,p.z,hit?.point.y]);
     }
     // Exercise the real market batches at full Saturday trade before moving
     // into a night when their stalls have been taken down.
@@ -246,9 +255,9 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
     assert.ok(root.children.every(m=>m.isInstancedMesh));
     assert.ok(root.children.reduce((n,m)=>n+m.geometry.index.count*m.count/3,0)<=3900);
     const boardMatrix=new THREE.Matrix4(),legMatrix=new THREE.Matrix4();
-    const landward=new Set(),bayward=new Set();
+    const south=new Set(),north=new Set();
     let plants=0,coasts=0;
-    for(let tick=0;tick<=440;tick++){
+    for(let tick=0;tick<=500;tick++){
       if(tick===220)world.ferryMarket.update(Date.parse('2026-11-21T23:00:00-08:00'));
       const t=86390+tick*.07;update(t);root.updateMatrixWorld(true);
       for(let i=0;i<plazaSkaterCount;i++){
@@ -261,8 +270,8 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
         assert.ok(Math.hypot(p.x-1.266,p.z+4.647)>.53,'clear of north light steps');
         assert.ok(Math.hypot(p.x+2.218,p.z+4.670)>.53,'clear of south light steps');
         assert.ok(p.x> -2.218&&p.x<1.266,'through the space between the two columns');
-        if(p.z< -4.83)landward.add(i);
-        if(p.z> -4.48)bayward.add(i);
+        if(p.x< -1.56)south.add(i);
+        if(p.x> .61)north.add(i);
         for(let k=0;k<plazaCrossingCount;k++){
           const walker=plazaCrossingPose(t,k);
           assert.ok(Math.hypot(p.x-walker.x,p.z-walker.z)>.080,'pedestrian shoulder clearance');
@@ -294,12 +303,42 @@ test('six skaters carve the inland Harry Bridges granite with four grounded whee
         }
       }
     }
-    assert.equal(landward.size,6);assert.equal(bayward.size,6,'every skater crosses the column alignment');
+    assert.equal(south.size,6);assert.equal(north.size,6,'each rider reaches both column landings');
     assert.ok(plants>10&&coasts>100);
     update(631);const fixed=board.instanceMatrix.array.slice(),version=board.instanceMatrix.version;update(631);
     assert.deepEqual(board.instanceMatrix.array,fixed);assert.equal(board.instanceMatrix.version,version);
     update(632);assert.notDeepEqual(board.instanceMatrix.array,fixed);
     g.dispose();floor.material.dispose();
+  }
+});
+
+test('each rider heads along the column alignment and turns only beside the opposite steps',async()=>{
+  const {ferryPublicRealm}=await import('../app/ferry-architecture.ts');
+  const realm=ferryPublicRealm();realm.updateMatrixWorld(true);
+  const columns=realm.getObjectsByProperty('name','Harry Bridges Plaza Millennium light')
+    .map(group=>({center:group.getWorldPosition(new THREE.Vector3()),radius:group.children[0].geometry.parameters.radiusBottom}))
+    .sort((a,b)=>a.center.x-b.center.x);
+  assert.equal(columns.length,2);
+  const [south,north]=columns;
+  const clearLength=north.center.x-south.center.x-south.radius-north.radius;
+  for(let i=0;i<plazaSkaterCount;i++){
+    let min=Infinity,max=-Infinity,lastDirection=0,lastTurn=null,turns=0;
+    for(let step=0;step<=6400;step++){
+      const t=step*.02,p=plazaSkaterPose(t,i),next=plazaSkaterPose(t+.005,i);
+      const dx=next.x-p.x,dz=next.z-p.z,length=Math.hypot(dx,dz);
+      const aligned=(Math.cos(p.heading)*dx-Math.sin(p.heading)*dz)/length;
+      assert.ok(length>.0005&&aligned>.9999,'board points along a continuously moving trajectory');
+      min=Math.min(min,p.x);max=Math.max(max,p.x);
+      const direction=Math.sign(dx);
+      if(lastDirection&&direction!==lastDirection){
+        const destination=direction<0?north:south;
+        const beyondSteps=Math.hypot(p.x-destination.center.x,p.z-destination.center.z)-destination.radius;
+        assert.ok(beyondSteps>.11&&beyondSteps<.24,'turn stays just inside the landing');
+        assert.notEqual(lastTurn,destination);lastTurn=destination;turns++;
+      }
+      lastDirection=direction;
+    }
+    assert.ok(turns>=8&&max-min>clearLength*.83,'each lap covers the available inter-column span');
   }
 });
 
@@ -311,7 +350,7 @@ test('the two skating lines pass one another with clearance through many laps',(
       const a=poses[i],b=poses[j],separation=Math.hypot(a.x-b.x,a.z-b.z);
       smallest=Math.min(smallest,separation);
       if(i<3&&j>=3&&previous&&separation<.27&&Math.cos(a.heading-b.heading)>.9&&
-        (previous[i].z-previous[j].z)*(a.z-b.z)<0)passes++;
+        (previous[i].x-previous[j].x)*(a.x-b.x)<0)passes++;
     }
     previous=poses;
   }

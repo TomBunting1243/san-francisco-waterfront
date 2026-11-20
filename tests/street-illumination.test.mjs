@@ -5,6 +5,7 @@ import {createLandscape,createCityVignette} from '../app/landscape.ts';
 import {createStreetField,createStreetIllumination,createSignalHousings,signalLensCenter,waterfrontSignals,signalAspects} from '../app/street-illumination.ts';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
 import grades from '../public/data/promenade-light-grades.json' with {type:'json'};
+import {northWaterfrontGrade} from '../app/north-quay-grade.ts';
 import {addSurveyBlocks} from '../app/survey-blocks.ts';
 
 const channelAt=(field,x,z,c=0)=>{
@@ -113,9 +114,16 @@ test('field derives from the scene globes, is local, and reaches the same shader
   const rincon=[287051,282079,284944,281691,281690,281688,284943,281687,282992];
   const ground=(x,z)=>new T.Raycaster(new T.Vector3(x,.14,z),down,0,.30)
     .intersectObjects(streetSurfaces,false).find(hit=>hit.face.normal.y>.6)?.point.y;
-  for(const [id,x,z] of [...fixtures.curb,...fixtures.inland].filter(([id])=>
-    [...rincon,287068,287069,282128,282127].includes(id))){
+  for(const [id,x,z,yaw] of [...fixtures.curb,...fixtures.inland].filter(([id])=>
+    [...rincon,287068,287069,282128,282127,284096].includes(id))){
     assert.ok(Math.abs(grades[id]-ground(x,z))<.00002,'fixture sits on the final streetscape at '+id);
+    if(id===282128||id===284096){
+      for(let k=0;k<8;k++){
+        const angle=k*Math.PI/4-yaw,r=.22*.06;
+        const px=x+r*Math.cos(angle),pz=z+r*Math.sin(angle);
+        assert.ok(ground(px,pz)>=northWaterfrontGrade(px)-.00002,'unsupported cast foot at '+id+' corner '+k);
+      }
+    }
     if(rincon.includes(id))for(let k=0;k<8;k++){
       const a=Math.PI*k/4,r=.22*.06;
       assert.ok(Math.abs(ground(x+r*Math.cos(a),z+r*Math.sin(a))-.045)<.0001,'whole pedestal supported at '+id+' azimuth '+k);

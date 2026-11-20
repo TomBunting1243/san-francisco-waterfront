@@ -1,10 +1,10 @@
-#cinematic-opening{display:none;--clock-crop:86%}
-@media (orientation:portrait){#cinematic-opening{--clock-crop:66%}}
+#cinematic-opening{display:none;--clock-crop:86%;--clock-crop-x:50%}
+@media (orientation:portrait){#cinematic-opening{--clock-crop:66%}html[data-opening-shot=bridge-to-city] #cinematic-opening{--clock-crop-x:25%}}
 html[data-opening-phase=film] #cinematic-opening,html[data-opening-phase=handoff] #cinematic-opening,html[data-opening-phase=fallback] #cinematic-opening{
   display:block;position:absolute;inset:0 0 auto;height:100svh;min-height:320px;overflow:hidden;pointer-events:none;
-  background:#293c46 var(--opening-image) center var(--clock-crop)/cover no-repeat;
+  background:#293c46 var(--opening-image) var(--clock-crop-x) var(--clock-crop)/cover no-repeat;
 }
-#cinematic-opening video{width:100%;height:100%;object-fit:cover;object-position:center var(--clock-crop);display:block;opacity:0}
+#cinematic-opening video{width:100%;height:100%;object-fit:cover;object-position:var(--clock-crop-x) var(--clock-crop);display:block;opacity:0}
 #cinematic-opening video[data-playing=true]{opacity:1}
 #cinematic-opening video[hidden]{display:none}
 html[data-opening-phase] #root{position:relative}

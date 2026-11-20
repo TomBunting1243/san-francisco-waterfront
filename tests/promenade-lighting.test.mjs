@@ -6,7 +6,7 @@ import grades from '../public/data/promenade-light-grades.json' with {type:'json
 import {bakeRigidChunk} from '../app/city-blocks.ts';
 import {sfMap} from '../app/sf-map.ts';
 import {insideBuilding} from '../app/building-character.ts';
-import {streetPose} from '../app/streets.ts';
+import {northWaterfrontGrade,streetPose} from '../app/streets.ts';
 import {buildPromenadeLighting} from '../app/promenade-lighting.ts';
 
 const root=new THREE.Group(),halos=buildPromenadeLighting(root);
@@ -34,7 +34,8 @@ test('the Ferry frontage carries two separate lanterns above its branched orname
   for(const [i,[,, ,yaw,heads]] of lamps.curb.entries()){
     const mesh=root.children[i];mesh.geometry.computeBoundingBox();
     const box=mesh.geometry.boundingBox;
-    assert.ok(Math.abs((box.max.y-box.min.y)/.06-(heads===1?5.55:7.15))<.001);
+    const centerGrade=grades[lamps.curb[i][0]];
+    assert.ok(Math.abs((box.max.y-centerGrade)/.06-(heads===1?5.55:7.15))<.001);
     if(heads===2){
       assert.ok(Math.abs(halos[k+1]-halos[k+4])<.00001);
       const du=halos[k]-halos[k+3],dv=halos[k+2]-halos[k+5];
@@ -95,9 +96,15 @@ test('baked lantern glass emits on its actual faces while iron stays dark',()=>{
 test('both curb rows stand on their registered supporting surfaces, including both finished Rincon curb approaches',()=>{
   const poles=[...lamps.curb,...lamps.inland];
   assert.equal(Object.keys(grades).length,poles.length);
-  for(const [i,[id]] of poles.entries()){
+  for(const [i,[id,x]] of poles.entries()){
     const geometry=root.children[i].geometry;geometry.computeBoundingBox();
-    assert.ok(Math.abs(geometry.boundingBox.min.y-grades[id])<.00001,id);
+    if(id===282128||id===284096){
+      const pos=geometry.attributes.position;
+      for(let corner=0;corner<8;corner++){
+        assert.ok(Math.abs(pos.getY(corner)-northWaterfrontGrade(pos.getX(corner)))<.00001,'cast foot at '+id);
+      }
+      assert.ok(geometry.boundingBox.min.y<northWaterfrontGrade(x)-.0002);
+    }else assert.ok(Math.abs(geometry.boundingBox.min.y-grades[id])<.00001,id);
   }
   for(const id of [287051,282079,284944,281691,281690,281688,284943,281687,282992])assert.equal(grades[id],.045);
   assert.equal(grades[287068],.045);assert.equal(grades[287069],.031);

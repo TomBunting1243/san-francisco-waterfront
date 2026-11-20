@@ -1,48 +1,63 @@
 import * as THREE from 'three';
 import {signalPeriod} from './waterfront-signals.ts';
-import {medianTop} from './curb-survey.ts';
+import {marketAxis,medianTop} from './curb-survey.ts';
 import {createStreetPaint,StreetAssembly} from './street-amenities.ts';
 
-// Between the Millennium Light landings, the riders keep to the eastern
-// edge while people gather. After the crossing parties return to the curb,
-// the long carves run back across their paths on the same granite.
-const promenade=new THREE.CatmullRomCurve3([[-.17,-5.06],[-.12,-5.16],[-.07,-5.18],[-.074,-5.06],
-  [-.070,-4.83],[-.052,-4.55],[-.060,-4.38],[-.061,-4.31],[-.107,-4.34],[-.145,-4.56],
-  [-.177,-4.86]].map(([x,z])=>new THREE.Vector3(x-.028*(1-THREE.MathUtils.smoothstep(z,-4.79,-4.60)),0,z)),true,'centripetal');
-const island=new THREE.CatmullRomCurve3([[.026,-4.84],[.048,-4.62],[.061,-4.42],[.135,-4.35],
-  [.161,-4.40],[.16,-4.56],[.136,-4.79],[.105,-4.99],[.068,-5.09],[.024,-4.99]]
-  .map(([x,z])=>new THREE.Vector3(x-.028*(1-THREE.MathUtils.smoothstep(z,-4.79,-4.60)),0,z)),true,'centripetal');
-const lines=[promenade,island],laps=[signalPeriod/6,signalPeriod/5];
-const speeds=lines.map((line,i)=>line.getLength()/laps[i]);
-// This interval follows the two signal-controlled parties in plaza-walkers.
-function clearCrossing(elapsed:number){
-  const t=THREE.MathUtils.euclideanModulo(elapsed,signalPeriod);
-  return -.81*THREE.MathUtils.smoothstep(t,30,40)*(1-THREE.MathUtils.smoothstep(t,45,54));
-}
-const phase=[.05,.39,.72,.16,.51,.84],cadence=[3.3,3.68,3.12,3.84,3.42,3.58];
+// The Millennium Light bases are centered at (-2.218,-4.670) and
+// (1.266,-4.647). Two straight passes parallel their alignment, joined
+// by round carves just inside each set of octagonal steps.
+const southTurn=-1.46,northTurn=.51,straight=northTurn-southTurn;
+const radii=[.13,.23],laps=[signalPeriod/2,signalPeriod/3];
+// Stagger each trio through the pedestrian crossing during clear intervals.
+const phase=[0,.86,.92,.704,.76,.815],cadence=[3.3,3.68,3.12,3.84,3.42,3.58];
 export const plazaSkaterCount=phase.length;
-const point=new THREE.Vector3(),direction=new THREE.Vector3(),ahead=new THREE.Vector3();
 const smooth=THREE.MathUtils.smoothstep;
+
+function run(distance:number,radius:number){
+  const arc=Math.PI*radius;
+  if(distance<straight)return {x:southTurn+distance,z:-radius,dx:1,dz:0};
+  distance-=straight;
+  if(distance<arc){
+    const angle=distance/radius,s=Math.sin(angle),c=Math.cos(angle);
+    return {x:northTurn+radius*s,z:-radius*c,dx:c,dz:s};
+  }
+  distance-=arc;
+  if(distance<straight)return {x:northTurn-distance,z:radius,dx:-1,dz:0};
+  const angle=(distance-straight)/radius,s=Math.sin(angle),c=Math.cos(angle);
+  return {x:southTurn-radius*s,z:radius*c,dx:-c,dz:-s};
+}
+
 export function plazaSkaterPose(elapsed:number,index:number){
-  const lane=index<3?0:1,line=lines[lane];
-  const u=THREE.MathUtils.euclideanModulo(phase[index]+elapsed/laps[lane],1);
-  line.getPointAt(u,point);line.getTangentAt(u,direction);line.getTangentAt((u+.012)%1,ahead);
-  const offset=clearCrossing(elapsed),drift=(clearCrossing(elapsed+.025)-clearCrossing(elapsed-.025))/.05;
-  point.x+=offset;
-  direction.multiplyScalar(speeds[lane]);direction.x+=drift;
-  const speed=direction.length();direction.normalize();
-  ahead.multiplyScalar(speeds[lane]);ahead.x+=drift;ahead.normalize();
+  const lane=index<3?0:1,radius=radii[lane],length=2*(straight+Math.PI*radius),speed=length/laps[lane];
+  const distance=THREE.MathUtils.euclideanModulo(phase[index]+elapsed/laps[lane],1)*length;
+  const p=run(distance,radius),ahead=run((distance+.055)%length,radius);
+  const z=-4.57+p.z+.0066*(p.x+.476),dz=p.dz+.0066*p.dx;
+  // The surveyed granite band sits .00035 above its adjoining slab. Let
+  // the wheelbase bridge that lip as the two axles roll across it.
+  const bandDistance=Math.abs(p.x-marketAxis(z));
+  const y=medianTop+.00035*(1-smooth(bandDistance,.795,.825));
   const stride=THREE.MathUtils.euclideanModulo(elapsed/cadence[index]+phase[index]*2,1);
   // Step sideways off the deck, plant, propel backwards and recover. During
   // contact the foot travels backward at the rider’s own forward speed. Coast through the tightest ends of the run.
-  const turn=direction.x*ahead.z-direction.z*ahead.x;
-  const coast=smooth(Math.abs(turn),.20,.42);
+  const turn=p.dx*ahead.dz-p.dz*ahead.dx;
+  const coast=smooth(Math.abs(turn),.065,.19);
   const reach=(1-coast)*smooth(stride,0,.085)*(1-smooth(stride,.29,.42));
-  const drive=smooth(stride,.085,.14)*(1-smooth(stride,.22,.29));
+  const contact=Math.min(.08,.52*.06/(speed*cadence[index]));
+  const drive=smooth(stride,.085,.14)*(1-smooth(stride,.14+contact,.21+contact));
   const push=smooth(reach,.72,.97)*drive;
-  const stroke=THREE.MathUtils.clamp((stride-.14)/.08,0,1);
-  return {x:point.x,z:point.z,y:medianTop+.00035,heading:-Math.atan2(direction.z,direction.x),
-    lean:THREE.MathUtils.clamp(turn*.8,-.20,.20),push,soleHeight:.1195*(1-push)+.064*reach*(1-drive),footSide:reach*.245,footAlong:reach*(.29-speed*cadence[index]*.08/.06*stroke)};
+  const stroke=THREE.MathUtils.clamp((stride-.14)/contact,0,1);
+  const heading=-Math.atan2(dz,p.dx),footSide=reach*.245;
+  const footAlong=reach*(.29-speed*cadence[index]*contact/.06*stroke);
+  let soleHeight=.1195*(1-push)+.064*reach*(1-drive);
+  if(push){
+    const along=(-.194+footAlong*.714/.679)*.06,side=(.033+footSide*.714/.679)*.06;
+    const shoeX=p.x+along*Math.cos(heading)+side*Math.sin(heading);
+    const shoeZ=z-along*Math.sin(heading)+side*Math.cos(heading);
+    const surface=medianTop+(Math.abs(shoeX-marketAxis(shoeZ))<.81?.00035:0);
+    soleHeight+=push*(surface-y)/.06;
+  }
+  return {x:p.x,z,y,heading,
+    lean:THREE.MathUtils.clamp(turn*.8,-.20,.20),push,soleHeight,footSide,footAlong};
 }
 
 export function createPlazaSkaters(material=createStreetPaint()){
@@ -86,7 +101,7 @@ export function createPlazaSkaters(material=createStreetPaint()){
   });
   function batch(geometry:THREE.BufferGeometry,name:string,count:number){
     const m=new THREE.InstancedMesh(geometry,material,count);m.name=name;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    m.boundingSphere=new THREE.Sphere(new THREE.Vector3(-.39,.09,-4.75),.82);root.add(m);return m;
+    m.boundingSphere=new THREE.Sphere(new THREE.Vector3(-.475,.09,-4.57),1.34);root.add(m);return m;
   }
   const boards=batch(silhouettes[0].board,'Skateboards with four wheels',plazaSkaterCount);
   const legs=batch(silhouettes[0].back,'Trailing skate legs',plazaSkaterCount);

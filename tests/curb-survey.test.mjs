@@ -141,3 +141,47 @@ test('Harry Bridges northbound refuge has one finished surface through both slop
   }
   for(const part of floor.children)part.geometry.dispose();
 });
+
+test('the two median shoulders beside the streetcar have only one exposed stone surface',()=>{
+  const paving=createMarketPaving(),ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  let sections=0;
+  for(const [,island,path] of curbRuns){
+    if(!island)continue;
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i];
+      if(a[4]<1||b[4]<1)continue;
+      for(const offset of [.006,.022]){
+        const at=(j,n)=>.63*(a[j]-offset*a[n])+.37*(b[j]-offset*b[n]);
+        const x=at(0,2),z=at(1,3);
+        ray.ray.origin.set(x,.13,z);
+        const hits=ray.intersectObjects([...edges.children,paving],false);
+        const caps=hits.filter(h=>Math.abs(h.point.y-medianTop)<.00005);
+        assert.equal(caps.length,1,'overlapping or missing stone cap at '+[x,z]);
+        sections++;
+      }
+    }
+  }
+  assert.ok(sections>=65);
+});
+
+test('the palm at Don Chee and trees on the graded Market entrance meet the finished street',async()=>{
+  const {waterfrontGardens}=await import('../app/waterfront-gardens.ts');
+  const {sfMap}=await import('../app/sf-map.ts');
+  const world=createLandscape(),garden=waterfrontGardens(sfMap.buildings);
+  world.root.updateMatrixWorld(true);
+  const ground=[...world.architectureChunks,world.root.getObjectByName('Market granite and herringbone promenade')];
+  const found=garden.treeAnchors.filter(t=>t.id===13605369993||
+    (t.z>=-9.066&&t.z<=-6.249&&Math.abs(t.x-marketAxis(t.z))<.92&&t.id>0));
+  assert.equal(found.length,8);
+  for(const tree of found){
+    const trunk=garden.root.getObjectByName('Surveyed tree '+tree.id);
+    const base=trunk?new THREE.Box3().setFromObject(trunk,true).min.y:tree.y;
+    assert.ok(Math.abs(down(ground,tree.x,tree.z,.15)-base)<.0012,'trunk base '+tree.id);
+    if(tree.id===13605369993){
+      for(let i=0;i<24;i++){
+        const angle=i*Math.PI/12,r=.014;
+        assert.ok(Math.abs(down(ground,tree.x+r*Math.cos(angle),tree.z+r*Math.sin(angle),.15)-base)<.0012,'full palm trunk on planting side');
+      }
+    }
+  }
+});

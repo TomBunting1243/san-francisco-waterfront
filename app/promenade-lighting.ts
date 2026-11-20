@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {addPlazaStreetLights} from './plaza-street-lights.ts';
 import fixtures from '../public/data/promenade-lights.json' with {type:'json'};
 import gradeData from '../public/data/promenade-light-grades.json' with {type:'json'};
@@ -26,7 +27,11 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
     ox=x;oz=z;ground=y;cos=Math.cos(azimuth);sin=Math.sin(azimuth);
   }
   function position(u:number,h:number,v:number):[number,number,number]{
-    return [ox+units*(cos*u+sin*v),ground+h*units,oz+units*(-sin*u+cos*v)];
+    const x=ox+units*(cos*u+sin*v);
+    // Two cast feet straddle the transition to the northern quay. Fit the
+    // bottom course to its incline while the column and lantern stay plumb.
+    const foot=h===0&&ox>35&&ox<36?northWaterfrontGrade(x)-northWaterfrontGrade(ox):0;
+    return [x,ground+h*units+foot,oz+units*(-sin*u+cos*v)];
   }
   function vertex(u:number,h:number,v:number,tone:string){
     let color=palette.get(tone);

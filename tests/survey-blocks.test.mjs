@@ -131,3 +131,46 @@ test('daylight rays see both continental crossings, upstream stop lines and thei
   }
   assert.equal(paint.castShadow,false);assert.ok(paint.material.polygonOffsetUnits<0);
 });
+
+test('the two distal streets retain surveyed walks, trees, tracks and continuous passenger-lane asphalt',async()=>{
+  const {group,mesh}=geometryGroup();addSurveyBlocks(mesh);group.updateMatrixWorld(true);
+  const {northWaterfrontGrade,streetPose,trackAt,trackCenterlines,waterfrontRailTop}=await import('../app/streets.ts');
+  const market=group.getObjectByName('Market Street beyond Montgomery');
+  const quay=group.getObjectByName('Northern Embarcadero street and pier approaches');
+  assert.ok(market&&quay&&(market.geometry.index.count+quay.geometry.index.count)/3<6000);
+  const down=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  const surfaces=(m,x,z)=>{
+    down.ray.origin.set(x,8,z);
+    return down.intersectObject(m).map(face=>face.point.y);
+  };
+  for(const [x,y] of [[-13.2,.045],[-12.4,.031]]){
+    assert.ok(Math.abs(surfaces(market,x,-80)[0]-y)<.0001);
+  }
+  assert.ok(surfaces(market,-11.6,-80)[0]>.4);
+  assert.deepEqual(surfaces(market,-13.6,-80),[]);
+  assert.ok(Math.abs(surfaces(quay,50,-3)[0]-.068)<.0001);
+  const {default:data}=await import('../public/data/sightline-streets.json',{with:{type:'json'}});
+  for(const [,line] of data.rails){
+    const [[ax,az],[bx,bz]]=line,len=Math.hypot(bx-ax,bz-az);
+    const x=(ax+bx)/2,z=(az+bz)/2;
+    for(const sign of [-1,1]){
+      const d=sign*.06*1.435/2;
+      assert.ok(Math.abs(surfaces(market,x+d*(bz-az)/len,z+d*(ax-bx)/len)[0]-.062)<.0001);
+    }
+  }
+  for(let x=35.13;x<95.5;x+=.47){
+    const lane=streetPose(x,1),px=x+.185*Math.sin(lane.heading),z=lane.z+.185*Math.cos(lane.heading);
+    const ys=surfaces(quay,px,z),grade=northWaterfrontGrade(px);
+    assert.ok(ys.some(y=>Math.abs(y-grade)<.0001),'missing asphalt at '+px);
+    assert.ok(ys[0]-grade<.0031,'raised obstruction at '+px);
+    for(const road of outsideSurveyRoads.filter(r=>r.name==='The Embarcadero')){
+      assert.ok(!road.p.slice(1).some(([x2],i)=>px>Math.min(x2,road.p[i][0])&&px<Math.max(x2,road.p[i][0])),'duplicate fallback road at '+px);
+    }
+  }
+  for(const line of trackCenterlines){
+    assert.equal(line.at(-1)[0],96);
+    assert.ok(line.every(([x],i)=>i===0||x>line[i-1][0]));
+    assert.ok(Math.abs(trackAt(87,line).z-streetPose(87,1).z)<1.2);
+  }
+  assert.ok(Math.abs(waterfrontRailTop(85)-northWaterfrontGrade(85)-.003)<.0001);
+});

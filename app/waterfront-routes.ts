@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
-import {streetPose} from './streets.ts';
+import {northWaterfrontGrade,streetPose} from './streets.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
 import {streetVehicleNose} from './street-vehicles.ts';
@@ -218,7 +218,7 @@ export function waterfrontCar(time:number,index:number,region?:Region){
   const along=active?inlet+k:outlet-(k-span)/transfer*span;
   const x=dir*along,u=Math.max(0,Math.min(1600,(x-streetStart)/step));
   const i=Math.min(1599,Math.floor(u)),lane=carriageways[north?1:0],a=lane[i],b=lane[i+1];
-  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:.04025,heading:a.heading,active};
+  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:northWaterfrontGrade(x)+.00925,heading:a.heading,active};
 }
 
 export function waterfrontCyclist(time:number,index:number){

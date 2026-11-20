@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import {westMarketGround} from './curb-survey.ts';
 
 const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 const clamp=(value:number)=>Math.max(0,Math.min(1,value));
@@ -43,13 +42,13 @@ const extensionRows:[number,number[]][]=[
 const sites:Site[]=[
   ...frontPitches.map(([x,stall])=>({x,z:-1.84,floor:.031,section:'front' as const,stall})),
   ...rearRows.flatMap(([z,row])=>row.map(x=>({x,z,floor:.096,section:'rear' as const,stall:'produce' as const}))),
-  ...[[.713,-8.175],[.787,-8.450],[.900,-8.713],[1.025,-8.988],[1.175,-9.238]].map(([x,z])=>({x,z,floor:.127-.0012*(x-2)+.0008*(z+8),section:'artist' as const})),
-  // Two white display footprints beside the striped Market approach. Centers read
-  // from SF's p2024_rgb8cm aerial, preserving the walking lane between its rows.
-  // SFAC Art Vendor Map 30 shows the lottery pitches and open passages here.
+  // SFAC Map 30 puts a row beside the lower plaza, between the Hyatt and the
+  // restroom/palms. The 2024 aerial locates the bend of the step. Set the tents
+  // back on the level paved side and face their counters into the upper aisle.
   // https://media.api.sf.gov/documents/Revolution_by_MarcoCochrane_B180_SFAC.pdf#page=18
-  ...[[-.71,-6.56],[-.72,-6.98]].map(([x,z],i)=>({x,z,floor:westMarketGround(x,z)+.00035,section:'artist' as const,approach:i===0?'prints' as const:'shirts' as const})),
-  // Keep the established art displays on their original pitch numbers.
+  ...[[.71,-9.87],[.69,-9.63],[.66,-9.39],[.63,-9.15],[.57,-8.91],[.42,-8.67],[.30,-8.43]]
+    .map(([x,z],i)=>({x,z,floor:.116,section:'artist' as const,turn:true,
+      approach:i===5?'prints' as const:i===6?'shirts' as const:undefined})),
   ...[-.94,-.55,-.16,.62,1.02,1.42].map((z,i)=>({x:-6.89,z,floor:.106,section:'rear' as const,
     stall:i===2?'flowers' as const:'produce' as const,turn:true})),
   {x:-5.84,z:-1.84,floor:.031,section:'front',stall:'produce'},
@@ -99,7 +98,6 @@ export function createFerryMarket(){
         let tint=colors.get(color);if(!tint)colors.set(color,tint=new THREE.Color(color));
         mesh.setColorAt(mesh.count++,tint);
       }
-      const groundOffset=(x:number,z:number)=>!site.approach?0:westMarketGround(site.x+x,site.z+z)+.00035-site.floor;
       const steel='#68726b',wood='#a18260';
       const cartX=.28*(1-range(phase,0,.24))+.09,cartZ=.12;
       if(phase<.88){
@@ -112,16 +110,15 @@ export function createFerryMarket(){
       }
       const workerX=cartX+.066-.13*range(phase,.42,.82),workerZ=cartZ-.05*range(phase,.4,.88);
       function person(x:number,z:number,coat:string,reach=0){
-        const ground=groundOffset(x,z);
-        for(const side of [-1,1])shape(boxes,x+side*.007,ground+.021,z,.008,.042,.011,'#465453',side*.04);
-        shape(rounds,x,ground+.059,z,.035,.050,.025,coat);
-        shape(rounds,x,ground+.092,z,.022,.025,.022,'#b89175');
+        for(const side of [-1,1])shape(boxes,x+side*.007,.021,z,.008,.042,.011,'#465453',side*.04);
+        shape(rounds,x,.059,z,.035,.050,.025,coat);
+        shape(rounds,x,.092,z,.022,.025,.022,'#b89175');
         for(const side of [-1,1]){
           if(reach&&side===reach){
-            shape(boxes,x+side*.015,ground+.067,z+reach*.006,.009,.023,.010,coat,0,-reach*.52);
-            shape(boxes,x+side*.015,ground+.060,z+reach*.020,.008,.022,.009,coat,0,reach*1.43);
-            shape(rounds,x+side*.015,ground+.061,z+reach*.033,.010,.009,.013,'#b89175');
-          }else shape(boxes,x+side*.016,ground+.058,z-.003,.008,.034,.009,coat,side*.18);
+            shape(boxes,x+side*.015,.067,z+reach*.006,.009,.023,.010,coat,0,-reach*.52);
+            shape(boxes,x+side*.015,.060,z+reach*.020,.008,.022,.009,coat,0,reach*1.43);
+            shape(rounds,x+side*.015,.061,z+reach*.033,.010,.009,.013,'#b89175');
+          }else shape(boxes,x+side*.016,.058,z-.003,.008,.034,.009,coat,side*.18);
         }
       }
       const counterShift=printCounter ? .05 : 0;
@@ -141,8 +138,8 @@ export function createFerryMarket(){
       const cloth=artist?'#f6f4e8':site.stall==='info'?'#408456':site.stall==='tasting'?'#da7731':rearCloth??canvas[i%canvas.length];
       if(phase>.18){
         for(const dx of [-1,1])for(const dz of [-1,1]){
-          const x=dx*width*.47,z=dz*depth*.47,base=groundOffset(x,z);
-          shape(boxes,x,(frame+base)/2,z,.003,frame-base,.003,steel);
+          const x=dx*width*.47,z=dz*depth*.47;
+          shape(boxes,x,frame/2,z,.003,frame,.003,steel);
         }
         const height=.022+.032*spread;
         shape(roofs,0,frame+height/2,0,width,height,depth,cloth);
@@ -154,8 +151,8 @@ export function createFerryMarket(){
         const tableX=.05*(1-unfold),topWidth=site.stall?width*.87:.128;
         shape(boxes,tableX,tableY,-.031+counterShift,topWidth,.007,.047,wood,(1-unfold)*.29);
         for(const side of [-1,1])for(const dz of [-.016,.016]){
-          const x=tableX+side*topWidth*.375,z=-.031+dz+counterShift,base=groundOffset(x,z);
-          shape(boxes,x,(tableY+base)/2,z,.003,tableY-base,.003,steel);
+          const x=tableX+side*topWidth*.375,z=-.031+dz+counterShift;
+          shape(boxes,x,tableY/2,z,.003,tableY,.003,steel);
         }
       }
       if(site.section==='front'){
@@ -208,7 +205,7 @@ export function createFerryMarket(){
         // https://www.cityartapparel.com/about
         const rack=.056+.068*range(phase,.57,.81);
         for(const x of [-.067,.067]){
-          const base=groundOffset(x,.069);shape(boxes,x,(rack+base)/2,.069,.003,rack-base,.003,steel);
+          shape(boxes,x,rack/2,.069,.003,rack,.003,steel);
         }
         shape(boxes,0,rack,.069,.137,.003,.003,steel);
         for(const [x,color] of [[-.040,'#d4b584'],[0,'#7e9fa0'],[.040,'#ece2c9']] as const){
@@ -217,7 +214,7 @@ export function createFerryMarket(){
           shape(boxes,x,rack-.023,.062,.016,.008,.001,'#465d63');
         }
         for(const z of [-.04,.04]){
-          const base=groundOffset(-.078,z);shape(boxes,-.078,(rack+base)/2,z,.003,rack-base,.003,steel);
+          shape(boxes,-.078,rack/2,z,.003,rack,.003,steel);
         }
         shape(boxes,-.078,rack,0,.003,.003,.084,steel);
         for(let k=0;k<5;k++){

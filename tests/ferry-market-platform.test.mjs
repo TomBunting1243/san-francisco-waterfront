@@ -116,3 +116,28 @@ test('both Ferry Terminal roofs clear the plaza trees and their wells stand on t
     }
   }
 });
+
+test('the median bough before the Ferry Building clears the rigid PCC through the curve',async()=>{
+  const {waterfrontGardens}=await import('../app/waterfront-gardens.ts');
+  const {sfMap}=await import('../app/sf-map.ts');
+  const {streetcarRideBody}=await import('../app/streetcar-ride-path.ts');
+  const {pccDimensions:car}=await import('../app/pcc-layout.ts');
+  const garden=waterfrontGardens(sfMap.buildings),tree=garden.root.getObjectByName('Surveyed tree -870123');
+  tree.updateMatrixWorld(true);
+  const body=new T.Object3D(),transform=new T.Matrix4(),tri=new T.Triangle();
+  const box=new T.Box3(new T.Vector3(-car.length/2,0,-car.width/2),new T.Vector3(car.length/2,car.height,car.width/2));
+  for(let station=-6.25;station< -4.2;station+=.04){
+    const p=streetcarRideBody(station);
+    body.position.set(p.x,p.y,p.z);body.rotation.set(0,p.heading,p.pitch);body.updateMatrixWorld();
+    for(const part of tree.children){
+      transform.copy(body.matrixWorld).invert().multiply(part.matrixWorld);
+      const g=part.geometry;
+      for(let k=0;k<g.index.count;k+=3){
+        tri.a.fromBufferAttribute(g.attributes.position,g.index.getX(k)).applyMatrix4(transform);
+        tri.b.fromBufferAttribute(g.attributes.position,g.index.getX(k+1)).applyMatrix4(transform);
+        tri.c.fromBufferAttribute(g.attributes.position,g.index.getX(k+2)).applyMatrix4(transform);
+        assert.ok(!box.intersectsTriangle(tri),part.name+' enters the car at '+station);
+      }
+    }
+  }
+});

@@ -1,3 +1,4 @@
+import {northWaterfrontGrade} from './streets.ts';
 import {hillsBuildings,hillsSign} from './hills-plaza.ts';
 export {setPccFrontDoor,setPccExitDoor} from './streetcar.ts';
 import {rinconGardenBorder} from './rincon-curb-edge.ts';
@@ -169,11 +170,31 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       const m=box(width,.028,length,(ax+bx)/2,y,(az+bz)/2,color);m.rotation.y=Math.atan2(bx-ax,bz-az);
     }
   }
+  function northRoadStrip(points:number[][],width:number,lift:number,color:string){
+    // The road survey ends at a constant x station. Match that section
+    // so the outer wheel track stays paved across the angled boundary.
+    const vertices:number[]=[];
+    for(let i=1;i<points.length;i++){
+      const [a,b]=points[i-1][0]<points[i][0]?[points[i-1],points[i]]:[points[i],points[i-1]];
+      if(b[0]===a[0])continue;
+      const half=.5*width*Math.hypot(1,(b[1]-a[1])/(b[0]-a[0]));
+      const ay=northWaterfrontGrade(a[0])+lift,by=northWaterfrontGrade(b[0])+lift;
+      const left=[a[0],ay,a[1]-half],right=[a[0],ay,a[1]+half];
+      const nextLeft=[b[0],by,b[1]-half],nextRight=[b[0],by,b[1]+half];
+      vertices.push(...left,...right,...nextLeft,...nextLeft,...right,...nextRight);
+    }
+    const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    geometry.computeVertexNormals();mesh(geometry,color,0,0,0);
+  }
   addSurveyBlocks(mesh);
   outsideSurveyRoads.forEach(road=>{
     const width=road.name.includes('Embarcadero')?1.02:road.name==='Market Street'?1.45:road.kind==='primary'?.8:.48;
-    linePath(road.p,width,.04,'#889b9a');
-    if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
+    if(road.name==='The Embarcadero'&&road.p.every(([x])=>x>=35)){
+      northRoadStrip(road.p,width,0,'#889b9a');northRoadStrip(road.p,.027,.0009,'#d4d3ba');
+    }else{
+      linePath(road.p,width,.04,'#889b9a');
+      if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
+    }
   });
   sfMap.parks.forEach(park=>{
     if(addBechtelPlaza(park,root))return;
@@ -389,7 +410,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       const t=i/96,z=from+(to-from)*t,y=ya+(yb-ya)*t-(main?4.7:1.65)*4*t*(1-t);
       points.push(new THREE.Vector3(x,y,z));
       if(i%3===0&&i>0&&i<96)addBayLightStrand(cableLightPositions,x,z,y);
-      if(i%3===0&&y>deckHigh+.12)pole(new THREE.Vector3(x,deckHigh+.05,z),new THREE.Vector3(x,y,z),.017,'#94aaa9',bridge);
+      if(i%3===0&&y>deckHigh+.12&&!(to===bridgeEnd&&i===96))pole(new THREE.Vector3(x,deckHigh+.05,z),new THREE.Vector3(x,y,z),.017,'#94aaa9',bridge);
     }
     mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.027,5,false),'#516d79',0,0,0,bridge);
   }

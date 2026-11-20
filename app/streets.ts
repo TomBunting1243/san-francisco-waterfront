@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import map from '../public/data/sf-waterfront.json' with {type:'json'};
+import {northQuayStations,northWaterfrontGrade} from './north-quay-grade.ts';
+import extensions from '../public/data/sightline-streets.json' with {type:'json'};
+export {northWaterfrontGrade};
 import tracks from '../public/data/embarcadero-tracks.json' with {type:'json'};
 const segments=map.roads.filter(r=>r.name==='The Embarcadero').flatMap(r=>r.p.slice(1).map((b,i)=>({a:r.p[i],b}))).filter(s=>Math.abs(s.b[0]-s.a[0])>.01);
 /** Sample the actual curved carriageways, retaining their mapped separation. */
@@ -20,12 +23,14 @@ export const streetcarTrack={
 export const junctionRailTop=.0331;
 export function waterfrontRailTop(x:number){
   const flat=Math.min(THREE.MathUtils.smoothstep(x,-9.85,-8.90),1-THREE.MathUtils.smoothstep(x,-6.40,-5.45));
-  return THREE.MathUtils.lerp(streetcarTrack.railTop,junctionRailTop,flat);
+  // The four rail heads also pass flush across the Howard Street roadway.
+  const howard=Math.min(THREE.MathUtils.smoothstep(x,-25.50,-24.83),1-THREE.MathUtils.smoothstep(x,-23.52,-22.85));
+  return THREE.MathUtils.lerp(streetcarTrack.railTop,junctionRailTop,Math.max(flat,howard))+(x>64?northWaterfrontGrade(x)-.054:0);
 }
 export function donCheeRailTop(z:number){
   return THREE.MathUtils.lerp(.062,junctionRailTop,THREE.MathUtils.smoothstep(z,-5.3,-4.65));
 }
-export const trackCenterlines=tracks.tracks;
+export const trackCenterlines=tracks.tracks.map((line,i)=>[...line,...extensions.outerTracks[i]]);
 export function trackAt(x:number,line=trackCenterlines[0]){
   let lo=0,hi=line.length-1;
   while(hi-lo>1){
@@ -57,7 +62,7 @@ export function buildStreetcarTrack(box:TrackBox,pole:TrackPole){
     // Retain surveyed plan segments while resolving the short approach grades.
     const track=original.flatMap((p,i)=>{
       if(i===0)return [p];
-      const a=original[i-1],cuts=[-9.85,-9.60,-9.37,-9.14,-8.90,-6.40,-6.16,-5.92,-5.69,-5.45];
+      const a=original[i-1],cuts=[-25.50,-25.28,-25.06,-24.83,-23.52,-23.30,-23.08,-22.85,-9.85,-9.60,-9.37,-9.14,-8.90,-6.40,-6.16,-5.92,-5.69,-5.45,...northQuayStations];
       return [...cuts.filter(x=>a[0]<x&&x<p[0]).map(x=>[x,a[1]+(p[1]-a[1])*(x-a[0])/(p[0]-a[0])]),p];
     });
     let nextSupport=0;
@@ -81,7 +86,7 @@ export function buildStreetcarTrack(box:TrackBox,pole:TrackPole){
         // One cantilever per track, on the outside of the pair.
         const side=original===trackCenterlines[0]?1:-1;
         const sx=x+nx*side*.25,sz=z+nz*side*.25;
-        pole(new THREE.Vector3(sx,.032,sz),new THREE.Vector3(sx,wireY+.04,sz),.0055,'#345564');
+        pole(new THREE.Vector3(sx,.032+(sx>64?northWaterfrontGrade(sx)-.054:0),sz),new THREE.Vector3(sx,wireY+.04,sz),.0055,'#345564');
         pole(new THREE.Vector3(sx,wireY+.035,sz),new THREE.Vector3(x,wireY,z),.0028,'#345564');
       }
     }

@@ -258,7 +258,50 @@ def add_ferry_refuge(data):
     refuge_paving.extend(facets(refuge.difference(unary_union(margins)),lambda x,z:.040644))
     data['ferryRefugePaving']=refuge_paving
     data['ferryRefugeAprons']=refuge_aprons
+def join_median_corners(data):
+    # Separate survey runs meet at identical plan coordinates. A shared
+    # miter keeps the end curb sections edge-to-edge at those three corners.
+    ends={}
+    for _,median,path in data['lines']:
+        if median:
+            for v in [path[0],path[-1]]:ends.setdefault(tuple(v[:2]),[]).append(v)
+    for pair in ends.values():
+        if len(pair)!=2:continue
+        a,b=pair
+        scale=math.hypot(a[2]+b[2],a[3]+b[3])
+        normal=[round((a[j]+b[j])/scale,6) for j in [2,3]]
+        a[2:]=b[2:]=[*normal,min(a[4],b[4])]
+
+def trim_median_caps(data):
+    # The curb mesh owns its stone lip and shoulder. Clip the island surfacing
+    # against those exact station offsets, including the wider lowered ramps.
+    caps=[]
+    for source,median,path in data['lines']:
+        if not median:continue
+        for a,b in zip(path,path[1:]):
+            back=.157 if min(a[4],b[4])<1 else .031
+            def offset(v,t):return (v[0]-t*v[2],v[1]-t*v[3])
+            for inner,outer in [(0,.011),(.011,back)]:
+                p,q=offset(a,inner),offset(b,inner)
+                r,s=offset(b,outer),offset(a,outer)
+                caps.extend(t for t in [Polygon([p,q,r]),Polygon([p,r,s])] if t.area>1e-12)
+    mask=unary_union(caps)
+    for key in ['medianSlab','medianPaving']:
+        result=[]
+        for points in data[key]:
+            tri=Polygon(points)
+            if not tri.intersects(mask):
+                result.append(points)
+                continue
+            for poly in pieces(tri.difference(mask),'Polygon'):
+                for cut in constrained_delaunay_triangles(poly).geoms:
+                    if cut.area>1e-12:
+                        result.append([[round(x,7),round(z,7)] for x,z in list(cut.exterior.coords)[:3]])
+        data[key]=result
+
+join_median_corners(data)
 add_ferry_refuge(data)
+trim_median_caps(data)
 # Keep high plaza brick outside the graded former street entrance.
 west=strip(-6.249,-9.066,1.23)
 park=Polygon(next(v['p'] for v in sf['parks'] if v['name']=='Embarcadero Plaza'))

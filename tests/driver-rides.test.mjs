@@ -7,6 +7,10 @@ import {bridgeLayout,bridgePoint} from '../app/bridge-layout.ts';
 import {westboundExitPose,fremontFork,buildApproachRoad} from '../app/approach-road.ts';
 import {bayReliefGround} from '../app/bay-relief.ts';
 import {museumDoorStation} from '../app/streetcar-ride-path.ts';
+import {northWaterfrontGrade,streetPose} from '../app/streets.ts';
+import {waterfrontCar,waterfrontCarCount} from '../app/waterfront-routes.ts';
+import {ambientStreetcarCall} from '../app/washington-call.ts';
+import {roadStopLines,signalAspects} from '../app/waterfront-signals.ts';
 import {pccDimensions} from '../app/streetcar.ts';
 
 const near=(x,y,eps=1e-6)=>assert.ok(Math.abs(x-y)<=eps,x+' vs '+y);
@@ -73,14 +77,15 @@ test('the westbound driver clears YBI and stays at seated eye height over both c
   }
   // Beyond the fork the driver follows the Fremont exit to its broad right
   // curve; the mainline here continues several hundred metres further south.
-  assert.ok(end.eye.x> -46&&end.eye.z> -47&&end.look.x>end.eye.x+2.45);
-  near(end.station,-32);assert.ok(end.eye.y<start.eye.y-.95);
+  const curve=driverPose('bridge',(start.station+32)/1.10);
+  assert.ok(curve.eye.x> -46&&curve.eye.z> -47&&curve.look.x>curve.eye.x+2.45);
+  assert.ok(end.eye.x>82.5&&end.eye.x<82.6&&end.eye.y<start.eye.y-3);
   const streams=[];
   road.traverse(node=>{if(node.isInstancedMesh&&node.name==='Skyway traffic')streams.push(node);});
   assert.equal(streams.length,4);
   const matrix=new T.Matrix4(),point=new T.Vector3();
   // Include the joint from the span side and every frame of the descending approach.
-  for(let tick=Math.floor((start.station-6)/1.1*30);tick<=Math.ceil(rideDuration('bridge')*30);tick++){
+  for(let tick=Math.floor((start.station-6)/1.1*30);tick<=245*30;tick++){
     const t=tick/30,p=driverPose('bridge',t);
     updateApproach(t);
     const dx=p.look.x-p.eye.x,dz=p.look.z-p.eye.z,n=Math.hypot(dx,dz);
@@ -129,7 +134,7 @@ test('routes clamp at their endpoints without wrapping and have continuous forwa
 });
 
 
-test('westbound lead-in retains five lanes, two shoulders and asphalt through the tunnel mouth',async()=>{
+test('constructed pavement supports the five-lane tunnel entrance and all three tire probes through Chestnut',async()=>{
   const {createLandscape}=await import('../app/landscape.ts');
   const {architectureChunks}=createLandscape(),ray=new T.Raycaster();
   const down=new T.Vector3(0,-1,0),y=bridgeLayout.upperDeck;
@@ -150,6 +155,8 @@ test('westbound lead-in retains five lanes, two shoulders and asphalt through th
       assert.ok(hit.normal.y>.9999);
     }
   }
+  const hiddenEnd=bridgePoint(.432,bridgeLayout.length+10.10);
+  assert.ok(bayReliefGround(hiddenEnd.x,hiddenEnd.z)>y+.0755+.7);
   const join=bridgeLayout.length;
   for(const z of [join-.003,join+.003,join+7.65,join+8.6,join+10.05]){
     matches(surface(0,z),'#728383',.0755);
@@ -163,4 +170,61 @@ test('westbound lead-in retains five lanes, two shoulders and asphalt through th
       matches(surface(x,z+.30),'#728383',.0755);
     }
   }
+  // Probe the actual baked road under both sides of the sedan and its center.
+  // A ray starting just above the expected roof also catches raised curbs or rails.
+  function tireOnRoad(x,z,pavement){
+    const chunks=architectureChunks.filter(({geometry:g})=>{
+      const {min,max}=g.boundingBox;
+      return x>=min.x&&x<=max.x&&z>=min.z&&z<=max.z&&pavement+.14>=min.y&&pavement-.02<=max.y;
+    });
+    ray.set(new T.Vector3(x,pavement+.14,z),down);ray.far=.16;
+    const hit=ray.intersectObjects(chunks,false)[0];
+    assert.ok(hit&&Math.abs(hit.point.y-pavement)<.009,'sedan tire at '+[x.toFixed(2),z.toFixed(2),hit?.point.y,pavement]);
+  }
+  for(let t=230;t<rideDuration('bridge');t+=3.83){
+    const {eye,look}=driverPose('bridge',t),vx=look.x-eye.x,vz=look.z-eye.z,n=Math.hypot(vx,vz);
+    for(const offset of [-.054,0,.054])
+      tireOnRoad(eye.x-(.38*.06+offset)*vz/n,eye.z+(.38*.06+offset)*vx/n,eye.y-1.18*.06);
+  }
+  // Continue down the road visible ahead of the parked sedan, across the
+  // far end of the survey into the lower-detail boulevard.
+  for(const x of [84,89,95.93,96,96.07,98,102]){
+    const road=streetPose(x);
+    for(const offset of [.131,.185,.239]){
+      const wheelX=x+offset*Math.sin(road.heading);
+      tireOnRoad(wheelX,road.z+offset*Math.cos(road.heading),northWaterfrontGrade(wheelX));
+    }
+  }
+});
+
+test('the sedan follows Fremont and Howard, clears moving cars and crosses the three waterfront signals on green',()=>{
+  const milestones=[[243,-34,-31.1],[255,-29.3,-31.8],[290,-26.3,-14.6],[320,-22.9,-1],
+    [350,-5.15,-2.75],[410,11.49,-2.89],[450,35.44,-2.15],[500,65.43,-1.66],[532,82.53,-3.2]];
+  for(const [t,x,z] of milestones){
+    const {eye}=driverPose('bridge',t);
+    assert.ok(Math.hypot(eye.x-x,eye.z-z)<.45,'city landmark at '+t);
+  }
+  const duration=rideDuration('bridge'),end=driverPose('bridge',duration);
+  assert.deepEqual(driverPose('bridge',duration-2.999),end);
+  assert.ok(distance(driverPose('bridge',duration-3.5).eye,end.eye)<.02);
+  assert.ok(end.look.x>end.eye.x+2.3);
+  const stops=Object.values(roadStopLines.north),crossings=[];
+  let previousX=-Infinity;
+  for(let t=305;t<=duration;t+=.1){
+    const {eye,look}=driverPose('bridge',t);
+    const dx=look.x-eye.x,dz=look.z-eye.z,n=Math.hypot(dx,dz);
+    const x=eye.x-.0228*dz/n,z=eye.z+.0228*dx/n;
+    for(const line of stops)if(previousX+.14<line&&x+.14>=line){
+      assert.equal(signalAspects(t)[0],2,'nose crossed stop line on green at '+t);crossings.push(line);
+    }
+    previousX=x;
+    if(t>=310&&t<=319)assert.ok(Math.abs(x-ambientStreetcarCall(t).station)>2,'clear of PCC while crossing the rails');
+    for(let i=0;i<waterfrontCarCount();i++){
+      const car=waterfrontCar(t,i);
+      if(!car.active)continue;
+      const a=car.x-x,b=car.z-z;
+      assert.ok(Math.abs((a*dx+b*dz)/n)>.30||Math.abs((a*dz-b*dx)/n)>.14,'clear of car '+i+' at '+t);
+    }
+  }
+  assert.deepEqual(crossings,stops);
 });

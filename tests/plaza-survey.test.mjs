@@ -28,6 +28,8 @@ test('all observed crowns are rendered on mapped stems at lidar height and sprea
     if(tree.userData.stationClearance){
       assert.ok(Math.abs(x-row.p[0])<.0015&&Math.abs(z-row.p[1])<.19,'small cross-track registration of obscured wells');
       assert.equal(gardens.treeAnchors.find(t=>t.id===row.id).z,z);
+    }else if(row.id===13605369993){
+      assert.ok(Math.abs(x-row.p[0])<.00051&&Math.abs(z-row.p[1]-.052)<.00051,'yard palm registers to planting side of curb');
     }else assert.ok(Math.hypot(x-row.p[0],z-row.p[1])<.0015);
     assert.equal(gardens.treeAnchors.filter(t=>t.id===row.id).length,1);
     const bounds=new THREE.Box3().setFromObject(tree,true),size=bounds.getSize(new THREE.Vector3());

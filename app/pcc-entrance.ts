@@ -22,11 +22,13 @@ export function foldingEntrance(exterior=false){
       if(hi>lo)rail(x,(lo+hi)/2,width,hi-lo,tint);
     }
   };
-  for(const u of [.037,w-.037])painted(u,0,leafHeight,.074);
+  // The closing-edge rubber occupies the last 24 mm of the stile.
+  painted(.037,0,leafHeight,.074);
+  painted(w-.049,0,leafHeight,.050);
   for(const [a,b] of [[0,.15],[.44,.56],[.86,1.36],[1.87,leafHeight]])painted(w/2,a,b,w-.148);
   for(const [a,b] of [[.15,.44],[.56,.86],[1.36,1.87]]){
     for(const u of [.081,w-.081])rail(u,(a+b)/2,.014,b-a,gasket);
-    for(const y of [a+.009,b-.009])rail(w/2,y,w-.174,.018,trim);
+    for(const y of [a+.009,b-.009])rail(w/2,y,w-.176,.018,trim);
   }
   rail(w-.012,leafHeight*.5,.024,leafHeight,'#465249');
   const material=createStreetPaint(),source=frame.bake(doorName,material);

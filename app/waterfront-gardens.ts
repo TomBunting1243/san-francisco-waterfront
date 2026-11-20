@@ -8,7 +8,7 @@ import treeSurvey from '../public/data/waterfront-tree-survey.json' with {type:'
 import landscapeData from '../public/data/waterfront-landscape.json' with {type:'json'};
 import {sfMap,center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
-import {harryBridgesGround} from './curb-survey.ts';
+import {harryBridgesGround,marketAxis,westMarketGround} from './curb-survey.ts';
 import {plazaTreeRecords,addSurveyedTree,treePavingHeight} from './plaza-survey.ts';
 import {waterfrontPalm,waterfrontTree} from './waterfront-trees.ts';
 
@@ -100,17 +100,25 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     const palms=canopy?.palm||record?.species==='Phoenix canariensis'||
       (node.id>=10828325148&&node.id<=10828325152)||(node.id>=10828325274&&node.id<=10828325286);
     const trunkRadius=record?.dbhInches ? record.dbhInches*.0254*.06/2 : undefined;
-    const support=harryBridgesGround(x,z)??(area?(biermanParcel(area.id)?y:y+.024):inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
-    if(record)treeWell(mesh,record.sfId,x,support,z,-Math.atan(.15));
-    if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,z,palms,record?.species??node.species,trunkRadius)){
-      treeAnchors.push({id:node.id,x,y:support,z});
+    // The former Market street descends through the plaza; its seven trunks
+    // follow this strip's grade, including the two ends below the terrace.
+    const onMarketRamp=z>=-9.066&&z<=-6.249&&Math.abs(x-marketAxis(z))<.92;
+    // Public Works palm 194324 is a yard planting. Its map point lands on
+    // the battered Don Chee curb. The nearest level .045 sidewalk supports
+    // the complete 18-inch trunk ring 0.052 units toward the planting side.
+    const medianPalm=record?.sfId===194324,plantZ=medianPalm?z+.052:z;
+    const localGrade=onMarketRamp?westMarketGround(x,z)+.00035:medianPalm?.045:undefined;
+    const support=localGrade??harryBridgesGround(x,z)??(area?(biermanParcel(area.id)?y:y+.024):inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
+    if(record)treeWell(mesh,record.sfId,x,support,plantZ,-Math.atan(.15));
+    if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,plantZ,palms,record?.species??node.species,trunkRadius)){
+      treeAnchors.push({id:node.id,x,y:support,z:plantZ});
     }else if(palms){
       const seed=Math.abs(Math.sin(node.id));
-      waterfrontPalm(mesh,x,y,z,node.id,.52+.13*seed,.20+.04*seed,trunkRadius);
-      treeAnchors.push({id:node.id,x,y,z});
+      waterfrontPalm(mesh,x,localGrade??y,z,node.id,.52+.13*seed,.20+.04*seed,trunkRadius);
+      treeAnchors.push({id:node.id,x,y:localGrade??y,z});
     }else{
       const atRincon=x> -43&&x< -24.8&&z> -3;
-      tree(x,z,y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
+      tree(x,z,localGrade??y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
     }
   }
   // Two broadleaf rows on Harry Bridges Plaza are absent from the OSM extract.

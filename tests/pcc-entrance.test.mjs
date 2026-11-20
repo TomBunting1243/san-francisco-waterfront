@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {bakePccBody,createStreetcar,setPccFrontDoor,setPccExitDoor} from '../app/streetcar.ts';
 import {createRideInteriors} from '../app/ride-interior.ts';
 import {pccFrontDoorX,pccFrontLeafWidth,pccCabDoorZ,pccExitX,pccExitSpacing} from '../app/pcc-layout.ts';
-import {pccTreads} from '../app/pcc-entrance.ts';
+import {foldingEntrance,pccTreads} from '../app/pcc-entrance.ts';
 
 const zDir=new THREE.Vector3(0,0,-1);
 function ray(x,y,z,direction=zDir,far=.7){
@@ -173,4 +173,15 @@ test('driver eye sees a continuous PCC body around the clear panes and working e
     setDoor(0);
   }
   cab.dispose();
+});
+
+test('folding-door rubber edges and window trim have a single visible face on both sides',()=>{
+  for(const exterior of [false,true]){
+    const leaves=foldingEntrance(exterior);
+    const leaf=new THREE.Mesh(leaves.geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+    for(const side of [-1,1])for(const [u,y] of [[.4,.28],[.4,1.7],[.0874,.154],[.3224,1.866]]){
+      const hits=ray(u,y,side*.10,new THREE.Vector3(0,0,-side),.09).intersectObject(leaf);
+      assert.equal(hits.length,1,'one visible pigment at '+[u,y,side,exterior]);
+    }
+  }
 });

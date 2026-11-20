@@ -3,7 +3,7 @@ import test from 'node:test';
 import * as THREE from 'three';
 import {createBridgeTraffic} from '../app/traffic-batches.ts';
 import {streetVehicleMaterial} from '../app/street-vehicles.ts';
-import {bridgeLayout} from '../app/bridge-layout.ts';
+import {bridgeLayout,bridgePoint} from '../app/bridge-layout.ts';
 import {bridgeLaneCenters} from '../app/bridge-deck.ts';
 import {driverPose,rideDuration} from '../app/driver-rides.ts';
 
@@ -48,13 +48,22 @@ test('the driver has a reserved moving gap, neighboring passes, and physically s
   }
   assert.equal(westSpeeds.size,5);assert.equal(eastSpeeds.size,5);
   for(let tick=0;tick<=Math.ceil(end*4);tick++){
-    const t=Math.min(end,tick/4),station=driverPose('bridge',t).station;
+    const t=Math.min(end,tick/4),{station,eye}=driverPose('bridge',t);
     update(t);
     for(const west of [true,false])for(const x of bridgeLaneCenters){
       const lane=cars.filter(c=>(c.rotation.y>0)===west&&c.position.x===x).map(c=>c.position.z).sort((a,b)=>a-b);
       assert.ok(lane.length>=5);
       const length=bridgeLayout.length+(west?8.6:0);
       for(let i=0;i<lane.length;i++)assert.ok(((lane[(i+1)%lane.length]-lane[i]+length)%length)>9);
+    }
+    // Past the deck joint, station measures distance down the exit and
+    // through city streets. Compare the real positions of those vehicles.
+    if(station<0){
+      for(const {position} of cars){
+        const p=bridgePoint(position.x,position.z);
+        assert.ok(Math.hypot(p.x-eye.x,position.y-eye.y,p.z-eye.z)>.4,'bridge vehicle clearance at '+t);
+      }
+      continue;
     }
     let neighbors=0;
     for(const car of upper){

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import survey from '../public/data/plaza-survey.json' with {type:'json'};
 import {fitStationTree} from './ferry-market-platform.ts';
+import {pccDimensions} from './pcc-layout.ts';
+import {trackAt,waterfrontRailTop} from './streets.ts';
 import {bayReliefGround} from './bay-relief.ts';
 import {waterfrontTree,waterfrontPalm} from './waterfront-trees.ts';
 
@@ -15,6 +17,33 @@ const roadTops:Record<string,number>={curb:.049,sidewalk:.045,street:.031,alley:
 export function treePavingHeight(record:Canopy){
   const [x,z]=record.p;
   return Math.max(bayReliefGround(x,z),roadTops[record.surface??'']??-Infinity);
+}
+
+// The survey resolves a broad plane crown next to the northbound curve. Its
+// rail-facing low bough must leave room for the full PCC body and its sweep.
+function clearMedianBough(tree:THREE.Group){
+  const center=trackAt(tree.position.x),slope=-Math.tan(center.heading);
+  const roof=waterfrontRailTop(center.x)+pccDimensions.height;
+  tree.updateMatrixWorld(true);
+  const world=new THREE.Vector3(),inverse=new THREE.Matrix4();
+  for(const part of tree.children){
+    if(!(part instanceof THREE.Mesh))continue;
+    const g=part.geometry,p=g.attributes.position;
+    inverse.copy(part.matrixWorld).invert();
+    for(let i=0;i<p.count;i++){
+      world.fromBufferAttribute(p,i).applyMatrix4(part.matrixWorld);
+      const rail=center.z+slope*(world.x-center.x);
+      const distance=world.z-rail;
+      const floor=roof+.016-2.4*(distance-pccDimensions.width/2-.020);
+      const transition=.014,room=world.y-floor;
+      if(room>=transition)continue;
+      // Lift the low overhang while preserving the measured crown spread,
+      // height, trunk anchor and the order of vertices within each bough.
+      world.y=floor+transition*Math.exp(room/transition-1);
+      world.applyMatrix4(inverse);p.setXYZ(i,world.x,world.y,world.z);
+    }
+    g.computeVertexNormals();g.computeBoundingBox();g.computeBoundingSphere();
+  }
 }
 
 /** Map the rendered trunk and crown to the observed canopy envelope. OSM anchors the trunk. */
@@ -36,6 +65,7 @@ export function addSurveyedTree(mesh:MeshFactory,root:THREE.Group,record:Canopy,
   }
   tree.scale.set(scale,h/bounds.max.y,scale);
   tree.position.set(x,y,z);
+  if(record.id===-870123)clearMedianBough(tree);
   if(record.supplemental)fitStationTree(tree);
   root.add(tree);
   return tree;

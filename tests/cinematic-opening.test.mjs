@@ -13,7 +13,7 @@ function camera(eye,look,lens,dx,dy,w,h){
 }
 for(const shot of ['city-to-bridge','bridge-to-city']){
   test(shot+' passes its recorded lens, eye and direction into the navigable orbit',()=>{
-    for(const [w,h] of [[1280,720],[1440,940],[390,844],[720,1280],[844,390],[1000,1000],[2560,1080]]){
+    for(const [w,h] of [[1280,720],[1440,940],[390,844],[378,880],[720,1280],[844,390],[1000,1000],[2560,1080]]){
       const [sw,sh]=h>=w?[720,1280]:[1280,720];
       for(const t of [0,.18,.57,.97,1]){
         const take=waterfrontShotPose(shot,t,sw,sh);
@@ -27,7 +27,8 @@ for(const shot of ['city-to-bridge','bridge-to-city']){
         const scale=Math.max(w/sw,h/sh);
         for(const position of [[0,2,-1.2],[-11,6,54],[1,.2,6]]){
           const p=new THREE.Vector3(...position).project(a),q=new THREE.Vector3(...position).project(b);
-          assert.ok(Math.abs(p.x*sw/2*scale-q.x*w/2)<1e-7);
+          const anchorX=h>=w&&shot==='bridge-to-city'?.25:.5;
+          assert.ok(Math.abs(p.x*sw/2*scale+(.5-anchorX)*(sw*scale-w)-q.x*w/2)<1e-7);
           const extraHeight=sh*scale-h;
           const anchor=h>=w?.66:.86;
           assert.ok(Math.abs(p.y*sh/2*scale+(anchor-.5)*extraHeight-q.y*h/2)<1e-7);
