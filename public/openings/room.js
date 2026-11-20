@@ -1,42 +1,91 @@
 const movie = document.querySelector('video');
 const enter = document.querySelector('.enter');
 const error = document.querySelector('.error');
-let transfer;
 
-function switchFilm() {
+let source = movie.src;
+let objectURL;
+let request;
+movie.dataset.filmSrc = source;
+
+function selection() {
   const opening = document.querySelector('input[name="opening"]:checked').value;
   const light = document.querySelector('input[name="film"]:checked').value;
   const bridge = opening === 'bridge';
   const name = (bridge ? 'city-to-bridge' : 'bridge-to-city') + (light === 'night' ? '-night' : '');
-  const src = new URL(name + '.mp4', document.baseURI).href;
-  const time = transfer?.time ?? (movie.ended ? 0 : movie.currentTime);
-  const playing = transfer?.playing ?? (!movie.paused && !movie.ended);
-  transfer = {src, time, playing};
-  error.hidden = true;
-  error.querySelector('a').href = src;
-  enter.href = '../?opening=' + opening + '&film=' + light;
-  movie.setAttribute('aria-label', (bridge ? 'City to Bay Bridge' : 'Bay Bridge to city') + ', ' + light);
-  movie.poster = name + '.webp';
-  movie.src = src;
-  movie.load();
-  // Set the default playback start position while metadata is in flight.
-  movie.currentTime = time;
-  if (playing) void movie.play().catch(() => {});
+  return {
+    src: new URL(name + '.mp4', document.baseURI).href,
+    poster: name + '.webp',
+    label: (bridge ? 'City to Bay Bridge' : 'Bay Bridge to city') + ', ' + light,
+    href: '../?opening=' + opening + '&film=' + light,
+  };
 }
 
-movie.addEventListener('loadedmetadata', () => {
-  if (!transfer || movie.currentSrc !== transfer.src || !Number.isFinite(movie.duration)) return;
-  movie.currentTime = Math.min(transfer.time, movie.duration);
-  transfer = undefined;
+async function switchFilm(upgradeInitial = false) {
+  const film = selection();
+  enter.href = film.href;
+  error.hidden = true;
+  error.querySelector('a').href = film.src;
+  if (request?.src === film.src) return;
+  request?.controller.abort();
+  request = undefined;
+  if (film.src === source && !upgradeInitial) return;
+
+  const controller = new AbortController();
+  request = {src: film.src, controller};
+  try {
+    // A host can return HTTP 200 for every Range request. A local Blob supports
+    // native seeking even there. Fetch just the selected edition; the old film
+    // stays operable while the replacement downloads.
+    const response = await fetch(film.src, {signal: controller.signal});
+    if (!response.ok) throw new Error('Film unavailable');
+    const blob = await response.blob();
+    if (controller.signal.aborted) return;
+
+    const time = movie.ended ? 0 : movie.currentTime;
+    const playing = !movie.paused && !movie.ended;
+    const previousURL = objectURL;
+    objectURL = URL.createObjectURL(blob);
+    source = film.src;
+    movie.poster = film.poster;
+    movie.setAttribute('aria-label', film.label);
+    movie.src = objectURL;
+    movie.load();
+    // At HAVE_NOTHING this sets the native default start position. It remains
+    // available to a subsequent rapid switch before metadata arrives.
+    movie.currentTime = time;
+    if (playing) void movie.play().catch(() => {});
+    movie.dataset.filmSrc = source;
+    if (previousURL) URL.revokeObjectURL(previousURL);
+  } catch {
+    if (!controller.signal.aborted) error.hidden = false;
+  } finally {
+    if (request?.controller === controller) request = undefined;
+  }
+}
+
+function checkInitialSeekability() {
+  if (objectURL || request || movie.readyState < 1 || selection().src !== source) return;
+  if (Number.isFinite(movie.duration) && movie.duration > 0 &&
+      (!movie.seekable.length || movie.seekable.end(movie.seekable.length - 1) < movie.duration - .1))
+    void switchFilm(true);
+}
+
+window.addEventListener('pagehide', event => {
+  if (event.persisted) return;
+  request?.controller.abort();
+  if (objectURL) URL.revokeObjectURL(objectURL);
 });
+movie.addEventListener('loadedmetadata', checkInitialSeekability);
 movie.addEventListener('error', () => {
-  if (transfer && movie.currentSrc && movie.currentSrc !== transfer.src) return;
-  error.hidden = false;
+  if (!request) error.hidden = false;
 });
 for (const group of document.querySelectorAll('fieldset')) {
   group.disabled = false;
-  group.addEventListener('change', switchFilm);
+  group.addEventListener('change', () => {
+    void switchFilm();
+    checkInitialSeekability();
+  });
 }
 
-if (!document.querySelector('input[value="bridge"]').checked ||
-    !document.querySelector('input[value="day"]').checked) switchFilm();
+if (selection().src !== source) void switchFilm();
+else checkInitialSeekability();

@@ -43,7 +43,7 @@ async function withPlayer(options,run){
   const data=Object.assign(new EventTarget(),{matches:false});
   const matchMedia=query=>query.includes('reduced-data')?data:media;
   const video=Object.assign(new EventTarget(),{style:{},dataset:{},readyState:4,HAVE_FUTURE_DATA:3,duration:361/24,currentTime:0,playbackRate:1,
-    play(){return Promise.resolve();},pause(){},setAttribute(){},removeAttribute(){},load(){}});
+    play(){return Promise.resolve();},pause(){},setAttribute(){},removeAttribute(){},load(){},remove(){this.removed=true;}});
   const layer={style:{},appendChild(){this.attached=true;},remove(){this.removed=true;}};
   const root={dataset:{}};
   const doc=Object.assign(new EventTarget(),{documentElement:root,closest:()=>options.inWorld?layer:null,getElementById:()=>layer,createElement:()=>video,
@@ -64,10 +64,11 @@ async function withPlayer(options,run){
     for(const [key,descriptor] of old){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}
   }
 }
-test('unselected and unrecognized URLs leave the published opening in control',async()=>{
+test('the root and unfamiliar links open from Bay Bridge to city; a comparison link can reverse it',async()=>{
   for(const query of ['', '?opening=other'])await withPlayer({query},({player,layer})=>{
-    assert.equal(player.currentOpening,undefined);assert.equal(layer.attached,undefined);
+    assert.equal(player.currentOpening.shot,'bridge-to-city');assert.equal(layer.attached,true);
   });
+  assert.equal(selectFilmEdition('?opening=bridge',new Date()).shot,'city-to-bridge');
 });
 test('the film retains its rendered endpoint until the live camera confirms the matching draw',async()=>{
   await withPlayer({query:'?opening=bridge'},async({player,video,root,layer,frames})=>{
@@ -148,7 +149,21 @@ test('the two filmed palettes follow the San Francisco sun at dawn and dusk and 
   assert.equal(palette('2026-09-11T02:37:00Z'),'night');
   assert.equal(palette('2026-12-22T06:00:00Z',720),'day');
   assert.equal(palette('2026-12-21T20:00:00Z',0),'night');
-  assert.equal(selectFilmEdition('?film=night',new Date()),undefined);
+  assert.deepEqual(selectFilmEdition('?film=night',new Date()),{shot:'bridge-to-city',palette:'night'});
+});
+
+test('disposing a portfolio hero during handoff leaves its layer reusable and the standalone player alone',async()=>{
+  await withPlayer({query:''},async({player,root,layer,frames,video})=>{
+    const standalone=player.currentOpening;
+    const host={dataset:{},querySelector:q=>q==='#cinematic-opening'?layer:{getAnimations:()=>[]},contains:()=>false};
+    const hero=player.startCinematicOpening(selectFilmEdition('',new Date()),host);
+    assert.equal(hero.shot,'bridge-to-city');assert.equal(host.dataset.openingPhase,'film');
+    hero.drawn(0,true);frames.shift()();frames.shift()();
+    hero.dispose();await Promise.resolve();
+    assert.equal(host.dataset.openingPhase,undefined);assert.equal(layer.removed,undefined);assert.equal(video.removed,true);
+    assert.equal(player.currentOpening,standalone);assert.equal(root.dataset.openingPhase,'film');
+    standalone.dispose();assert.equal(player.currentOpening,undefined);
+  });
 });
 
 test('the demonstration palette applies to the film, first poster and failure fallback',async()=>{

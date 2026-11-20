@@ -31,7 +31,7 @@ The fireboat leaves Station 35, performs its five-stream display, and returns on
 
 Where did the shape of the waterfront come from? The [research catalog](references/README.md) connects the modeled places to photographs, architectural drawings, surveys and historic accounts. It also counts the data shipped with the city and the original survey material we could trace. The [survey manifest](references/SURVEY-ASSETS.csv) lists individual source assets.
 
-Two [opening films](https://the-embarcadero.radiantsun9.chatgpt.site/openings/index.html) circle the Ferry Building clock in opposite directions. Choose day or night to compare them, then use **Explore this opening** to take the controls.
+The city opens looking past the clock toward the Bay Bridge, then turns toward downtown. The final view takes in the bridge and the skyline together. The [opening films](https://the-embarcadero.radiantsun9.chatgpt.site/openings/index.html) let you replay it, see it at night or try the reverse direction.
 
 ## Development and updates
 
