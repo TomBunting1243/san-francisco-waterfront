@@ -11,8 +11,9 @@
 <body>
   <main>
     <header><h1>Waterfront openings</h1><span class="location">San Francisco</span></header>
-    <video controls playsinline muted preload="metadata" width="1280" height="720" src="./bridge-to-city.mp4"
-      poster="./bridge-to-city.webp" aria-label="Bay Bridge to city, day">
+    <video controls playsinline muted preload="metadata" width="1280" height="720" aria-label="Bay Bridge to city, day">
+      <source media="(orientation: portrait)" src="./bridge-to-city-portrait.mp4" type="video/mp4">
+      <source src="./bridge-to-city.mp4" type="video/mp4">
       Your browser cannot play this film. <a href="./bridge-to-city.mp4">Open the movie file</a>.
     </video>
     <div class="controls">

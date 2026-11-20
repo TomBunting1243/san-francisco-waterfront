@@ -1,5 +1,7 @@
+import {urbanStreamBytes} from './urban-stream.ts';
 import {indexedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
+import {Earcut} from 'three/src/extras/Earcut.js';
 import mapped from '../public/data/urban-context.json' with {type:'json'};
 import approach from '../public/data/approach-soma.json' with {type:'json'};
 import {approachLengths,approachPose} from './approach-road.ts';
@@ -9,11 +11,16 @@ type Tile = [number, number, string, string, number[]];
 type XZ = [number, number];
 const tileData = mapped.tiles as Tile[];
 const scale = .06;
-const walls = ['#c2b6a1','#9cadae','#b3917f','#c4c1ae','#9daaaa','#bda98d','#b1aca3','#c9c3af'].map(s=>new THREE.Color(s));
-const roofs = ['#bdb8ab','#a9afb0','#aaa49a','#c4c2b5','#adb4ae','#b9afa0'].map(s=>new THREE.Color(s));
-const taggedColors=mapped.colors.map(s=>new THREE.Color(s));
-const streetPaint=new THREE.Color('#9b9e96'), alleyPaint=new THREE.Color('#b8b5a8');
-const deckPaint=new THREE.Color('#849493'), beamPaint=new THREE.Color('#929e98');
+type Paint=readonly [number,number,number];
+function paint(hex:string):Paint{
+  const c=new THREE.Color(hex);
+  return [Math.round(c.r*255),Math.round(c.g*255),Math.round(c.b*255)];
+}
+const walls = ['#c2b6a1','#9cadae','#b3917f','#c4c1ae','#9daaaa','#bda98d','#b1aca3','#c9c3af'].map(paint);
+const roofs = ['#bdb8ab','#a9afb0','#aaa49a','#c4c2b5','#adb4ae','#b9afa0'].map(paint);
+const taggedColors=mapped.colors.map(paint);
+const streetPaint=paint('#9b9e96'), alleyPaint=paint('#b8b5a8');
+const deckPaint=paint('#849493'), beamPaint=paint('#929e98');
 const joins=[mapped.joins.west[0],mapped.joins.east[0]];
 const approachDecks=approachLengths.map((length,i)=>approachPose(i===1,length,0).y+.01375);
 
@@ -21,15 +28,7 @@ class Reader {
   view: DataView;
   offset=0;
   constructor(encoded:string){
-    // Decode in native code where available. The fallback also avoids the
-    // iterator and per-byte callbacks on older Safari versions.
-    const type=Uint8Array as typeof Uint8Array & {fromBase64?:(text:string)=>Uint8Array};
-    let bytes:Uint8Array;
-    if(type.fromBase64)bytes=type.fromBase64(encoded);
-    else{
-      const raw=atob(encoded);bytes=new Uint8Array(raw.length);
-      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    }
+    const bytes=urbanStreamBytes(encoded);
     this.view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   }
   u8(){return this.view.getUint8(this.offset++);}
@@ -50,7 +49,7 @@ class Surface {
   vertexCount=0;
   private indexCount=0;
   reset(){this.vertexCount=0;this.indexCount=0;}
-  vertex(x:number,y:number,z:number,color:THREE.Color,u=-1,v=-1){
+  vertex(x:number,y:number,z:number,color:Paint,u=-1,v=-1){
     const n=this.vertexCount++,p=n*3;
     if(p===this.xyz.length){
       const xyz=new Float32Array(p*2),rgb=new Uint8Array(p*2),uv=new Float32Array(n*4);
@@ -58,7 +57,7 @@ class Surface {
       this.xyz=xyz;this.rgb=rgb;this.uv=uv;
     }
     this.xyz[p]=x;this.xyz[p+1]=y;this.xyz[p+2]=z;
-    this.rgb[p]=Math.round(color.r*255);this.rgb[p+1]=Math.round(color.g*255);this.rgb[p+2]=Math.round(color.b*255);
+    this.rgb[p]=color[0];this.rgb[p+1]=color[1];this.rgb[p+2]=color[2];
     this.uv[n*2]=u;this.uv[n*2+1]=v;
     return n;
   }
@@ -87,36 +86,65 @@ class Surface {
   }
 }
 
-function addBuilding(surface:Surface,rings:XZ[][],height:number,bottom:number,tag:number,wallTone:number,roofTone:number,levels:number){
-  const ring=rings[0],x=ring[0][0],z=ring[0][1];
-  const hash=Math.abs(Math.round(x*137+z*91));
-  const wall=wallTone?taggedColors[wallTone-1]:walls[tag||hash%walls.length];
-  const roof=roofTone?taggedColors[roofTone-1]:roofs[hash%roofs.length];
-  const bays=.155+(hash%5)*.022;
-  const storeys=levels||Math.max(1,Math.round(height/(height>1.65?.218:.186)));
-  const floor=height/storeys;
-  const flats=rings.flat();
-  const ground=flats.map(([px,pz])=>bayReliefGround(px,pz));
-  const base=ground.reduce((sum,h)=>sum+h,0)/ground.length;
-  const top=base+height;
-  const start=surface.vertexCount;
-  const loop=rings.map(r=>r.map(p=>new THREE.Vector2(...p)));
-  const faces=THREE.ShapeUtils.triangulateShape(loop[0],loop.slice(1));
-  for(const [px,pz] of flats)surface.vertex(px,top,pz,roof);
-  for(const [a,b,c] of faces)surface.triangle(start+c,start+b,start+a);
-  let offset=0;
-  for(const r of rings){
-    for(let i=0;i<r.length;i++){
-      const j=(i+1)%r.length,[ax,az]=r[i],[bx,bz]=r[j];
-      const width=Math.max(1,Math.round(Math.hypot(bx-ax,bz-az)/bays));
-      const lowA=bottom?base+bottom:ground[offset+i]-.05,lowB=bottom?base+bottom:ground[offset+j]-.05;
-      const a=surface.vertex(ax,lowA,az,wall,0,(lowA-base)/floor);
-      const b=surface.vertex(bx,lowB,bz,wall,width,(lowB-base)/floor);
-      const c=surface.vertex(bx,top,bz,wall,width,storeys);
-      const d=surface.vertex(ax,top,az,wall,0,storeys);
-      surface.quad(b,a,d,c);
+// Keep one scratch footprint per in-flight tile. Roof triangulation, grade
+// sampling and facade construction use the same decoded coordinate stream.
+class Footprint {
+  private points:number[]=[];
+  private ends:number[]=[];
+  private holes:number[]=[];
+  private ground:number[]=[];
+
+  read(surface:Surface,reader:Reader,x:number,z:number){
+    const height=reader.u16()/100*scale,bottom=reader.u16()/100*scale;
+    const tag=reader.u8(),wallTone=reader.u8(),roofTone=reader.u8(),levels=reader.u8();
+    const rings=reader.u8(),{points,ends,holes,ground}=this;
+    let count=0,sum=0,closed=false;
+    for(let r=0;r<rings;r++){
+      const start=count,n=reader.u16();
+      for(let i=0;i<n;i++,count++){
+        const px=x+reader.i16()/100,pz=z+reader.i16()/100;
+        points[count*2]=px;points[count*2+1]=pz;
+        const y=bayReliefGround(px,pz);ground[count]=y;sum+=y;
+      }
+      ends[r]=count;
+      if(r)holes[r-1]=start;
+      if(n>2&&points[2*start]===points[2*count-2]&&points[2*start+1]===points[2*count-1])closed=true;
     }
-    offset+=r.length;
+    points.length=count*2;holes.length=rings-1;
+    const hash=Math.abs(Math.round(points[0]*137+points[1]*91));
+    const wall=wallTone?taggedColors[wallTone-1]:walls[tag||hash%walls.length];
+    const roof=roofTone?taggedColors[roofTone-1]:roofs[hash%roofs.length];
+    const bays=.155+(hash%5)*.022;
+    const storeys=levels||Math.max(1,Math.round(height/(height>1.65?.218:.186)));
+    const floor=height/storeys,base=sum/count,top=base+height,start=surface.vertexCount;
+    // ShapeUtils strips duplicate closing corners for Earcut only. Keep the
+    // original emitted roof/wall vertices, including those rare survey rings.
+    let facePoints=points,faceHoles=holes;
+    if(closed){
+      facePoints=[];faceHoles=[];
+      for(let r=0;r<rings;r++){
+        const first=r?ends[r-1]:0,end=ends[r];
+        const duplicate=end-first>2&&points[first*2]===points[end*2-2]&&points[first*2+1]===points[end*2-1];
+        if(r)faceHoles.push(facePoints.length/2);
+        for(let j=first*2;j<(end-Number(duplicate))*2;j++)facePoints.push(points[j]);
+      }
+    }
+    const faces=Earcut.triangulate(facePoints,faceHoles);
+    for(let i=0;i<count;i++)surface.vertex(points[i*2],top,points[i*2+1],roof);
+    for(let i=0;i<faces.length;i+=3)surface.triangle(start+faces[i+2],start+faces[i+1],start+faces[i]);
+    for(let r=0;r<rings;r++){
+      const first=r?ends[r-1]:0,end=ends[r];
+      for(let i=first;i<end;i++){
+        const j=i+1===end?first:i+1,ax=points[i*2],az=points[i*2+1],bx=points[j*2],bz=points[j*2+1];
+        const width=Math.max(1,Math.round(Math.hypot(bx-ax,bz-az)/bays));
+        const lowA=bottom?base+bottom:ground[i]-.05,lowB=bottom?base+bottom:ground[j]-.05;
+        const a=surface.vertex(ax,lowA,az,wall,0,(lowA-base)/floor);
+        const b=surface.vertex(bx,lowB,bz,wall,width,(lowB-base)/floor);
+        const c=surface.vertex(bx,top,bz,wall,width,storeys);
+        const d=surface.vertex(ax,top,az,wall,0,storeys);
+        surface.quad(b,a,d,c);
+      }
+    }
   }
 }
 
@@ -182,12 +210,10 @@ function addRoad(surface:Surface,path:XZ[],kind:number){
 // A complete building (including its courtyard rings) is the smallest bake.
 function tileReader(tile:Tile){
   const [x,z,buildings,roads]=tile;
-  const b=new Reader(buildings),r=new Reader(roads);
+  const b=new Reader(buildings),r=new Reader(roads),footprint=new Footprint();
   return (surface:Surface,deadline:number)=>{
     while(b.offset<b.view.byteLength){
-      const height=b.u16()/100*scale,bottom=b.u16()/100*scale,tag=b.u8(),wall=b.u8(),roof=b.u8(),levels=b.u8();
-      const rings=Array.from({length:b.u8()},()=>b.path(x,z));
-      addBuilding(surface,rings,height,bottom,tag,wall,roof,levels);
+      footprint.read(surface,b,x,z);
       if(deadline!==Infinity&&performance.now()>=deadline)return false;
     }
     while(r.offset<r.view.byteLength){

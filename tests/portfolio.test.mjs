@@ -422,24 +422,39 @@ test('camera settling is smooth and independent of the display refresh rate',asy
   assert.ok(Math.max(...final)-Math.min(...final)<1e-10);
 });
 
-test('stars cover every camera heading on desktop and mobile',async()=>{
-  const {starfieldData}=await import('../app/sky.ts');
-  const {openingCamera}=await import('../app/camera.ts');
-  const {positions,colors}=starfieldData(),point=new THREE.Vector3();
-  assert.ok([...positions,...colors].every(Number.isFinite));
-  for(const [width,height,setup] of [[1440,950,openingCamera.desktop],[390,844,openingCamera.mobile]]){
-    const camera=new THREE.PerspectiveCamera(20,width/height,1.5,650);camera.setFocalLength(setup.focalLength);
-    const counts=[];
-    for(let heading=0;heading<24;heading++){
-      const azimuth=heading*Math.PI/12;
-      camera.lookAt(Math.sin(azimuth)*setup.distance,-setup.elevation,Math.cos(azimuth)*setup.distance);camera.updateMatrixWorld();
-      let count=0;
-      for(let i=0;i<positions.length;i+=3){point.fromArray(positions,i).project(camera);if(Math.abs(point.x)<1&&Math.abs(point.y)<1&&point.z>-1&&point.z<1)count++;}
-      counts.push(count);
-    }
-    assert.ok(Math.min(...counts)>15,`Empty sky sector at ${width}px: ${counts}`);
-    assert.ok(Math.max(...counts)/Math.min(...counts)<1.6,'Star density changes sharply during an orbit');
+test('urban stars are sparse above the haze and weather suppresses them',async()=>{
+  const {starfieldData,starVisibility,harborStars}=await import('../app/sky.ts');
+  const {waterfrontShotPose}=await import('../app/waterfront-shot.ts');
+  const {positions,colors}=starfieldData();
+  assert.ok(positions.length/3>=12 && positions.length/3<=45);
+  assert.equal(colors.length,positions.length/3*4);
+  assert.deepEqual(positions,starfieldData().positions);
+  for(let i=0;i<positions.length;i+=3){
+    const v=new THREE.Vector3().fromArray(positions,i);
+    assert.ok(Math.abs(v.length()-420)<.001 && v.y/v.length()>.04);
   }
+  const material=harborStars(THREE).material;
+  assert.ok(material.depthTest && !material.depthWrite && !material.sizeAttenuation);
+  const shader={...THREE.ShaderLib.points};
+  material.onBeforeCompile(shader);
+  assert.match(shader.vertexShader,/gl_Position.z = gl_Position.w/);
+  assert.match(shader.fragmentShader,/length\(gl_PointCoord - 0.5\)/);
+  for(const [width,height] of [[1280,720],[390,844]]){
+    const pose=waterfrontShotPose('bridge-to-city',1,width,height);
+    const camera=new THREE.PerspectiveCamera(20,width/height,.35,1800);
+    camera.position.fromArray(pose.eye);camera.lookAt(...pose.look);camera.setFocalLength(pose.focalLength);
+    camera.setViewOffset(width,height,-pose.shiftX,-pose.shiftY,width,height);camera.updateMatrixWorld();
+    let visible=0;
+    for(let i=0;i<positions.length;i+=3){
+      const p=new THREE.Vector3().fromArray(positions,i).add(camera.position).project(camera);
+      if(p.z<1 && p.z>0 && Math.abs(p.x)<1 && Math.abs(p.y)<1)visible++;
+    }
+    assert.ok(visible<=6 && (width<500||visible>0), `Broadside sky has ${visible} stellar points at ${width}px`);
+  }
+  assert.equal(starVisibility(.55,0,0),0);
+  assert.equal(starVisibility(1,0,0),1);
+  assert.equal(starVisibility(1,1,0),0);
+  assert.ok(starVisibility(1,.6,.5)<.03);
 });
 
 test('reference-based Gateway facades keep glazing outside all adjoining volumes',async()=>{

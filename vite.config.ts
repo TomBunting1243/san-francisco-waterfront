@@ -1,3 +1,4 @@
+import {packUrbanContext} from './scripts/pack-urban-context.ts';
 import {resolve} from 'node:path';
 import {build,defineConfig,type Plugin} from 'vite';
 import {packBayRelief} from './scripts/pack-bay-relief.ts';
@@ -21,4 +22,4 @@ function openingHead():Plugin{
   };
 }
 
-export default defineConfig({plugins:[react(),packBayRelief(),openingHead()],base:'./'});
+export default defineConfig({plugins:[react(),packBayRelief(),packUrbanContext(),openingHead()],base:'./'});

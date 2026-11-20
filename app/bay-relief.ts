@@ -135,19 +135,10 @@ function surfaceVertex(grid: HeightGrid, col: number, row: number) {
   return { x, y, z, lng, lat, meters };
 }
 
-function reliefHeight(grid:HeightGrid,lng:number,lat:number){
-  return sample(grid, lng, lat, (col, row) => {
-    const i=row*grid.cols+col;
-    const cached=grid.groundY[i];
-    if(!Number.isNaN(cached))return cached;
-    return grid.groundY[i]=surfaceVertex(grid,col,row).y;
-  });
-}
-
-/** Height of the clipped relief along the surveyed bank, including its boundary. */
-export function bayReliefBankHeight(x:number,z:number){
-  const [lng,lat]=geographicPosition(x,z);
-  return reliefHeight(applicableGrid(lng,lat),lng,lat);
+function groundVertex(grid:HeightGrid,col:number,row:number){
+  const i=row*grid.cols+col,cached=grid.groundY[i];
+  if(!Number.isNaN(cached))return cached;
+  return grid.groundY[i]=surfaceVertex(grid,col,row).y;
 }
 
 function withinRing(points:number[][],x:number,z:number){
@@ -159,18 +150,29 @@ function withinRing(points:number[][],x:number,z:number){
   return inside;
 }
 
-/** Local support height for paths, footprints and the bridge abutment. */
-export function bayReliefGround(x: number, z: number) {
+function reliefGround(x:number,z:number,clip:boolean){
   const [lng, lat] = geographicPosition(x, z);
   const grid = applicableGrid(lng, lat);
   const u=THREE.MathUtils.clamp((lng-grid.west)/grid.step,0,grid.cols-1);
   const v=THREE.MathUtils.clamp((lat-grid.south)/grid.step,0,grid.rows-1);
   const col=Math.min(grid.cols-2,Math.floor(u)),row=Math.min(grid.rows-2,Math.floor(v));
-  const cuts=surveyedCoastalCells(grid.name)?.get(row*grid.cols+col);
+  const cuts=clip?surveyedCoastalCells(grid.name)?.get(row*grid.cols+col):undefined;
   if(cuts&&!cuts[u-col+v-row<=1?0:1].some(([outer,...holes])=>
     withinRing(outer,x,z)&&!holes.some(ring=>withinRing(ring,x,z))))return waterSurface.level-.36;
-  return reliefHeight(grid,lng,lat);
+  const dx=u-col,dz=v-row,b=groundVertex(grid,col+1,row),c=groundVertex(grid,col,row+1);
+  if(dx+dz<=1){
+    const a=groundVertex(grid,col,row);
+    return a+(b-a)*dx+(c-a)*dz;
+  }
+  const d=groundVertex(grid,col+1,row+1);
+  return d+(c-d)*(1-dx)+(b-d)*(1-dz);
 }
+
+/** Height along the surveyed bank, including its boundary. */
+export function bayReliefBankHeight(x:number,z:number){return reliefGround(x,z,false);}
+
+/** Local support height for paths, footprints and the bridge abutment. */
+export function bayReliefGround(x:number,z:number){return reliefGround(x,z,true);}
 
 class ColoredTriangles {
   readonly positions: number[] = [];

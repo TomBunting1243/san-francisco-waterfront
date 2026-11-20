@@ -1,4 +1,4 @@
-import {filmAssetPath,selectFilmEdition,type FilmEdition} from '../app/cinematic-edition.ts';
+import {filmAssetPath,portraitFilmQuery,selectFilmEdition,type FilmEdition} from '../app/cinematic-edition.ts';
 import {readMotionPreference} from '../app/city-runtime.ts';
 import {loadConditions} from './conditions.ts';
 
@@ -15,7 +15,7 @@ if(edition){
   const saveData=network?.saveData||matchMedia('(prefers-reduced-data: reduce)').matches;
   // The custom property is consumed by the compiled stylesheet under assets/.
   // Resolve it against the page, just like the matching image preload.
-  const src=new URL(filmAssetPath(edition)+(still||saveData?'-end':'')+'.webp',document.baseURI).href;
+  const src=new URL(filmAssetPath(edition,matchMedia(portraitFilmQuery).matches)+(still||saveData?'-end':'')+'.webp',document.baseURI).href;
   root.style.setProperty('--opening-image','url("'+src+'")');
   const preload=document.createElement('link');
   preload.rel='preload';preload.as='image';preload.href=src;preload.fetchPriority='high';

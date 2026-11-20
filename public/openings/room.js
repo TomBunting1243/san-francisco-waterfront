@@ -2,7 +2,9 @@ const movie = document.querySelector('video');
 const enter = document.querySelector('.enter');
 const error = document.querySelector('.error');
 
-let source = movie.src;
+const portrait = matchMedia('(orientation: portrait)');
+let source = movie.currentSrc || new URL(portrait.matches ? 'bridge-to-city-portrait.mp4' : 'bridge-to-city.mp4', document.baseURI).href;
+movie.poster = selection().poster;
 let objectURL;
 let request;
 movie.dataset.filmSrc = source;
@@ -11,7 +13,7 @@ function selection() {
   const opening = document.querySelector('input[name="opening"]:checked').value;
   const light = document.querySelector('input[name="film"]:checked').value;
   const bridge = opening === 'bridge';
-  const name = (bridge ? 'city-to-bridge' : 'bridge-to-city') + (light === 'night' ? '-night' : '');
+  const name = (bridge ? 'city-to-bridge' : 'bridge-to-city') + (light === 'night' ? '-night' : '') + (portrait.matches ? '-portrait' : '');
   return {
     src: new URL(name + '.mp4', document.baseURI).href,
     poster: name + '.webp',
@@ -41,7 +43,7 @@ async function switchFilm(upgradeInitial = false) {
     const blob = await response.blob();
     if (controller.signal.aborted) return;
 
-    const time = movie.ended ? 0 : movie.currentTime;
+    const time = movie.currentTime;
     const playing = !movie.paused && !movie.ended;
     const previousURL = objectURL;
     objectURL = URL.createObjectURL(blob);
@@ -79,6 +81,7 @@ movie.addEventListener('loadedmetadata', checkInitialSeekability);
 movie.addEventListener('error', () => {
   if (!request) error.hidden = false;
 });
+portrait.addEventListener('change', () => { void switchFilm(); });
 for (const group of document.querySelectorAll('fieldset')) {
   group.disabled = false;
   group.addEventListener('change', () => {

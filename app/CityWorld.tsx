@@ -20,7 +20,7 @@ import {updateTreeBatches} from './tree-batches';
 import {cinematicOrbit} from './cinematic-camera';
 import type {CinematicOpening} from './cinematic-player';
 import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
-import { starfieldData } from './sky';
+import { harborStars, starVisibility } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
 import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,compactDevice,createQualityMonitor,drawingPixelRatio} from './city-runtime';
@@ -97,6 +97,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: streetView ? 'default' : 'high-performance' }); }
       catch { if(rideRef.current)endRideRef.current?.();setStatus('fallback');return; }
       teardown=()=>{renderer.dispose();renderer.domElement.remove();};
+      // Overlap the municipal survey download with the staged waterfront bake.
+      // The first waterfront frame never waits for this optional module.
+      const surveyModule=streetView?null:import('./urban-context').catch(()=>null);
       const navigatorHints=navigator as Navigator & {deviceMemory?:number;connection?:{saveData?:boolean}};
       const economy=window.matchMedia('(prefers-reduced-data: reduce)').matches||navigatorHints.connection?.saveData===true;
       const compact=compactDevice(navigator.maxTouchPoints>0,navigator.hardwareConcurrency,navigatorHints.deviceMemory);
@@ -157,16 +160,32 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(disposed)return;
       }
       scene.add(world.root);
-      // Keep the detailed waterfront and hills on the opening path. The larger
-      // municipal neighborhood survey streams once the first frame is visible.
       let neighborhoods:ReturnType<typeof import('./urban-context').createUrbanContext>|undefined;
-      let surveyUnavailable=false;
+      let surveyUnavailable=false,firstSurveyDrawn=false;
+      let surveyTask:ReturnType<typeof setTimeout>|undefined;
       function loadNeighborhoods(){
-        void import('./urban-context').then(({createUrbanContext})=>{
+        void surveyModule?.then(module=>{
           if(disposed)return;
-          neighborhoods=createUrbanContext();neighborhoods.autoUpdate=false;world.root.add(neighborhoods);
+          if(module){
+            neighborhoods=module.createUrbanContext();neighborhoods.autoUpdate=false;
+            world.root.add(neighborhoods);
+          }else surveyUnavailable=true;
           lastVisual='';requestFrame();
-        }).catch(()=>{if(!disposed){surveyUnavailable=true;requestFrame();}});
+        }).catch(()=>{if(!disposed){surveyUnavailable=true;lastVisual='';requestFrame();}});
+      }
+      // On a busy GPU, tying every 2–5 ms tile slice to another full scene
+      // draw leaves the CPU idle between frames. Advance the first visible
+      // survey in short tasks as well. The frame itself checks its exact camera
+      // frustum again before reporting that the submitted skyline is ready.
+      function scheduleSurvey(){
+        if(firstSurveyDrawn||surveyTask!==undefined)return;
+        surveyTask=setTimeout(()=>{
+          surveyTask=undefined;
+          if(disposed||!neighborhoods||!visible||!rendering||document.hidden||rideRef.current||firstSurveyDrawn)return;
+          if(neighborhoods.prepareOrbitView(camera,6)){
+            lastVisual='';requestFrame();
+          }else scheduleSurvey();
+        },0);
       }
       const print=printModule?.createHarborPrint(renderer,world.clockCenter);
       const ferryClock={...world.ferryClock,tideOffset:0};
@@ -267,10 +286,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       };
       if(conditionsRef.current.weather)applyWeather();
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
-      const starData=starfieldData();
-      const starGeometry=new THREE.BufferGeometry();starGeometry.setAttribute('position',new THREE.BufferAttribute(starData.positions,3));starGeometry.setAttribute('color',new THREE.BufferAttribute(starData.colors,3));
-      const starMaterial=new THREE.PointsMaterial({size:1.5,sizeAttenuation:false,vertexColors:true,transparent:true,opacity:lighting.night,depthWrite:false,fog:false,toneMapped:false});
-      const stars=new THREE.Points(starGeometry,starMaterial);stars.scale.setScalar(3.8);scene.add(stars);
+      const stars=harborStars(THREE);scene.add(stars);
       let conversation: {person:number;until:number}|null=null, speechCount=0;
       const personMatrix=new THREE.Matrix4(), head=new THREE.Vector3(), foot=new THREE.Vector3();
       const shoes=world.people.group.getObjectByName('Shoes') as InstanceType<typeof THREE.InstancedMesh>;
@@ -645,6 +661,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         if(neighborhoods){
           camera.updateMatrixWorld();
           neighborhoodsReady=mode?neighborhoods.prepareRideView(camera,7):neighborhoods.prepareOrbitView(camera,movingCamera?2:5);
+          if(!mode&&!neighborhoodsReady)scheduleSurvey();
         }else if(mode){neighborhoodsReady=surveyUnavailable;}
         if(mode&&!neighborhoodsReady&&presentedRide!==mode){requestFrame();return;}
         stars.position.copy(camera.position);
@@ -758,7 +775,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.bayHorizon.value.copy(coastalHorizon).convertLinearToSRGB();
         }
         const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.closest('main')?.setAttribute('data-harbor-light',duskAmount>.55?'dark':'light');host.parentElement?.style.setProperty('--world-ink',ink);host.parentElement?.style.setProperty('--world-halo',duskAmount>.55?'#132536':'#cddbdd');lastInk=ink;}
-        starMaterial.opacity=Math.max(0,(duskAmount-.55)*1.8)*(1-cloud)*(1-fog);stars.visible=!streetView&&starMaterial.opacity>.001;
+        stars.material.opacity=starVisibility(duskAmount,cloud,fog);stars.visible=!streetView&&stars.material.opacity>.001;
         setFerryClockTime(world.clockHands,lighting.hours,lighting.minutes);
         const motionChanged=elapsed!==lastMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
@@ -885,6 +902,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           renderer.info.reset();
           if(print)print.render(scene,camera,magnification,!!driver,quality,target,ambient.groundColor);
           else renderer.render(scene,camera);
+          if(neighborhoods&&neighborhoodsReady&&!mode)firstSurveyDrawn=true;
           renderedFrames++;cinematic?.drawn(shotTime,(!!neighborhoods&&neighborhoodsReady)||surveyUnavailable);if(!presented){presented=true;setStatus('ready');if(!streetView)loadNeighborhoods();}const triangles=String(renderer.info.render.triangles);if(host.dataset.triangles!==triangles)host.dataset.triangles=triangles;}lastVisual=visual;
         // A fence confirms the GPU finished the first cab image without blocking input.
         if(mode&&presentedRide!==mode){
@@ -898,13 +916,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       }
       requestFrame();
       teardown=()=>{
+        clearTimeout(surveyTask);
         window.removeEventListener('waterfront-print-loaded',refreshPrint);window.removeEventListener('keyup',releaseKey);window.removeEventListener('blur',clearKeys);clearKeys();resetTravel.current=()=>{};
         window.removeEventListener('portfolio-palette-change',refreshPalette);clearTimeout(timer);applyConditions.current=()=>{};wake.current=()=>{};cancelAnimationFrame(frame);resizeObserver.disconnect();observer.disconnect();
         host.removeEventListener('dblclick',zoomHere);host.removeEventListener('touchstart',onTouchStart);host.removeEventListener('touchmove',onTouchMove);host.removeEventListener('touchend',onTouchEnd);host.removeEventListener('touchcancel',onTouchEnd);host.removeEventListener('wheel',onWheel);host.removeEventListener('pointerdown',onDown);host.removeEventListener('pointermove',onMove);host.removeEventListener('pointerup',onUp);host.removeEventListener('pointerleave',onLeave);host.removeEventListener('pointercancel',onCancel);document.removeEventListener('visibilitychange',onVisibility);renderer.domElement.removeEventListener('webglcontextlost',onLost);
         const geometries=new Set<InstanceType<typeof THREE.BufferGeometry>>(), mats=new Set<InstanceType<typeof THREE.Material>>();
         world.root.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){if(!o.userData.sharedGeometry)geometries.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));}});
         world.root.traverse(o=>{if(o instanceof THREE.BatchedMesh){geometries.delete(o.geometry);o.dispose();}});
-        if(rideFence)gl.deleteSync(rideFence);interiors?.dispose();culled?.dispose();print?.dispose();streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();starGeometry.dispose();starMaterial.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
+        if(rideFence)gl.deleteSync(rideFence);interiors?.dispose();culled?.dispose();print?.dispose();streetIllumination.dispose();precipitation.dispose();sky?.dome.geometry.dispose();sky?.dome.material.dispose();stars.geometry.dispose();stars.material.dispose();geometries.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());sun.shadow.dispose();renderer.dispose();renderer.domElement.remove();
       };
     }).catch(error=>{if(!disposed){console.error('Waterfront renderer could not start',error);if(rideRef.current)endRideRef.current?.();setStatus('fallback');}});
     return()=>{disposed=true;teardown();motionQuery.removeEventListener('change',onMotion);};

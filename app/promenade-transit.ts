@@ -1,3 +1,4 @@
+import {collectFerryWalkPools,ferryWalkLens} from './ferry-walk-lights.ts';
 import {streetcarPose} from './streets.ts';
 import {createWashingtonPlatforms,type WashingtonTramPose} from './washington-platform.ts';
 import {createFerryPassenger} from './ferry-stop-passenger.ts';
@@ -60,9 +61,38 @@ export function busPose(time:number){
     z:pose.z+blend*(kerbOffset*c-longitudinalOffset*s),yaw:pose.yaw,t,stopped:t<=layover};
 }
 
+// Shared surveyed stop and canopy transforms. Offsets are metres in the stop frame.
+const coveredStops={
+  market:{name:'Steuart and Market sheltered terminal',x:-3.0284,z:-8.8519,yaw:Math.PI+steuartYaw,offset:[.98,-1.30]},
+  mission:{name:'Steuart and Mission sheltered terminal',x:-12.2754,z:-8.6167,yaw:steuartYaw,offset:[-2.45,-.62]},
+};
+function stopFrame(name:string,x:number,z:number,yaw:number){
+  const root=new THREE.Group();root.name=name;root.position.set(x,.045,z);root.rotation.y=yaw;root.scale.setScalar(scale);
+  return root;
+}
+const roofSupports=[-1.88,1.88];
+// Radius Displays supplied LED roof lamps for the SF wave shelter. Two
+// shielded strips below the modeled support rails are a placement estimate.
+// https://radius-displays.com/projects/san-francisco-bus-shelters/
+export function addSteuartShelterLights(root:THREE.Group){
+  const fixtures=new THREE.Group();root.add(fixtures);
+  const housing=new THREE.MeshStandardMaterial({color:'#66706e'}),glass=new THREE.MeshStandardMaterial({color:'#dadcd2'});
+  const caseGeometry=new THREE.BoxGeometry(.082,.048,.62),lensGeometry=new THREE.BoxGeometry(.059,.008,.56);
+  for(const site of Object.values(coveredStops)){
+    const frame=stopFrame(site.name+' roof lights',site.x,site.z,site.yaw);
+    const canopy=new THREE.Group();canopy.position.set(site.offset[0],0,site.offset[1]);frame.add(canopy);fixtures.add(frame);
+    for(const x of roofSupports){
+      const cover=new THREE.Mesh(caseGeometry,housing);cover.position.set(x,2.509,.06);canopy.add(cover);
+      const lens=new THREE.Mesh(lensGeometry,glass);lens.position.set(x,2.481,.06);canopy.add(lens);
+      ferryWalkLens(lens,'Steuart shelter LED roof lamp',.29,.83);
+    }
+  }
+  return collectFerryWalkPools(fixtures);
+}
+
 function shelter(){
   const a=new StreetAssembly();
-  for(const x of [-1.88,1.88]){
+  for(const x of roofSupports){
     a.box(x,1.31,-.52,.084,2.62,.084,steel);
     a.box(x,1.23,-.04,.03,1.95,.89,'#9caeac');
     a.box(x,2.57,-.04,.065,.075,1.41,steel);
@@ -83,15 +113,15 @@ function shelter(){
   }
   return a.bake('Muni shelter with wave roof, bench and information case');
 }
-function stop(name:string,x:number,z:number,yaw:number,covered:boolean,route2:boolean){
-  const root=new THREE.Group();root.name=name;root.position.set(x,.045,z);root.rotation.y=yaw;root.scale.setScalar(scale);
+function stop(name:string,x:number,z:number,yaw:number,canopyOffset:number[]|undefined,route2:boolean){
+  const root=stopFrame(name,x,z,yaw);
   const a=new StreetAssembly();
   a.add(new THREE.CylinderGeometry(.044,.049,3.19,8),'#86928e',0,1.595,0);
   a.box(0,2.71,0,.34,.71,.058,'#e6d9bd');a.box(0,2.97,.035,.34,.19,.012,red);
   a.label('Muni',0,2.93,.044,.089,'#f1ddc2');
   if(route2)a.label('2',0,2.57,.037,.17,'#4a5660');
   a.box(0,1.38,0,.23,.36,.066,'#bcbbaa');root.add(a.bake('Muni stop flag'));
-  if(covered){const canopy=shelter();canopy.position.set(-2.45,0,-.62);root.add(canopy);}
+  if(canopyOffset){const canopy=shelter();canopy.position.set(canopyOffset[0],0,canopyOffset[1]);root.add(canopy);}
   return root;
 }
 // Local metres on the raised pad of the Steuart/Market shelter. The same
@@ -249,15 +279,15 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   const conveniences=createStreetAmenities();poses.add(conveniences.root);
   // Curbside bus stops at the Steuart terminal. The F platforms occupy the waterfront median.
   // The red-roofed shelter at the Market end is visible at the curb in the 2024 city aerial.
-  const market=stop('Steuart and Market sheltered terminal',-3.0284,-8.8519,Math.PI+steuartYaw,true,false);
-  market.children[1].position.set(.98,0,-1.30);
+  const covered=(site:typeof coveredStops.market)=>stop(site.name,site.x,site.z,site.yaw,site.offset,false);
+  const market=covered(coveredStops.market);
   const reader=shelterRider();
   const readerAnchor=new THREE.Group();readerAnchor.position.copy(market.children[1].position);
   readerAnchor.add(reader.root);market.add(readerAnchor);
   const pad=new StreetAssembly();pad.box(.98,-.115,-1.2,5.9,.23,2.08,'#b8b5a2');
   market.add(pad.bake('Terminal sidewalk beneath the surveyed shelter'));poses.add(market);
-  poses.add(stop('Steuart and Mission sheltered terminal',-12.2754,-8.6167,steuartYaw,true,false));
-  poses.add(stop('2 Sutter terminal at Steuart and Don Chee',-8.9851,-7.942,Math.PI+steuartYaw,false,true));
+  poses.add(covered(coveredStops.mission));
+  poses.add(stop('2 Sutter terminal at Steuart and Don Chee',-8.9851,-7.942,Math.PI+steuartYaw,undefined,true));
   const model=coach(),coaches=Array.from({length:8},(_,i)=>{
     const group=new THREE.Group();group.name='2 Sutter coach '+(i+1);group.scale.setScalar(scale);
     group.add(model.body.clone());

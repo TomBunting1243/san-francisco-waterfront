@@ -5,7 +5,7 @@ main{width:min(calc(100% - clamp(2rem,8vw,7rem)),84rem);margin:0 auto;padding:cl
 header{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;padding-bottom:clamp(.9rem,2.1svh,1.7rem)}
 h1{margin:0;font:normal clamp(1.9rem,3.9vw,3.6rem)/1.04 Georgia,'Times New Roman',serif;letter-spacing:-.047em}
 .location,legend{font-size:.77rem;letter-spacing:.035em;color:#b0bab9}
-video{display:block;width:100%;height:auto;max-height:calc(100svh - 12rem);aspect-ratio:16/9;object-fit:contain;background:#0a0d0e;box-shadow:0 0 0 1px #c9bfa522,0 12px 40px #0003}
+video{display:block;width:min(100%,calc((100svh - 12rem)*16/9));margin-inline:auto;height:auto;aspect-ratio:16/9;object-fit:cover;background:#0a0d0e;box-shadow:0 0 0 1px #c9bfa522,0 12px 40px #0003}
 .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem clamp(1.25rem,3.5vw,3.2rem);padding:1.15rem 0}
 fieldset{margin:0;padding:0;border:0;min-inline-size:0}
 legend{margin-bottom:.45rem;padding:0}
@@ -29,9 +29,9 @@ fieldset:disabled label{cursor:default}
   main{width:100%;padding-top:1.5rem}
   header,.controls,.error{margin-inline:1rem}
   header{align-items:center}.location{font-size:.72rem}
-  video{max-height:none}
   .controls{gap:1rem 1.25rem}
   .enter{margin-left:0}
 }
+@media(orientation:portrait){video{width:min(100%,56.25svh);aspect-ratio:9/16}}
 @media(max-width:370px){header{flex-wrap:wrap;gap:.35rem}.choices span{padding-inline:.65rem}}
-@media(max-height:540px) and (orientation:landscape){video{max-height:none}main{padding-top:1rem}}
+@media(max-height:540px) and (orientation:landscape){video{width:100%}main{padding-top:1rem}}

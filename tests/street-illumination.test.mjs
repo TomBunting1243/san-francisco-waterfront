@@ -53,6 +53,42 @@ test('both Market carriageways see the main aspect from upstream, including thei
 
 test('field derives from the scene globes, is local, and reaches the same shader on buildings, people and buses',()=>{
   const scene=createLandscape(),globes=scene.streetGlobes,field=createStreetField(globes);
+  const {shelterPools,ferryWalkPools}=scene.root.userData;
+  const steuart=createStreetField(globes,ferryWalkPools,shelterPools),unlit=createStreetField(globes,ferryWalkPools);
+  const emitters=[];
+  for(const chunk of scene.architectureChunks){
+    const glass=chunk.geometry.attributes.signLight,position=chunk.geometry.attributes.position;
+    if(!glass)continue;
+    for(let i=0;i<glass.count;i++){
+      if(glass.getX(i)>.89&&glass.getY(i)>.87&&glass.getZ(i)>.75&&position.getZ(i)<-8)
+        emitters.push(new T.Vector3().fromBufferAttribute(position,i));
+    }
+  }
+  assert.equal(shelterPools.length,4);
+  for(const name of ['Steuart and Market sheltered terminal','Steuart and Mission sheltered terminal']){
+    const stop=scene.transit.poses.getObjectByName(name);
+    const canopy=stop.getObjectByName('Muni shelter with wave roof, bench and information case');
+    for(const side of [-1,1]){
+      const lens=canopy.localToWorld(new T.Vector3(side*1.88,2.481,.06));
+      const pool=shelterPools.find(p=>lens.distanceTo(new T.Vector3(p.x,p.y,p.z))<.00001);
+      assert.ok(pool,'roof light registered to its final canopy offset at '+name);
+      assert.ok(emitters.some(p=>lens.distanceTo(p)<.018),'night glass survives static architecture bake');
+      const up=new T.Raycaster(lens,new T.Vector3(0,1,0),0,.005);
+      assert.ok(up.intersectObject(canopy)[0],'housing reaches a roof support');
+      assert.equal(channelAt(unlit,lens.x,lens.z,2),0);
+      assert.ok(channelAt(steuart,lens.x,lens.z,2)>175);
+      assert.ok(Math.abs(channelAt(steuart,lens.x,lens.z,1)/255-lens.y)<.003);
+      assert.equal(channelAt(steuart,lens.x,lens.z),channelAt(unlit,lens.x,lens.z),'surrounding street illumination retained');
+    }
+    const bench=canopy.localToWorld(new T.Vector3(0,.54,-.31));
+    assert.ok(channelAt(steuart,bench.x,bench.z,2)>70,'waiting area receives local light');
+  }
+  const flag=scene.transit.poses.getObjectByName('2 Sutter terminal at Steuart and Don Chee').position;
+  assert.equal(channelAt(steuart,flag.x,flag.z,2),0,'no roof light at uncovered flag');
+  // The shader decodes local roof lights only in this empty part of the signal field.
+  for(let x=-13.16;x<=-2.34;x+=.06)for(let z=-9.46;z<=-7.94;z+=.06)
+    for(const c of [1,2])assert.equal(channelAt(unlit,x,z,c),0);
+  steuart.dispose();unlit.dispose();
   const plazaSamples=[
     ['Harry Bridges median',0,-4.65,150],['western carriageway',2,-5,190],
     ['palm walk curb',3,-6,230],['brick court',3,-8.8,200],

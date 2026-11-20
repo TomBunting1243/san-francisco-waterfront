@@ -94,7 +94,7 @@ export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
   return all;
 }
 
-export function createStreetField(globes:number[],ferryPools:readonly FerryWalkPool[]=[]){
+export function createStreetField(globes:number[],ferryPools:readonly FerryWalkPool[]=[],shelterPools:readonly FerryWalkPool[]=[]){
   const pixels=new Uint8Array(width*height*4);
   const stamp=(x:number,y:number,z:number,r:number,channel:number,heading?:number,plaza=false,strength=1)=>{
     const col=(x-minX)/pitch-.5,row=(z-minZ)/pitch-.5,bound=r/pitch;
@@ -112,10 +112,11 @@ export function createStreetField(globes:number[],ferryPools:readonly FerryWalkP
           const edge=1-THREE.MathUtils.smoothstep(d,.57,1);
           const beam=heading===undefined||d*r<.09?1:.08+.92*THREE.MathUtils.smoothstep((dx*Math.sin(heading)+dz*Math.cos(heading))/(d*r),-.6,.8);
           const weight=strength*beam*edge/(1+shoulder*shoulder);
-          const old=pixels[idx],add=Math.round((255-old)*weight);
+          const intensity=idx+channel,sourceHeight=idx+(channel===2?1:3);
+          const old=pixels[intensity],add=Math.round((255-old)*weight);
           if(!add)continue;
-          pixels[idx]=old+add;
-          pixels[idx+3]=Math.round((pixels[idx+3]*old+255*Math.min(1,Math.max(0,y))*add)/(old+add));
+          pixels[intensity]=old+add;
+          pixels[sourceHeight]=Math.round((pixels[sourceHeight]*old+255*Math.min(1,Math.max(0,y))*add)/(old+add));
         }else{
           const pool=Math.min(1,(1-d)/(1-.085/r));
           const weight=Math.round(255*(channel===0?pool**2.2:(1-d*d)**3)*aim);
@@ -137,6 +138,10 @@ export function createStreetField(globes:number[],ferryPools:readonly FerryWalkP
   for(const h of waterfrontSignals){
     const p=signalLensCenter(h);stamp(p.x,p.y,p.z,.42,1+h.axis,h.heading);
   }
+  // Steuart's shelter pads are outside the signal footprints. Reuse their two
+  // empty channels locally: this preserves the boulevard spill above the roof
+  // and lets the white shelter lamps cut off separately at their own height.
+  for(const {x,y,z,radius,strength} of shelterPools)stamp(x,y,z,radius,2,undefined,true,strength);
   const texture=new THREE.DataTexture(pixels,width,height,THREE.RGBAFormat);
   texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;texture.needsUpdate=true;
   return texture;
@@ -196,7 +201,14 @@ const illumination=`
       float signalZ=1.-smoothstep(.24,.45,waterfrontLightPosition.y);
       float normalY=inverseTransformDirection(normal,viewMatrix).y;
       float facing=smoothstep(-.72,-.05,normalY)*(.47+.53*max(normalY,0.));
-      vec3 spill=vec3(1.,.4564,.1119)*field.r*lampZ*.82+
+      vec3 shelterSpill=vec3(0.);
+      if(waterfrontLightPosition.z> -9.4 && waterfrontLightPosition.z< -8.0 &&
+         waterfrontLightPosition.x> -13.1 && waterfrontLightPosition.x< -2.4){
+        float belowRoof=1.-smoothstep(field.g-.045,field.g+.001,waterfrontLightPosition.y);
+        shelterSpill=vec3(.90,.85,.73)*field.b*belowRoof;
+        field.gb=vec2(0.);
+      }
+      vec3 spill=shelterSpill+vec3(1.,.4564,.1119)*field.r*lampZ*.82+
         (waterfrontMainSignal*field.g+waterfrontCrossSignal*field.b)*signalZ*.34;
       outgoingLight+=waterfrontStreetNight*facing*(.015+.85*diffuseColor.rgb)*spill;
       if(waterfrontStreetWet>.01 && normalY>.75){
@@ -234,7 +246,7 @@ const cabIllumination=`
 /** One field lookup for nearby opaque surfaces. The same shader evaluates
  * current instance/batch coordinates for moving coats, cars and the tram. */
 export function createStreetIllumination(root:THREE.Group,globes:number[],water:THREE.Material,enableRides=false){
-  const field=createStreetField(globes,root.userData.ferryWalkPools),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
+  const field=createStreetField(globes,root.userData.ferryWalkPools,root.userData.shelterPools),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
   const cabPosition={value:new THREE.Vector3()},cabDirection={value:new THREE.Vector3(0,0,-1)},cabIntensity={value:0};
   const lenses=signalLenses();root.add(lenses.mesh);
   const materials=new Set<THREE.MeshStandardMaterial>();

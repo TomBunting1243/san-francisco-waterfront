@@ -14,6 +14,8 @@ export function selectFilmEdition(search:string,now:Date,minutes?:number):FilmEd
   return {shot,palette};
 }
 
-export function filmAssetPath({shot,palette}:FilmEdition){
-  return './openings/'+shot+(palette==='night'?'-night':'');
+export const portraitFilmQuery='(orientation: portrait)';
+
+export function filmAssetPath({shot,palette}:FilmEdition,portrait:boolean){
+  return './openings/'+shot+(palette==='night'?'-night':'')+(portrait?'-portrait':'');
 }

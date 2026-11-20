@@ -138,3 +138,26 @@ test('boarding batches preserve Three’s full-precision indexed facade, roof an
     assert.deepEqual(normal.array,geometry.getAttribute('normal').array);
   }
 });
+
+test('a completed background slice cannot report a different camera skyline ready',()=>{
+  const streamed=createUrbanContext(),reference=createUrbanContext();
+  const camera=new THREE.PerspectiveCamera(35,1,.1,52);
+  camera.up.set(0,0,-1);
+  const look=(x,z)=>{
+    camera.position.set(x,24,z);camera.lookAt(x,0,z);camera.updateMatrixWorld();
+  };
+  look(-119,-62);
+  assert.equal(streamed.prepareOrbitView(camera,Infinity),true);
+  const previous=streamed.children.length;
+  look(60,-80);
+  assert.equal(streamed.prepareOrbitView(camera,0),false);
+  assert.equal(streamed.prepareOrbitView(camera,Infinity),true);
+  reference.update(camera);
+  const fresh=streamed.children.slice(previous);
+  assert.equal(fresh.length,reference.children.length);
+  assert.ok(fresh.length>0);
+  for(const [i,tile] of fresh.entries()){
+    assert.deepEqual(tile.geometry.index.array,reference.children[i].geometry.index.array);
+    assert.deepEqual(tile.geometry.attributes.position.array,reference.children[i].geometry.attributes.position.array);
+  }
+});

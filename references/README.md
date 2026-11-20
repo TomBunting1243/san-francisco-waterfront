@@ -14,9 +14,9 @@ Follow the research behind the city, from the Ferry Building’s clock and arcad
 
 | Measure | Recorded amount |
 |---|---:|
-| Cited publication, image, data and source URLs | 641 |
+| Cited publication, image, data and source URLs | 645 |
 | Survey asset URLs | 2,028 (5 also directly cited) |
-| Distinct URLs across both registers | 2,664 |
+| Distinct URLs across both registers | 2,668 |
 | Shipped geographic JSON files | 34 files · 9,044,438 bytes |
 | Other shipped data JSON (portrait, wordmark, radar palette, tides and timetables) | 5 files · 54,918 bytes |
 | Measured input files in the [asset register](SURVEY-ASSETS.csv) | 2,028 files · 514,926,384 bytes |
@@ -83,7 +83,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Data and services](#data-and-services) · 51
 - [Reports and technical documents](#reports-and-technical-documents) · 92
 - [Licenses and credits](#licenses-and-credits) · 5
-- [Additional published sources](#additional-published-sources) · 210
+- [Additional published sources](#additional-published-sources) · 214
 
 ### Photographs and imagery
 
@@ -561,6 +561,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Enclos curtain wall](https://enclos.com/project/199-fremont/) · enclos.com — [199 Fremont Street / 300 Howard Street](../references/WATERFRONT-REFERENCE-AUDIT.md#199-fremont-street--300-howard-street)
 - [millennium tower · enclos.com](https://enclos.com/project/millennium-tower-301-mission/) · enclos.com — [millennium tower](../app/millennium-tower.ts#L88)
 - [Entrance designer](https://esi.nbbj.com/work/221-main-street) · esi.nbbj.com — [Mission, Main and Beale frontages](../references/WATERFRONT-REFERENCE-AUDIT.md#mission-main-and-beale-frontages)
+- [opening room · example.test](https://example.test/openings/) · example.test — [opening room](../tests/opening-room.test.mjs#L15)
 - [rincon park · fisher.access.sfmoma.org](https://fisher.access.sfmoma.org/301/) · fisher.access.sfmoma.org — [rincon park](../app/rincon-park.ts#L66)
 - [Winter holiday dates](https://foodwise.org/articles/farmers-market-winter-holiday-guide/) · foodwise.org — [The Ferry plazas and the foot of Market](../references/WATERFRONT-REFERENCE-AUDIT.md#the-ferry-plazas-and-the-foot-of-market)
 - [Thanksgiving dates](https://foodwise.org/articles/foodwise-farmers-market-fall-feast-guide/) · foodwise.org — [The Ferry plazas and the foot of Market](../references/WATERFRONT-REFERENCE-AUDIT.md#the-ferry-plazas-and-the-foot-of-market)
@@ -579,6 +580,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [J/22 dimensions](https://jboats.com/j22-tech-specs) · jboats.com — [Reconstructing the view from the Ferry Building](../references/WATERFRONT-REFERENCE-AUDIT.md#reconstructing-the-view-from-the-ferry-building)
 - [La Corneta menu](https://lacorneta.com/menu/glen-park) · lacorneta.com — [Waterfront advertising kiosks](../references/WATERFRONT-REFERENCE-AUDIT.md#waterfront-advertising-kiosks)
 - [golden gateway garage · lots.impark.com](https://lots.impark.com/IMP/en/details/27/50?csr=0) · lots.impark.com — [golden gateway garage](../app/golden-gateway-garage.ts#L44)
+- [Shelter architect](https://lundbergdesign.com/project/sfmta-bus-shelters/) · lundbergdesign.com — [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail)
 - [The Slanted Door, Lundberg Design](https://lundbergdesign.com/project/the-slanted-door/) · lundbergdesign.com — [ferry patios](../app/ferry-patios.ts#L12) · [Restaurant frontage and ferry lighting](../references/RESEARCH-SOURCES.md#restaurant-frontage-and-ferry-lighting) · [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [Location pin](https://maps.app.goo.gl/fq5LJVzLtPjNq6gJ9) · maps.app.goo.gl — [Portside Park, Pier 14 and public art](../references/RESEARCH-SOURCES.md#portside-park-pier-14-and-public-art)
 - [Reflectivity color scale](https://mesonet.agron.iastate.edu/GIS/rasters.php?rid=2) · mesonet.agron.iastate.edu — [Weather](../THIRD-PARTY-NOTICES.md#weather) · [radar palette](../public/data/radar-palette.json#L1) · [Waterfront weather](../references/WATERFRONT-REFERENCE-AUDIT.md#waterfront-weather)
@@ -607,6 +609,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [market historic frontages · presidiobay.com](https://presidiobay.com/projects/88-spear-street-san-francisco-office/) · presidiobay.com — [market historic frontages](../app/market-historic-frontages.ts#L162)
 - [Four Seasons hotel renovation announcement](https://press.fourseasons.com/content/fourseasons_pressroom/printView.html?pageToPrint=%2Fcontent%2Ffourseasons_pressroom%2Fen%2Fnews%2Fembarcadero%2F2022%2Fguest_room_renovatio) · press.fourseasons.com — [California Center](../references/RESEARCH-SOURCES.md#california-center)
 - [JLL Market Center listing and brochure](https://property.jll.com/listings/market-center-555-market-st-san-francisco) · property.jll.com — [Market Plaza](../references/RESEARCH-SOURCES.md#market-plaza)
+- [Lighting supplier](https://radius-displays.com/projects/san-francisco-bus-shelters/) · radius-displays.com — [promenade transit](../app/promenade-transit.ts#L76) · [Transit Detail](../references/RESEARCH-SOURCES.md#transit-detail)
 - [downtown roofs · s3-us-west-2.amazonaws.com](https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/) · s3-us-west-2.amazonaws.com — [downtown roofs](../scripts/import-downtown-roofs.py#L31)
 - [bay relief · s3.amazonaws.com](https://s3.amazonaws.com/elevation-tiles-prod/terrarium/) · s3.amazonaws.com — [bay relief](../scripts/import-bay-relief.mjs#L11)
 - [Bay Water Trail’s Pier 40 profile](https://sfbaywatertrail.org/trailhead/pier-40/) · sfbaywatertrail.org — [South Beach to China Basin](../references/WATERFRONT-REFERENCE-AUDIT.md#south-beach-to-china-basin)
@@ -683,6 +686,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [MTC and Bay Area Toll Authority bridge overview](https://www.mtc.ca.gov/operations/programs-projects/bridges/san-francisco-oakland-bay-bridge) · mtc.ca.gov — [Bay Bridge, SoMa approach and ferries](../references/WATERFRONT-REFERENCE-AUDIT.md#bay-bridge-soma-approach-and-ferries)
 - [Kennedy’s 2006 patio gathering](https://www.niallkennedy.com/blog/2006/08/wordcamp-kickoff-party.html) · niallkennedy.com — [ferry patios](../app/ferry-patios.ts#L15) · [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [Pier One renovation](https://www.nibbi.com/projects/pier-one/) · nibbi.com — [Reconstructing the view from the Ferry Building](../references/WATERFRONT-REFERENCE-AUDIT.md#reconstructing-the-view-from-the-ferry-building)
+- [sky · www.nps.gov](https://www.nps.gov/subjects/nightskies/rateyoursky.htm) · nps.gov — [sky](../app/sky.ts#L2)
 - [OMA design](https://www.oma.com/projects/the-avery) · oma.com — [avery building](../app/avery-building.ts#L15) · [388 Market, 77 Beale, and The Avery](../references/WATERFRONT-REFERENCE-AUDIT.md#388-market-77-beale-and-the-avery)
 - [billboard sites · www.opensfhistory.org](https://www.opensfhistory.org/Display/) · opensfhistory.org — [billboard sites](../app/billboard-sites.ts#L21)
 - [PCI project profile](https://www.pci.org/ProjectProfile?ID=270038) · pci.org — [providian building](../app/providian-building.ts#L16) · [201 Mission Street](../references/WATERFRONT-REFERENCE-AUDIT.md#201-mission-street)

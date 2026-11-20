@@ -249,6 +249,8 @@ The rights to a referenced photograph or plan remain with its creator or publish
 
 ### Transit Detail
 
+The Steuart shelters at Market and Mission use the wave-roof design. The supplier documents LED roof lamps and light panels. Two downward-facing strips on the modeled support rails approximate the lamp count, dimensions and offsets. [Lighting supplier](https://radius-displays.com/projects/san-francisco-bus-shelters/) · [Shelter architect](https://lundbergdesign.com/project/sfmta-bus-shelters/)
+
 - [Route description and schedule](https://www.sfmta.com/routes/2-sutter)
 - [SFMTA fleet photo and description](https://www.sfmta.com/fr/node/1322)
 - [SFMTA overhaul specifications, Technical Specifications, Attachment on material and color selections](https://www.sfmta.com/sites/default/files/reports-and-documents/2019/07/7-16-19_item_10.10_rfp_-_mid_life_overhaul.pdf)
