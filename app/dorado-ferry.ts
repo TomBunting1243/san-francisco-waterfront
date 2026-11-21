@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import {vesselLens} from './vessel-lighting.ts';
+
 type FerryMesh = (shape: THREE.BufferGeometry, color: string, x: number, y: number, z: number, parent: THREE.Group) => THREE.Mesh;
 type Point = [x: number, y: number, z: number];
 
@@ -169,8 +171,11 @@ export function createDoradoFerry(mesh:FerryMesh,name:string) {
   beam([mastX-.17,1.603,0],[mastX,2.02,0],.011,trim);
   beam([mastX,1.97,-.20],[mastX,1.97,.20],.010,roof);
   box(.087,.058,.275,mastX,mastHead,0,roof);
-  box(.04,.045,.050,mastX,1.972,-.192,'#a55c4d');
-  box(.04,.045,.050,mastX,1.972,.192,green);
+  box(.063,.062,.067,mastX,1.972,-.192,vesselLens.port);
+  box(.063,.062,.067,mastX,1.972,.192,vesselLens.starboard);
+  box(.064,.063,.069,mastX,mastHead+.056,0,vesselLens.mast);
+  box(.046,.066,.090,-2.48,.865,0,vesselLens.stern);
+  for(const side of [-1,1])box(.11,.045,.030,.44,1.062,side*.761,vesselLens.work);
   // The moving group's origin follows the water triangle under the hulls.
   // Position every painted and structural part relative to that load waterline.
   for(const part of hull.children)part.position.y-=waterline;

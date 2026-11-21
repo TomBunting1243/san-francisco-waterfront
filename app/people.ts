@@ -162,7 +162,19 @@ export function createPeople(count=22,seatedCount=0){
   const knee=new THREE.Vector3(),hip=new THREE.Vector3(), foot=new THREE.Vector3(), midpoint=new THREE.Vector3(), offset=new THREE.Vector3();
   const viewer=new THREE.Vector2(Infinity,Infinity);
   function setViewer(x:number,z:number){viewer.set(x,z);}
+  const hidden=new Uint8Array(count),collapsed=new THREE.Matrix4().makeScale(0,0,0);
+  function hide(i:number){
+    if(hidden[i])return;
+    hidden[i]=1;
+    for(const mesh of [bodies,hems,hands,lapels,heads,cheeks,hats,bags,straps])mesh.setMatrixAt(i,collapsed);
+    for(const side of [0,1]){
+      const limb=i*2+side;
+      for(const mesh of [legs,sleeves,shoes,contacts])mesh.setMatrixAt(limb,collapsed);
+      if(i>=count-seatedCount)legs.setMatrixAt((i+seatedCount)*2+side,collapsed);
+    }
+  }
   function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample,seat?:{amount:number;height:number;footReach:number;pace:number}){
+    hidden[i]=0;
     const cadence=5.55+(i%4)*.23, phase=t*cadence+i*2.1, sway=Math.sin(phase);
     const style=i%cast.length, person=cast[style], adultHeight=1.65+(i%4)*.085;
     const size=adultHeight*metresToScene/modelHeight;
@@ -259,5 +271,5 @@ export function createPeople(count=22,seatedCount=0){
   function flush(){
     for(const mesh of [legs,shoes,bodies,hems,sleeves,hands,lapels,heads,cheeks,hats,bags,straps,contacts])mesh.instanceMatrix.needsUpdate=true;
   }
-  return {group,bodies,heads,setPaintLight,setViewer,update,flush};
+  return {group,bodies,heads,setPaintLight,setViewer,update,hide,isHidden:(i:number)=>hidden[i]===1,flush};
 }

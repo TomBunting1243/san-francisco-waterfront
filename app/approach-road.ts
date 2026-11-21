@@ -236,6 +236,10 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
   }
   for(const [routeIndex,axis] of [...main,...ramps.map(r=>r.ramp)].entries()){
     const branch=routeIndex>1,westbound=routeIndex===0;
+    // CanadaD, KartaView track 366261 frame 2052 (CC BY-SA 4.0): the
+    // Fremont exit keeps the yellow stripe against the driver's left parapet.
+    // https://kartaview.org/details/366261/2052/track-info
+    const yellowEdge=westbound||axis===fremont?-1:1;
     const bridgeFoot=!branch;
     const marking=pavementMarkings(axis);
     const right=(w:number)=>w,left=(w:number)=>-w;
@@ -272,7 +276,7 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
         add(slabGeometry(axis,start,to,inner,inner,side>0?.103:0,side>0?0:.103),concrete);
         add(slabGeometry(axis,start,to,side>0?outer:inner,side>0?inner:outer,.103,.103),concrete);
         const edge=(w:number)=>side*(w-.059);
-        add(marking(start,to,edge,.011),side===(westbound?-1:1)?'#c4ab72':'#d8d8c3');
+        add(marking(start,to,edge,.011),side===yellowEdge?'#c4ab72':'#d8d8c3');
       }
     }
     for(let s=bridgeFoot?.115:1.4;s<axis.length-.6;s+=.86){

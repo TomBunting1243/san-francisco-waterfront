@@ -5,7 +5,7 @@ import {FontLoader} from 'three/addons/loaders/FontLoader.js';
 import fontData from '../app/harbor-font.json' with {type:'json'};
 import data from '../public/data/approach-soma.json' with {type:'json'};
 import {shuffleBillboardAds,anthropicCopy,buildApproachBillboards,spaceXCopy,palantirCopy,palantirLines} from '../app/approach-billboards.ts';
-import {approachDistance,approachGround,approachLengths,approachPose,buildApproachRoad} from '../app/approach-road.ts';
+import {approachDistance,approachGround,approachLengths,approachPose,buildApproachRoad,fremontExitDistance,westboundExitPose} from '../app/approach-road.ts';
 import sharp from 'sharp';
 import {extraBillboardAds,renderBillboardEdition,billboardCaptions} from '../app/billboard-editions.ts';
 import {waterfrontKioskSites} from '../app/waterfront-kiosk-sites.ts';
@@ -33,6 +33,26 @@ test('the Skyway continues from both suspension decks past Sixth with supported 
       assert.ok((Math.cos(a.heading)*(b.x-a.x)-Math.sin(a.heading)*(b.z-a.z))*(east?-1:1)>.04);
       assert.ok(Math.abs(a.y-b.y)<.02);
       assert.ok(approachDistance(a.x,a.z,road.points)<.13);
+    }
+  }
+});
+
+test('the Fremont exit has yellow on the driver’s left and white on the right through the bend',()=>{
+  const root=new THREE.Group();
+  buildApproachRoad(addMesh,root);root.updateMatrixWorld(true);
+  const surfaces=root.children[0].children.filter(m=>m.isMesh&&!m.isInstancedMesh);
+  const down=new THREE.Vector3(0,-1,0);
+  // On this two-lane section the sedan travels in the right-hand lane.
+  // Derive right from forward travel, independently of how the stripes are built.
+  for(const fraction of [.60,.70,.75]){
+    const s=fraction*fremontExitDistance,p=westboundExitPose(s);
+    const ahead=westboundExitPose(s+.01),behind=westboundExitPose(s-.01);
+    const right=new THREE.Vector3(behind.z-ahead.z,0,ahead.x-behind.x).normalize();
+    for(const [offset,expected] of [[-.316,'c4ab72'],[.100,'d8d8c3']]){
+      const from=new THREE.Vector3(p.x,p.y+.08,p.z).addScaledVector(right,offset);
+      const [hit]=new THREE.Raycaster(from,down,0,.16).intersectObjects(surfaces,false);
+      assert.ok(hit?.object.geometry.userData.roadPaint,'paint on the visible ramp surface at '+[fraction,offset]);
+      assert.equal(hit.object.material.color.getHexString(),expected);
     }
   }
 });

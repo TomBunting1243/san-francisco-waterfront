@@ -11,6 +11,7 @@ import {ferryFleet,ferryPose} from './motion.ts';
 import {collectFerryWalkPools} from './ferry-walk-lights.ts';
 import {collectStreetGlobes,createSignalHousings} from './street-illumination.ts';
 export {createStreetIllumination} from './street-illumination.ts';
+import {addRinconPathLighting} from './rincon-path-lighting.ts';
 import {buildPromenadeLighting} from './promenade-lighting.ts';
 import {createCanopyMaterial} from './canopy-pigment.ts';
 import {createFerryMarket} from './ferry-market.ts';
@@ -47,6 +48,7 @@ import {embarcaderoPlaza,plazaStandingHeight} from './embarcadero-plaza.ts';
 import {addRinconRestaurant} from './rincon-restaurants.ts';
 import {createRememberedWaterfront} from './remembered-waterfront.ts';
 import {bindFountainWaterClock,fountainWaterName} from './fountain-flow.ts';
+import {bindVesselLighting,setVesselLightingPhase} from './vessel-lighting.ts';
 import {createFireboat} from './fireboat.ts';
 import {ferryPassengerCount,updateFerryPassengers} from './ferry-passengers.ts';
 import {createServiceFerry,serviceFerryPaint,updatePyxisBoardingDoor} from './service-ferries.ts';
@@ -130,7 +132,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const root = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number; tide?:boolean }[] = [];
-  const residentPositions:{x:number;z:number;y:number}[]=[];
+  const residentPositions:{x:number;z:number;y:number;rearShopper?:boolean}[]=[];
   const cream = '#ede4d3', dark = '#345564';
   function material(color: string) {
     if (!materials.has(color)) materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: .86, metalness: .02 }));
@@ -258,7 +260,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   function addBuilding(b:typeof detailedBuildings[number]){
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
     if(b.name==='Fireboat Station 35'){
-      const station=fireboatStation(b,detailedBuildings,font,mesh);root.add(station.root);windowPositions.push(...station.windows);return;
+      const station=fireboatStation(b,font,mesh);root.add(station.root);windowPositions.push(...station.windows);return;
     }
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
@@ -406,15 +408,17 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   // Cable profile: 1,160 ft side spans and 2,310 ft main spans, twice.
   const cableLightPositions:number[]=[];
   yield 3;
-  const cableSpans=[[15.64,36.85,4.85,9.55],[36.85,79.097,9.55,9.55],[79.097,100.31,9.55,4.85],[100.31,121.524,4.85,9.55],[121.524,163.771,9.55,9.55],[163.771,bridgeEnd,9.55,4.85]];
-  for(const x of [-.75,.75])for(const [from,to,ya,yb] of cableSpans){
-    const points:THREE.Vector3[]=[];
-    const main=Math.abs(ya-yb)<.1;
-    for(let i=0;i<=96;i++){
-      const t=i/96,z=from+(to-from)*t,y=ya+(yb-ya)*t-(main?4.7:1.65)*4*t*(1-t);
-      points.push(new THREE.Vector3(x,y,z));
-      if(i%3===0&&i>0&&i<96)addBayLightStrand(cableLightPositions,x,z,y);
-      if(i%3===0&&y>deckHigh+.12&&!(to===bridgeEnd&&i===96))pole(new THREE.Vector3(x,deckHigh+.05,z),new THREE.Vector3(x,y,z),.017,'#94aaa9',bridge);
+  // Permit M2012.009.04 describes 308 strands on the north cable plane.
+  // Distribute those stations by modeled span length, keeping towers and anchorage clear.
+  const cableSpans=[[15.64,36.85,4.85,9.55,38],[36.85,79.097,9.55,9.55,75],[79.097,100.31,9.55,4.85,38],[100.31,121.524,4.85,9.55,38],[121.524,163.771,9.55,9.55,75],[163.771,bridgeEnd,9.55,4.85,44]];
+  for(const x of [-.75,.75])for(const [from,to,ya,yb,hangers] of cableSpans){
+    const sag=Math.abs(ya-yb)<.1?4.7:1.65;
+    const onCable=(t:number)=>new THREE.Vector3(x,ya+(yb-ya)*t-sag*4*t*(1-t),from+(to-from)*t);
+    const points=Array.from({length:97},(_,i)=>onCable(i/96));
+    for(let i=1;i<=hangers;i++){
+      const top=onCable(i/(hangers+1));
+      pole(new THREE.Vector3(x,deckHigh+.05,top.z),top,.017,'#94aaa9',bridge);
+      addBayLightStrand(cableLightPositions,x,top.z,top.y);
     }
     mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.027,5,false),'#516d79',0,0,0,bridge);
   }
@@ -448,6 +452,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   if(shouldYield())yield 3;
   buildApproachBlocks(mesh,root);
   buildApproachBillboards(mesh,root,font);
+  if(shouldYield())yield 3;
   // Carry the viaduct from its west-span anchorage to the rising tunnel cut.
   const leadLength=10.1,leadMiddle=bridgeEnd+leadLength/2;
   for(const deck of [deckLow,deckHigh]){
@@ -567,6 +572,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     }
   }
   root.add(harborPublicPiers(sfMap.piers,font));
+  if(shouldYield())yield 3;
   root.add(ferryPublicRealm());
   // People meet on the granite paving or pause outside the restaurant threshold.
   residentPositions.push({x:-9.83,z:1.51,y:southPlazaTop+.009});
@@ -576,9 +582,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const terminal=buildFerryTerminal(mesh,root);
   for(const entry of ferryConnections)root.add(ferryPortal(entry,font));
   mesh(walkSurface(routes.ferry,routeWidth.ferry,.016),'#bdb8a6',0,0,0).name='Ferry landing promenade';
-  for(const [x,z] of [[-4.63,2.98],[-4.24,3.10],[-3.40,4.73],[-4.30,4.95],[-3.70,5.30],[-3.49,5.66]])residentPositions.push({x,z,y:.096});
+  for(const [x,z] of [[-4.63,2.98],[-4.24,3.10],[-3.40,4.73],[-4.30,4.95],[-3.70,5.30],[-3.49,5.66]])residentPositions.push({x,z,y:.096,rearShopper:true});
   // Buckyball at the Exploratorium, north along the Embarcadero.
   const bucky=mesh(new THREE.IcosahedronGeometry(.58,0),'#bc985d',47.26,.9,.07);bucky.material=material('#bc985d');bucky.material.wireframe=true;
+  addRinconPathLighting(root);
   const lanterns=buildPromenadeLighting(root);
   root.userData.ferryWalkPools=collectFerryWalkPools(root);
   root.userData.shelterPools=addSteuartShelterLights(root);
@@ -669,14 +676,15 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   // Instanced windows keep the detailed city inexpensive to draw.
   const windowMaterial=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,emissive:0xffffff,emissiveIntensity:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   const facadeClock=createFacadeClock();
-  applyWindowLighting(windowMaterial,bayLights.clock,facadeClock.litShare);
+  applyWindowLighting(windowMaterial,bayLights.clock,facadeClock.litShare,facadeClock.night);
   const windowGeometry=new THREE.PlaneGeometry(1,1);
+  windowGeometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(),Math.hypot(.533,.554));
   windowGeometry.setAttribute('windowGlow',new THREE.InstancedBufferAttribute(new Float32Array(windowPositions.map(windowGlow)),1));
   const windowMesh=new THREE.InstancedMesh(windowGeometry,windowMaterial,windowPositions.length);
   const dummy=new THREE.Object3D();
   windowPositions.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(0,p.ry,0);dummy.scale.set(p.w,p.h,1);dummy.updateMatrix();windowMesh.setMatrixAt(i,dummy.matrix);windowMesh.setColorAt(i,new THREE.Color().setScalar((Math.sin(i*12.9898)*43758.5453)%1>.0?1:.72));});root.add(windowMesh);
   const sailboats=[createDaySailer('#aa5038'),createDaySailer('#386676')];root.add(...sailboats);
-  const fireboat=createFireboat();root.add(fireboat.root);
+  const fireboat=createFireboat(nightInk);root.add(fireboat.root);
   // Merge static architecture by material. Detail increases without thousands of draw calls.
   root.updateMatrixWorld(true);
   yield 5;
@@ -795,6 +803,17 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       const m=new THREE.Mesh(g,mat);m.castShadow=true;m.receiveShadow=true;group.add(m);
     });
   }
+  const ferryMaterials=new Set<THREE.Material>();
+  for(const [i,boat] of ferries.entries()){
+    const vessel=vessels[i];
+    const bridgeSill=vessel.family==='dorado'?1.47:vessel.sill+(vessel.family==='prop'?2.1:5)*.06;
+    boat.traverse(part=>{
+      if(!(part instanceof THREE.Mesh)||part.material!==ferryPaint)return;
+      part.material=ferryPaint.clone();
+      ferryMaterials.add(part.material);
+      bindVesselLighting(boat,part,nightInk,bridgeSill);
+    });
+  }
   for(const object of moving)object.traverse(child=>{child.castShadow=false;});
   const transit=createPromenadeTransit();root.add(transit.root);
   if(shouldYield())yield 6;
@@ -835,7 +854,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     // Keep printed lettering, glass, water, and transparent wakes on their own material treatments.
     const washSurface=mat instanceof THREE.MeshStandardMaterial&&!mat.transparent&&!mat.map&&
       mat!==windowMaterial&&mat!==waterMaterial&&mat.roughness>.55;
-    const marine=mat===waterMaterial||mat===ferryPaint;
+    const marine=mat===waterMaterial||ferryMaterials.has(mat);
     const previousCompile=mat.onBeforeCompile;
     const previousCacheKey=mat.customProgramCacheKey();
     mat.onBeforeCompile=(shader,renderer)=>{
@@ -940,6 +959,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   root.add(boardingBrows.mesh);
   ferries.forEach((boat,i)=>{
     const pose=ferryPose(0,i,ferryClock);
+    setVesselLightingPhase(boat,pose.phase);
     boat.position.set(pose.x,pose.y,pose.z);boat.rotation.y=pose.heading;
     boardingBrows.update(i,pose);
   });

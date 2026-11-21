@@ -75,22 +75,81 @@ export function addRinconRestaurant(b:Building,root:THREE.Group,windows:Window[]
     const door=epic?edge===12:edge===2,service=epic?edge===10:edge===9;
     const brickWall=!epic&&(edge===0||edge===7||edge===9);
     const podium=brickWall?height:epic?(v<-.70?.14:.055):.044;
+    // On illuminated dining frontages each jamb, glazing bar and
+    // soffit samples the apertures in its own wall, so a corner is an occluder.
+    const bounce=!brickWall&&!service&&(nz>.3||(epic?nx<-.5:nx>.5));
+    const panes:THREE.Mesh[]=[];
+    const inverse=new THREE.Matrix4(),localPoint=new THREE.Vector3(),localNormal=new THREE.Vector3();
+    let haveFrame=false;
+    function incident(point:THREE.Vector3,normal:THREE.Vector3){
+      if(!haveFrame){inverse.copy(g.matrixWorld).invert();haveFrame=true;}
+      localPoint.copy(point).applyMatrix4(inverse);
+      localNormal.copy(normal).transformDirection(inverse);
+      let sum=0;
+      for(const pane of panes){
+        const level=pane.userData.signLight?.[0];
+        if(!level)continue;
+        const {position,scale}=pane;
+        const depth=localPoint.z-(position.z+scale.z/2);
+        // The opaque facade blocks rays to the rear. Its projecting receivers
+        // also see the first strip of promenade lit by this same pane.
+        if(localPoint.z<.014||depth>.065)continue;
+        const halfW=scale.x*.46,halfH=scale.y*.46;
+        const x=THREE.MathUtils.clamp(localPoint.x-position.x,-halfW,halfW);
+        const y=THREE.MathUtils.clamp(localPoint.y-position.y,-halfH,halfH);
+        const dx=position.x+x-localPoint.x;
+        if(Math.abs(dx)>.12)continue;
+        if(depth>0){
+          // Average across the local part of the pane. A thin mullion can
+          // receive light from the left or right even right over the glass.
+          for(const shift of [-.018,.018]){
+            const sx=position.x+THREE.MathUtils.clamp(x+shift,-halfW,halfW)-localPoint.x;
+            const sy=position.y+THREE.MathUtils.clamp(y+shift,-halfH,halfH)-localPoint.y;
+            const d2=sx*sx+sy*sy+depth*depth;
+            const facing=sx*localNormal.x+sy*localNormal.y-depth*localNormal.z;
+            sum+=.5*level*depth*Math.max(0,facing)/d2/(1+d2/.0016);
+          }
+        }
+        // A short, diffuse second bounce from the paving in front of the
+        // opening reaches the lower stonework and outer faces of the jambs.
+        // Keep the receiver above and in front of the base of this wall.
+        const down=grade-localPoint.y,out=.115-localPoint.z;
+        const d2=dx*dx+down*down+out*out;
+        const facing=dx*localNormal.x+down*localNormal.y+out*localNormal.z;
+        const baseLight=1/(1+Math.max(0,position.y-scale.y/2-grade)*7);
+        sum+=level*baseLight*Math.max(0,facing)/Math.sqrt(d2)/(1+d2/.018)*.80;
+      }
+      return sum*1.5;
+    }
+    function receiver(mesh:THREE.Mesh){
+      if(bounce){mesh.userData.uplight=incident;mesh.userData.uplightTint=[.63,.29];}
+    }
     box(len,height,.024,0,floor+height/2,-.009,brickWall?stone:metal,g);
-    box(len,podium,.030,0,floor+podium/2,0,stone,g);
+    receiver(box(len,podium,.030,0,floor+podium/2,0,stone,g));
     if(!brickWall){
       const bays=Math.max(1,Math.round(len/(epic?.20:.23))),bw=len/bays;
       for(let j=0;j<bays;j++){
         const x=(j+.5)*bw-len/2,isDoor=(door||service)&&j===Math.floor(bays/2);
         const bottom=isDoor?floor:floor+podium,head=roof-.027;
         const bg=isDoor?(service?'#777d73':'#4d635f'):glass;
-        box(bw-.014,head-bottom,.016,x,(bottom+head)/2,.011,bg,g).name=isDoor?(service?'Service door':'Dining entrance glazing'):'Dining room glass';
+        const diningPane=box(bw-.014,head-bottom,.016,x,(bottom+head)/2,.011,bg,g);
+        diningPane.name=isDoor?(service?'Service door':'Dining entrance glazing'):'Dining room glass';
+        // Bay-facing dining windows cast warm light across the waterfront terrace.
+        // https://doc.epicsteak.com/pdf/EpicRoasthouse_PrivateDining.pdf
+        // https://www.waterbarsf.com/about/
+        if(bounce){
+          const level=(j+edge)%5===1?.46:.70;
+          diningPane.userData.signLight=[level,level*(epic?.57:.63),level*.29];
+          panes.push(diningPane);
+          if(j%2===0)diningPane.userData.ferryWalkPool={radius:.64,strength:.52};
+        }
         if(isDoor){
           box(.007,.031,.009,x+bw*.25,floor+.063,.025,'#c3b295',g);
-          box(bw,.012,.062,x,floor+.146,.029,epic?'#617e7b':metal,g);
+          receiver(box(bw,.012,.062,x,floor+.146,.029,epic?'#617e7b':metal,g));
         }else if(head-bottom>.085){
           const frame=epic?metal:'#5e5547';
-          box(bw,.009,.021,x,bottom+(head-bottom)*.63,.020,frame,g);
-          box(.009,head-bottom,.021,x,(bottom+head)/2,.020,frame,g);
+          receiver(box(bw,.009,.021,x,bottom+(head-bottom)*.63,.020,frame,g));
+          receiver(box(.009,head-bottom,.021,x,(bottom+head)/2,.020,frame,g));
           // Opening quads on the bay and park elevations, inside each jamb.
           if((nz>.3||nx>.5)&&j%2===1){
             const x0=u+nz*(x-bw*.23)+nx*.023,z0=v-nx*(x-bw*.23)+nz*.023;
@@ -99,10 +158,10 @@ export function addRinconRestaurant(b:Building,root:THREE.Group,windows:Window[]
               ry:Math.atan2(wx,wz),w:bw*.38,h:(head-bottom)*.52});
           }
         }
-        box(epic?.018:.038,height,.041,x-bw/2+.006,floor+height/2,.012,epic?trim:stone,g);
+        receiver(box(epic?.018:.038,height,.041,x-bw/2+.006,floor+height/2,.012,epic?trim:stone,g));
       }
     }
-    box(len+.012,.022,.060,0,roof-.009,.006,metal,g);
+    receiver(box(len+.012,.022,.060,0,roof-.009,.006,metal,g));
     if(epic&&edge===12){
       // The street entry sits beneath the grey-clad sign block and shallow
       // projecting canopy. The facade photograph shows raised red initials.

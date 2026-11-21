@@ -176,6 +176,16 @@ type Region='street'|'plaza';
 const walks=(region?:Region)=>region==='street'?streetRoutes:region==='plaza'?plazaRoutes:cityRoutes;
 export const waterfrontWalkerCount=(region?:Region)=>walks(region).reduce((sum,r)=>sum+r.count,0);
 
+// Resolve the same four slots in the all-city and plaza casts.
+export function frontMarketShopperStart(region?:Region){
+  let start=0;
+  for(const route of walks(region)){
+    if(route===shoppers)return start;
+    start+=route.count;
+  }
+  return -1;
+}
+
 export function waterfrontWalker(time:number,index:number,region?:Region){
   for(const route of walks(region)){
     const {count}=route;

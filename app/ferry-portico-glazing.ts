@@ -1,3 +1,4 @@
+import {openingIrradiance} from './authored-window-spill.ts';
 import * as THREE from 'three';
 type Pt=[number,number,number];
 
@@ -85,6 +86,7 @@ export function ferryGlazing(parent:THREE.Group){
       pane(x+w*.20,lo+.031,back+.034,w*.43,.058,'#857861');
       pane(x+w*.20,lo+.062,back+.036,w*.47,.008,warm);
     }
+    const roomLevel=illumination,firstTrim=pos.length;
     illumination=.065;
     const entrance=seed%4===0;
     if(entrance)doors(x,w,z,lo,hi-lo);
@@ -95,6 +97,20 @@ export function ferryGlazing(parent:THREE.Group){
     }
     // Glazed transom captures a strip of reflected sky.
     pane(x+w*.24,hi-.021,z-.002,w*.42,.035,glass);
+    // The opaque interiors and their trim occupy different depth planes in
+    // this prepacked mesh. Only the trim of this particular room receives it.
+    const a=new THREE.Vector3(),b=new THREE.Vector3(),normal=new THREE.Vector3();
+    for(let j=firstTrim;j<pos.length;j+=12){
+      a.fromArray(pos,j);b.fromArray(pos,j+3).sub(a);
+      normal.fromArray(pos,j+6).sub(a).crossVectors(b,normal).normalize();
+      for(let k=j;k<j+12;k+=3){
+        const strength=roomLevel*.44*openingIrradiance(x,(lo+hi)/2,back+.038,w,hi-lo,
+          pos[k],pos[k+1],pos[k+2],normal.x,normal.y,normal.z);
+        light[k]=Math.min(255,light[k]+Math.round(255*col[k]*strength));
+        light[k+1]=Math.min(255,light[k+1]+Math.round(166*col[k+1]*strength));
+        light[k+2]=Math.min(255,light[k+2]+Math.round(92*col[k+2]*strength));
+      }
+    }
   }
   function finish(){
     const geo=new THREE.BufferGeometry();

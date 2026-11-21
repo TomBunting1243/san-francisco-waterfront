@@ -19,6 +19,17 @@ const roadwaySites=[
   [286246,9.291,-14.556,.03165,-.467],[286247,11.302,-14.326,.045,-.472],
   [286249,13.201,-13.353,.045,-.472],[286245,7.88,-15.282,.031,-.467],
 ];
+// Active SFPUC SL-StdSteel objects at Howard, Folsom and Steuart.
+// IDs and plan positions come from the lighting inventory linked above.
+// Grades were raycast against the finished street. Each yaw points toward
+// its road's mapped centerline. Arm and cobra-head dimensions are estimated.
+const rinconRoadwaySites=[
+  [284262,-25.0696,-4.2232,.031,1.720],[284263,-23.9811,-4.9346,.045,-1.421],
+  [284265,-24.3683,-7.1484,.045,-1.398],[295606,-36.101,-7.8235,.045,-1.419],
+  [296274,-22.0811,-7.1682,.045,.144],[300397,-35.751,-5.4246,.04266,-1.443],
+  [300628,-15.9369,-6.9039,.045,-2.998],[300630,-19.970,-6.3008,.04064,-2.998],
+  [300631,-17.8927,-7.7952,.045,.144],[300632,-23.826,-5.7328,.03150,-2.993],
+];
 const bronze='#655b4a',black='#364242',steel='#778380',glass='#e5daca';
 const up=new THREE.Vector3(0,1,0);
 const post=new THREE.CylinderGeometry(.68,1,1,8),globe=new THREE.SphereGeometry(1,8,5);
@@ -73,14 +84,18 @@ export function addPlazaStreetLights(root:THREE.Group,halos:number[]){
     }
     finish('Fountain walk three-lantern standard');
   }
-  for(const [id,x,z,y,aim] of roadwaySites){
+  function roadwayStandard(site:number[],district:string){
+    const [id,x,z,y,aim]=site;
     const {a,upright,arm,light,finish}=assembly(x,y,z);
     upright(.49,.011,steel);
     const p=arm(aim,.135,.455,.035,steel);
-    a.add(globe,steel,p.x,p.y,p.z).scale.set(.026,.011,.016);
+    const hood=a.add(globe,steel,p.x,p.y,p.z);hood.scale.set(.026,.011,.016);
     p.y-=.006;
     const window=a.add(globe,glass,p.x,p.y,p.z);window.scale.set(.024,.008,.014);
     window.userData.signLight=warm;light(p);
-    finish('Park approach SFPUC '+id);
+    if(district==='Rincon')hood.rotation.y=window.rotation.y=aim-Math.PI/2;
+    finish(district+' SFPUC '+id);
   }
+  for(const site of roadwaySites)roadwayStandard(site,'Park approach');
+  for(const site of rinconRoadwaySites)roadwayStandard(site,'Rincon');
 }

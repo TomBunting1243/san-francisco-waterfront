@@ -1,3 +1,4 @@
+import {lightOpeningTrim} from './authored-window-spill.ts';
 import {hillsPalomino} from './hills-plaza.ts';
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
@@ -79,11 +80,13 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
       mesh(new THREE.ConeGeometry(.172,.061,8),color,x,y+.382,z,parent);
     }
   }
-  function storefront(x:number,z:number,y:number,w:number,h:number,frame:string,parent:THREE.Group){
+  function storefront(x:number,z:number,y:number,w:number,h:number,frame:string,parent:THREE.Group,level:number){
     box(w+.031,h+.033,.032,x,y,z,frame,parent);
     const glazing=box(w,h,.025,x,y,z+.021,glass,parent);
+    const firstTrim=parent.children.length;
     for(const side of [-1,0,1])box(.012,h,.014,x+side*w*.305,y,z+.039,frame,parent);
     box(w,.012,.017,x,y+h*.25,z+.039,frame,parent);
+    lightOpeningTrim(parent,parent.children.slice(firstTrim),x,y,z+.0335,w,h,level);
     return glazing;
   }
 
@@ -331,7 +334,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   // Hafalia's 2015 photographs document the occupied dining room and bar.
   // Model dim window spill onto the lateral passenger walk beside Pier 2.
   for(const [x,w,h] of [[-.67,.33,.284],[.13,.44,.265]]){
-    const pane=storefront(x,0,.279,w,h,blueTrim,townSide);
+    const pane=storefront(x,0,.279,w,h,blueTrim,townSide,.36);
     pane.userData.signLight=[.36,.24,.13];
     pane.userData.ferryWalkPool={radius:1.34,strength:.69};
   }
@@ -371,7 +374,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   pane.name='Sinbad display glass';pane.material=new THREE.MeshStandardMaterial({color:'#c7ddda',roughness:.16,transparent:true,opacity:.12,depthWrite:false});
   pane.castShadow=false;
   for(const x of [-.68,-.23,.23,.68]){
-    const pane=storefront(x,.434,.296,.41,.283,blueTrim,sinbads);
+    const pane=storefront(x,.434,.296,.41,.283,blueTrim,sinbads,x<0?.31:.23);
     pane.userData.signLight=x<0?[.31,.22,.14]:[.23,.17,.11];
     pane.userData.ferryWalkPool={radius:1.29,strength:.69};
   }
@@ -498,10 +501,12 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   arch.quadraticCurveTo(0,.405,-.267,.31);arch.closePath();
   mesh(new THREE.ExtrudeGeometry(arch,{depth:.012,bevelEnabled:false,curveSegments:14}),'#58716a',0,.012,.032,taqueria);
   const head=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-.267,.326,.054),new THREE.Vector3(0,.422,.054),new THREE.Vector3(.267,.326,.054));
+  const transomTrim=taqueria.children.length;
   mesh(new THREE.TubeGeometry(head,16,.012,6,false),limestone,0,0,0,taqueria);
   for(const x of [-.271,.271])box(.021,.323,.038,x,.1615,.053,limestone,taqueria);
   for(const x of [-.092,.092])box(.011,.343,.012,x,.177,.057,doorSash,taqueria);
   box(.534,.019,.013,0,.241,.059,doorSash,taqueria);
+  lightOpeningTrim(taqueria,taqueria.children.slice(transomTrim),0,.3,.056,.175,.096,.07);
   // The dark paired door has a shallow kick plate and narrow brass pulls.
   for(const x of [-.045,.045]){
     box(.082,.135,.009,x,.084,.063,'#727865',taqueria);
@@ -511,8 +516,10 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   for(const x of [-.224,-.075,.075,.224]){
     const pane=box(.080,.122,.010,x,.545,.052,'#aaa68c',taqueria);
     pane.userData.signLight=[.18,.115,.042];
+    const firstTrim=taqueria.children.length;
     for(const dx of [-.043,0,.043])box(.004,.13,.009,x+dx,.545,.060,doorSash,taqueria);
     for(const dy of [-.063,-.021,.021,.063])box(.089,.005,.009,x,.545+dy,.060,doorSash,taqueria);
+    lightOpeningTrim(taqueria,taqueria.children.slice(firstTrim),x,.545,.057,.080,.122,.18);
   }
   const transom=box(.175,.096,.008,0,.3,.052,'#738b77',taqueria);
   transom.userData.signLight=[.06,.07,.035];

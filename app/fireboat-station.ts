@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
-import {buildingCharacter,characterColors} from './building-character.ts';
+import {ferryWalkLens} from './ferry-walk-lights.ts';
+import {floatingFirehouse} from './fireboat-house.ts';
+import type {buildingCharacter} from './building-character.ts';
 import {footprintGeometry,sfMap} from './sf-map.ts';
 import {staticBoxes} from './static-boxes.ts';
 import {collectTidalParts,markTidalPart} from './tidal-berths.ts';
@@ -16,19 +18,15 @@ export const firehouseFloat=sfMap.piers.find(p=>p.closed&&p.p.some(([x,z])=>x===
 const foot=.3048*.06,shore=harborDatum.pierDeck,floatTop=waterSurface.level+5*foot;
 const steel='#909d9a',dark='#495c5c',timber='#796f5c';
 
-export function fireboatStation(b:Building,neighbors:Building[],font:Font,mesh:MeshFactory){
+export function fireboatStation(b:Building,font:Font,mesh:MeshFactory){
   const root=new THREE.Group(),floating=new THREE.Group();
   root.name='Pier 22½ firehouses and access';floating.name='Station 35 steel float';
   root.add(floating);markTidalPart(floating,'Pier 22½');
   const box=staticBoxes(mesh,root);
-  const slab=mesh(footprintGeometry(firehouseFloat.p,9*foot-.006),'#5c7071',0,floatTop-9*foot,0,floating);
+  const slab=mesh(footprintGeometry(firehouseFloat.p,9*foot-.006),'#46515a',0,floatTop-9*foot,0,floating);
   slab.name='Station 35 floating hull';
   mesh(footprintGeometry(firehouseFloat.p,.006),'#a6aaa1',0,floatTop-.006,0,floating);
-  const station={...b,h:34*foot};
-  const detail=buildingCharacter(station,neighbors,font);
-  detail.root.position.y=floatTop;floating.add(detail.root);
-  mesh(footprintGeometry(station.p,station.h),characterColors[b.name],0,floatTop,0,floating);
-  const windows=detail.windows.map(p=>({...p,y:p.y+floatTop,tide:true}));
+  const windows=floatingFirehouse(b.p,floatTop,floating,mesh,font);
 
   // Four fixed 48-inch guide piles; the steel deck and collars travel vertically.
   const corners=firehouseFloat.p.slice(0,4);
@@ -55,6 +53,11 @@ export function fireboatStation(b:Building,neighbors:Building[],font:Font,mesh:M
       const x=side*(width/2-.006),posts=Math.ceil(run/.18);
       for(let i=0;i<=posts;i++){
         const t=i/posts;box(.008,.068,.008,x,dy*t+.035,run*t,steel,group);
+        if(width>.3&&i%3===1){
+          box(.014,.011,.025,x-side*.005,dy*t+.055,run*t,dark,group);
+          const lens=box(.009,.003,.019,x-side*.009,dy*t+.048,run*t,'#d7dad0',group);
+          ferryWalkLens(lens,'Station 35 ramp guardrail downlight',.36,.58);
+        }
       }
       for(const y of [.036,.069]){
         const rail=box(.009,.009,length,x,dy/2+y,run/2,steel,group);

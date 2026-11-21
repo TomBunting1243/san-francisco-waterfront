@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MeshStandardMaterial,ShaderLib,Vector4} from 'three';
+import {compileFunction} from 'node:vm';
+import {MathUtils,MeshStandardMaterial,Raycaster,ShaderLib,Vector3,Vector4} from 'three';
+import {createLandscape} from '../app/landscape.ts';
+import {bridgeLayout} from '../app/bridge-layout.ts';
 import {configureBayWater} from '../app/bay-water.ts';
-import {createBayLights,addBayLightStrand} from '../app/bay-lights.ts';
+import {createBayLights,addBayLightStrand,bayLightPattern} from '../app/bay-lights.ts';
 
 test('the installation follows the outer face of each north suspender from road to cable',()=>{
   const positions=[];
@@ -28,6 +31,80 @@ test('one night draw has a pausable shader clock and drops out of the daytime re
   update(1,8.25);assert.equal(shader.uniforms.bayLightTime.value,8.25);
   update(1,9.5);assert.equal(shader.uniforms.bayLightTime.value,9.5);
   update(0,12);assert.equal(lights.visible,false);assert.equal(lights.material.opacity,0);
+});
+
+test('nearby strands resolve at their projected scale and only shine toward the northern waterfront',()=>{
+  const {lights}=createBayLights([.772,7.1,45]),shader={...ShaderLib.points,uniforms:{}};
+  lights.material.onBeforeCompile(shader);
+  const vertex=shader.vertexShader;
+  assert.ok(vertex.includes('isPerspectiveMatrix(projectionMatrix)?normalize(-mvPosition.xyz):vec3(0.,0.,1.)'));
+  assert.ok(vertex.includes('normalize(mat3(modelViewMatrix)*vec3(1.,0.,0.))'));
+  assert.ok(vertex.includes('scale*projectionMatrix[1][1]/depth'));
+  const fieldOfView=32*Math.PI/180;
+  const pixelsPerUnit=distance=>352/Math.tan(fieldOfView/2)/distance;
+  const sizeExpr=vertex.match(/gl_PointSize=(size\*clamp\([^;]+);/)[1];
+  const diameter=compileFunction('return '+sizeExpr,['size','pixelsPerUnit','clamp']);
+  const at=distance=>diameter(lights.material.size,pixelsPerUnit(distance),MathUtils.clamp);
+  assert.equal(at(150),2);
+  assert.ok(at(30)>4&&at(30)<5,'near waterfront groups resolve individually');
+  assert.equal(at(5),8,'close tower sample stays bounded');
+  const lobe=vertex.match(/bayLightLevel\*=smoothstep\(([-.\d]+),([.\d]+),dot\(outward,toEye\)\)/);
+  const facing=cosine=>MathUtils.smoothstep(cosine,Number(lobe[1]),Number(lobe[2]));
+  assert.equal(facing(-.1),0);
+  assert.ok(facing(.03)>0&&facing(.03)<1);
+  assert.equal(facing(.2),1,'oblique shoreline retains the primary display');
+});
+
+test('the assembled western crossing carries moving light through every 100 m of its six spans',()=>{
+  const city=createLandscape(), {lights}=city.bayLights;
+  city.root.updateMatrixWorld(true);
+  const position=lights.geometry.getAttribute('position'), strands=new Map();
+  for(let i=0;i<position.count;i++){
+    const z=position.getZ(i);
+    if(!strands.has(z))strands.set(z,[]);
+    strands.get(z).push(position.getY(i)-bridgeLayout.upperDeck);
+  }
+  const stations=[...strands.keys()].sort((a,b)=>a-b);
+  assert.equal(stations.length,308);
+  const [w2,w3,w5,w6]=bridgeLayout.towers;
+  const limits=[15.64,w2,w3,bridgeLayout.anchor,w5,w6,bridgeLayout.length];
+  const spans=limits.slice(1).map((end,i)=>stations.filter(z=>z>limits[i]&&z<end));
+  assert.deepEqual(spans.map(span=>span.length),[38,75,38,38,75,44]);
+  assert.ok(stations.every((z,i)=>!i||z-stations[i-1]<1.2));
+  assert.equal(lights.material.depthTest,true);
+  assert.equal(lights.material.depthWrite,false);
+  assert.equal(lights.material.sizeAttenuation,false);
+
+  const outward=new Vector3(1,0,0).transformDirection(lights.matrixWorld);
+  for(const span of spans){
+    const z=span[Math.floor(span.length/2)],height=strands.get(z)[2]+bridgeLayout.upperDeck;
+    const emitter=lights.localToWorld(new Vector3(position.getX(0),height,z));
+    const outside=emitter.clone().addScaledVector(outward,.05);
+    const hit=new Raycaster(outside,outward.clone().negate(),0,.1).intersectObjects(city.architectureChunks)[0];
+    assert.ok(hit&&hit.distance>.05&&hit.distance<.065,'the outer lens sits directly on its suspender');
+  }
+
+  // Run the scalar GLSL expression used by both the artwork and its reflection.
+  const body=bayLightPattern.slice(bayLightPattern.indexOf('{')+1,bayLightPattern.lastIndexOf('}'));
+  const level=compileFunction(body.replaceAll('float ','const '),['z','h','t','sin','smoothstep']);
+  const smoothstep=(low,high,x)=>MathUtils.smoothstep(x,low,high);
+  let minimum=1,maximum=0,largestChange=0,previous=[];
+  for(let t=0;t<240;t+=1){
+    const means=stations.map(z=>{
+      const heights=strands.get(z);
+      return heights.reduce((sum,h)=>sum+level(z,h,t,Math.sin,smoothstep),0)/heights.length;
+    });
+    for(let i=0;i<means.length;i++){
+      minimum=Math.min(minimum,means[i]);maximum=Math.max(maximum,means[i]);
+      if(previous.length)largestChange=Math.max(largestChange,Math.abs(previous[i]-means[i]));
+      if(i<10)continue;
+      // Eleven adjacent suspenders span roughly 100 m. Give each an equal vote.
+      const average=means.slice(i-10,i+1).reduce((a,b)=>a+b,0)/11;
+      assert.ok(average>.18,`dark run near station ${stations[i]} at ${t}s`);
+    }
+    previous=means;
+  }
+  assert.ok(minimum<.16&&maximum>.90&&largestChange>.10,'bright crests and moving shadows survive');
 });
 
 test('Ferry Building night reflections follow lit architectural features and skip the terminal decks',()=>{

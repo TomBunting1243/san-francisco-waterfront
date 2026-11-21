@@ -8,6 +8,7 @@ import {build181Fremont} from './181-fremont.ts';
 import {pierFive} from './pier-five.ts';
 import {createStreetVehicle,streetVehicleMaterial} from './street-vehicles.ts';
 import type { FerryConnection } from './ferry-terminal.ts';
+import {ferryWalkLens} from './ferry-walk-lights.ts';
 import {addPier14Corpus} from './pier14-corpus.ts';
 import {createPier14Plaza,createPier14Chairs,pier14Ground} from './pier14-plaza.ts';
 
@@ -617,6 +618,35 @@ export function harborPublicPiers(piers:Pier[],font:Font){
       for(let z=.2;z<length;z+=.39){
         m.box(width,.006,.009,x,.064,z,'#a9ada3');
         m.box(.029,.011,.069,x-.097,.067,z,'#acbdba');
+      }
+      // ROMA's morning photograph resolves low black domes at both rails
+      // with one inset lens facing the walk. Intervals and output are estimated.
+      // https://www.romacollaborative.com/pier-14
+      const shell=new THREE.CylinderGeometry(.009,.014,.022,8);
+      const cap=new THREE.SphereGeometry(.010,8,4,0,Math.PI*2,0,Math.PI/2);
+      const railEdges=edges(p.p);
+      function deckMarker(edge:(typeof railEdges)[number],offset:number){
+        const xx=edge.x+edge.nz*offset-edge.nx*.033,zz=edge.z-edge.nx*offset-edge.nz*.033;
+        m.mesh(shell,'#444849',xx,.071,zz);
+        m.mesh(cap,'#393f40',xx,.082,zz);
+        const lens=m.box(.004,.005,.013,xx-edge.nx*.011,.077,zz-edge.nz*.011,'#dad4b7');
+        lens.rotation.y=Math.atan2(-edge.nz,edge.nx);
+        ferryWalkLens(lens,'Pier 14 inward-facing deck marker',.39,.45,true);
+      }
+      for(const edge of railEdges.filter(e=>e.w>10)){
+        const count=Math.round(edge.w/.54);
+        for(let i=0;i<count;i++)deckMarker(edge,edge.w*((i+.5)/count-.5));
+      }
+      // ROMA's elevated view of the overlook shows the same capped markers
+      // around the circular head, among the swivel seats and fishing racks.
+      const rim=railEdges.filter(e=>e.z>11.5);
+      const perimeter=rim.reduce((sum,e)=>sum+e.w,0);
+      for(let i=0;i<5;i++){
+        let offset=perimeter*(i+.5)/5;
+        for(const edge of rim){
+          if(offset<=edge.w){deckMarker(edge,edge.w/2-offset);break;}
+          offset-=edge.w;
+        }
       }
       m.root.add(createPier14Plaza(),createPier14Chairs());
       addPier14Corpus(m.root,-15.1954,pier14Ground(-15.1954,-.807),-.807,-.08);

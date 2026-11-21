@@ -9,6 +9,30 @@ const visits=[
 
 export const frontMarketShopperCount=visits.length;
 
+// Stagger visits once tables and merchandise are in place. The same reversible
+// thresholds empty each aisle before the stalls are packed away.
+function shopperCount(progress:number,capacity:number){
+  return Math.max(0,Math.min(capacity,Math.floor((progress-.80)/.17*capacity)));
+}
+
+export function marketShopperAttendance(frontStart:number,rearSlots:readonly number[]){
+  const frontSlots=frontStart<0?[]:visits.map((_,i)=>frontStart+i);
+  const absent=new Set<number>();
+  let lastFront=-1,lastRear=-1;
+  return {
+    absent,
+    update({front,rear}:{front:number;rear:number}){
+      const frontCount=shopperCount(front,frontSlots.length),rearCount=shopperCount(rear,rearSlots.length);
+      if(frontCount===lastFront&&rearCount===lastRear)return false;
+      lastFront=frontCount;lastRear=rearCount;
+      absent.clear();
+      for(let i=frontCount;i<frontSlots.length;i++)absent.add(frontSlots[i]);
+      for(let i=rearCount;i<rearSlots.length;i++)absent.add(rearSlots[i]);
+      return true;
+    },
+  };
+}
+
 export function frontMarketShopperPose(time:number,index:number){
   const {left,right,firstLook,secondLook,walk,offset}=visits[index];
   const period=firstLook+secondLook+walk*2;

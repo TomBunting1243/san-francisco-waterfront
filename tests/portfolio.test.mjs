@@ -363,9 +363,11 @@ test('fireboat departs, salutes and returns without crossing piers or ferry lane
   assert.ok(Math.hypot(fireboatPose(45).x-dock.x,fireboatPose(45).z-dock.z)>12);
   const boat=createFireboat();let previous=fireboatPose(0);
   const body=boat.root.getObjectByName('Fireboat hull, wheelhouse and monitors');
-  assert.equal(body.parent.children.length,1);assert.equal(body.geometry.attributes.position.count/3,2212);
+  assert.equal(body.parent.children.length,1);assert.equal(body.geometry.attributes.position.count/3,2212+6*12); // Six boxed marine-light lenses.
   const pigment=body.geometry.attributes.color,paint=new Set();
   for(let i=0;i<pigment.count;i++)paint.add(new THREE.Color().fromBufferAttribute(pigment,i).getHexString());
+  const {vesselLens}=await import('../app/vessel-lighting.ts');
+  for(const color of Object.values(vesselLens))assert.ok(paint.delete(color.slice(1)),color);
   assert.equal(paint.size,18);assert.ok(['b84f3c','eee7ce','385c64','304647'].every(hex=>paint.has(hex)));
   assert.ok(body.castShadow&&body.receiveShadow&&body.material.vertexColors);
   for(let t=0;t<=fireboatCycle*2;t+=.25){
@@ -883,15 +885,16 @@ test('harbor pane draw IDs follow each clipped quad, preserving room data, tides
   assert.deepEqual(draw.uniformsTexture.image.data.slice(0,n),glow);
   for(let i=0;i<n;i++)for(let c=0;c<3;c++)assert.equal(draw.colorsTexture.image.data[i*4+c],source.instanceColor.array[i*3+c]);
   const camera=new THREE.PerspectiveCamera(42,1.5,.2,32),frustum=new THREE.Frustum(),matrix=new THREE.Matrix4();
-  const corners=[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]].map(([x,y])=>new THREE.Vector3(x,y,0));
-  const worldCorners=corners.map(c=>c.clone());
+  const corners=(halfWidth,bottom,top)=>[[-halfWidth,bottom],[halfWidth,bottom],[-halfWidth,top],[halfWidth,top]].map(([x,y])=>new THREE.Vector3(x,y,0));
+  const unlitCorners=corners(.5,-.5,.5),litCorners=corners(.533,-.554,.522);
+  const worldCorners=unlitCorners.map(c=>c.clone());
   function verify(){
     camera.updateMatrixWorld();
     frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     const expected=[];
     for(let i=0;i<n;i++){
       source.getMatrixAt(i,matrix);matrix.premultiply(source.matrixWorld);
-      corners.forEach((c,j)=>worldCorners[j].copy(c).applyMatrix4(matrix));
+      (glow[i]>0?litCorners:unlitCorners).forEach((c,j)=>worldCorners[j].copy(c).applyMatrix4(matrix));
       if(frustum.planes.every(p=>worldCorners.some(c=>p.distanceToPoint(c)>=0)))expected.push(i);
     }
     draw.performFrustumCulling(camera);

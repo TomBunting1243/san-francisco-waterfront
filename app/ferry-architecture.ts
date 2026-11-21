@@ -1,3 +1,4 @@
+import {lightOpeningTrim} from './authored-window-spill.ts';
 import {ferryWalkLens} from './ferry-walk-lights.ts';
 import {taylorCounter,taylorTerrace} from './taylors-refresher.ts';
 import {ferryPatios} from './ferry-patios.ts';
@@ -91,6 +92,7 @@ export function ferryHall(font:Font) {
       const room=Math.round((x+width/2)/(width/23));
       if(style==='end'||room%5===2||room%7===3)glazing.userData.signLight=[.42,.31,.18];
     }
+    const firstTrim=g.children.length;
     const r=w/2,spring=h-r,frame=style==='bay'?'#81918a':'#a8aa9d';
     for(const fraction of style==='bay'?[-.72,-.36,0,.36,.72]:[-.62,0,.62]){
       const pane=spring+r*Math.sqrt(1-fraction*fraction);
@@ -101,6 +103,7 @@ export function ferryHall(font:Font) {
     mesh(new THREE.TorusGeometry(r+.004,style==='bay'?.006:.009,5,17,Math.PI),style==='bay'?'#89978d':pale,x,base+spring,z+.018,g);
     if(spring>.016)for(const sign of [-1,1])box(.014,spring,.017,x+sign*(r+.004),base+spring/2,z+.019,pale,g);
     box(w+.016,.015,.022,x,base-.006,z+.016,ashlar,g);
+    if(glazing.userData.signLight)lightOpeningTrim(g,g.children.slice(firstTrim),x,base+h/2,z+.012,w,h,glazing.userData.signLight[0]);
   }
   function storefront(g:THREE.Group,x:number,w:number,lo:number,h:number,z:number,finish:string){
     const glazing=box(w,h,.018,x,lo+h/2,z,finish,g);
@@ -281,6 +284,7 @@ export function ferryHall(font:Font) {
     }else{
       const worldX=centerX+x;
       const slantedDoor=worldX>=4.17&&worldX<5.88;
+      const storefrontStart=bay.children.length;
       const glazing=storefront(bay,x,bayPitch*.95,.105,.277,-.176,slantedDoor?'#405956':i%5===4?'#708176':'#586d66');
       const dining=worldX>=1.63&&worldX<3.27||worldX>=4.17&&worldX<5.88;
       const coffee=worldX>=-4.26&&worldX< -3.61;
@@ -292,6 +296,7 @@ export function ferryHall(font:Font) {
         // interior light behind the glass; the lower privacy screen stays cool.
         glazing.position.z-=.022;
         glazing.userData.signLight=[.13,.12,.085];
+        lightOpeningTrim(bay,bay.children.slice(storefrontStart+1),x,.2435,glazing.position.z+.009,bayPitch*.95,.277,.27);
         for(const side of [-1,1]){
           const inset=x+side*bayPitch*.22;
           const wall=box(bayPitch*.37,.105,.005,inset,.255,-.181,'#888478',bay);

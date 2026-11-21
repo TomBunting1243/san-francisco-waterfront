@@ -87,3 +87,28 @@ test('the full city and both vignette shaders follow independent local clocks ac
   full.setFacadeClock(8,0,0);assert.equal(f.roomQuiet.value,0);
   assert.equal(s.roomQuiet.value,1);assert.equal(p.roomQuiet.value,0);
 });
+
+test('occupied facade pixels and modeled opening returns reuse the active room and its tint',async()=>{
+  const {applyDowntownGlazing,createFacadeClock}=await import('../app/downtown-buildings.ts');
+  const {applyWindowLighting}=await import('../app/window-lighting.ts');
+  const clock=createFacadeClock();
+  function compile(material){
+    const shader={vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader,uniforms:{}};
+    material.onBeforeCompile(shader,{});
+    return shader;
+  }
+  const wall=new THREE.MeshStandardMaterial();applyDowntownGlazing(wall,clock);
+  const grids=compile(wall);
+  assert.match(grids.fragmentShader,/vec3 source=mix\(warm,cool,tint\)\*on\*blinds/);
+  assert.match(grids.fragmentShader,/roomEmission\+=source\*wall\*mix\(receive,meanReceive,lod\)\*visibility\*smoothstep\(0\.,\.22,roomNight\)/);
+  const pane=new THREE.MeshStandardMaterial();applyWindowLighting(pane,{value:7},clock.litShare,clock.night);
+  const instances=compile(pane);
+  assert.equal(instances.uniforms.roomNight,grids.uniforms.roomNight);
+  assert.equal(instances.uniforms.roomShare,grids.uniforms.roomShare);
+  assert.match(instances.vertexShader,/if\(roomGlow>0\.&&roomNight>0\.\)/);
+  assert.match(instances.fragmentShader,/if\(roomGlow>0\.&&max\(outside.x,outside.y\)>0\.\)/);
+  assert.match(instances.fragmentShader,/totalEmissiveRadiance\*=returnLight/);
+  clock.setFacadeClock(12,0,0,0);
+  assert.equal(instances.uniforms.roomNight.value,0);
+  assert.equal(instances.uniforms.roomShare.value,0);
+});

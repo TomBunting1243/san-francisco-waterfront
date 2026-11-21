@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {createDoradoFerry} from './dorado-ferry.ts';
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
+import {vesselLens} from './vessel-lighting.ts';
 import {vessels} from './ferry-service.ts';
 
 export const serviceFerryPaint=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86,metalness:.02});
@@ -251,6 +252,22 @@ export function createServiceFerry(mesh:Parameters<typeof createDoradoFerry>[0],
     box(.15,.16,-.02,.02,mast,mast+(small?.73:2.35),gray);
     box(.13,.18,-.09,.09,mast+(small?.67:2.26),mast+(small?.77:2.38),cream);
   }
+  const cabinRoof=deckH+(pyxis?6.37:small?3.31:mono?7.70:7.29);
+  for(const side of [-1,1]){
+    const wing=side*(pyxis?.61:small?.59:mono?.57:.63);
+    const bridgeX=pyxis?.20:small?.39:mono?.41:.30;
+    box(bridgeX-.018,bridgeX+.018,wing-.027,wing+.027,cabinRoof,cabinRoof+.20,side<0?vesselLens.port:vesselLens.starboard);
+    const flank=side*(pyxis?.923:small?.826:mono?.916:.926);
+    box(door-.028,door+.028,flank-.012,flank+.012,deckH+(small?1.69:2.22),deckH+(small?1.85:2.43),vesselLens.work);
+  }
+  const mastX=pyxis?.054:.155;
+  const mastHead=cabinRoof+(pyxis?1.32:small?.77:2.38);
+  box(mastX-.017,mastX+.017,-.029,.029,mastHead,mastHead+.21,vesselLens.mast);
+  if(mono){
+    box(-.49,-.482,-.012,.012,deckH+5.35,mastHead+.59,gray);
+    box(-.50,-.471,-.030,.030,mastHead+.59,mastHead+.82,vesselLens.mast);
+  }
+  box(-.978,-.960,-.042,.042,deckH+.12,deckH+.35,vesselLens.stern);
   const first=f.positions.length/3;
   if(v.family==='pyxis'){
     const z=-.92+.010;

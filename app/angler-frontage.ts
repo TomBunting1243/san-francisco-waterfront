@@ -1,3 +1,4 @@
+import {openingIrradiance} from './authored-window-spill.ts';
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {StreetAssembly} from './street-amenities.ts';
@@ -35,7 +36,7 @@ const pendantX=[-.26,.26],pendantZ=[-.20,-.44],sconceX=[-.135,.135];
 // The city shader adds signLight only after dusk. Sample the actual surfaces in
 // room coordinates while their pigment and normal are still available. This
 // includes the floor visible through a window from an elevated waterfront orbit.
-function bakeRestaurantLight(mesh:THREE.Mesh){
+function bakeRestaurantLight(mesh:THREE.Mesh,bay:number,aperture:number){
   const g=mesh.geometry,p=g.getAttribute('position'),n=g.getAttribute('normal'),pigment=g.getAttribute('color');
   const light=g.getAttribute('signLight');
   for(let i=0;i<p.count;i++){
@@ -56,6 +57,11 @@ function bakeRestaurantLight(mesh:THREE.Mesh){
         const falloff=Math.max(0,1-dx*dx-dy*dy-dz*dz);
         flux+=.39*falloff*falloff;
       }
+    }
+    // Occupied display openings face the promenade. Restrict escaping room
+    // light to the exterior faces of the sill, frame and adjacent white brick.
+    if(z>=0)for(const cx of [-bay,bay]){
+      flux+=.50*openingIrradiance(cx,.190,-.014,aperture,.162,x,y,z,n.getX(i),n.getY(i),n.getZ(i));
     }
     if(flux<=0)continue;
     const r=Math.min(.54,flux*Math.sqrt(pigment.getX(i))*.76);
@@ -226,6 +232,6 @@ export function anglerFrontage(b:{p:number[][]},height:number,font:Font){
       z:(r[1]+s[1])/2-x*Math.sin(backYaw)+.045*Math.cos(backYaw),ry:backYaw,w:.16,h:.23});
   }
   const lounge=parts.bake('Angler waterfront entry and dining room');
-  bakeRestaurantLight(lounge);front.add(lounge);
+  bakeRestaurantLight(lounge,bay,aperture);front.add(lounge);
   return {root,windows};
 }

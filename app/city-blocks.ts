@@ -107,7 +107,7 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   const positions = new Float32Array(vertices * 3);
   const normals = new Int16Array(vertices * 3);
   const colors = new Uint8Array(vertices * 3);
-  const signLights = parts.some(mesh=>mesh.userData.signLight||mesh.userData.uplight||mesh.geometry.hasAttribute('signLight')) ? new Uint8Array(vertices * 3) : null;
+  const signLights = parts.some(mesh=>mesh.userData.signLight||mesh.userData.uplight||mesh.userData.authoredWindowSpill||mesh.geometry.hasAttribute('signLight')) ? new Uint8Array(vertices * 3) : null;
   const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
   const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
   const printAttribute=parts[0].geometry.hasAttribute('kioskPrint')?'kioskPrint':'billboardPrint';
@@ -191,6 +191,15 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
       signLights[j]=Math.min(255,colors[j]*irradiance);
       signLights[j+1]=Math.min(255,colors[j+1]*irradiance*greenLight);
       signLights[j+2]=Math.min(255,colors[j+2]*irradiance*blueLight);
+    }
+    const windowSpill=mesh.userData.authoredWindowSpill as typeof uplight;
+    if(signLights&&windowSpill&&!light)for(let i=0;i<pos.count;i++){
+      const j=base+i*3;
+      point.fromArray(positions,j);normal.fromArray(normals,j).multiplyScalar(1/32767);
+      const spill=windowSpill(point,normal);
+      signLights[j]=Math.min(255,signLights[j]+Math.round(Math.sqrt(colors[j]*255)*spill));
+      signLights[j+1]=Math.min(255,signLights[j+1]+Math.round(Math.sqrt(colors[j+1]*255)*spill*.65));
+      signLights[j+2]=Math.min(255,signLights[j+2]+Math.round(Math.sqrt(colors[j+2]*255)*spill*.36));
     }
     const sourceIndices=geometry.index?.array;
     if(sourceIndices){

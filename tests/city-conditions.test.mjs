@@ -15,7 +15,7 @@ test('the chosen wall clock uses the current San Francisco date, including DST a
   for(const choice of [undefined,-1,1440,NaN])assert.equal(cityDate(now,choice),now);
   const marketOpen=cityDate(now,10*60),night=cityDate(now,22*60);
   assert.equal(pacificLighting(marketOpen).phase,'day');assert.equal(pacificLighting(night).phase,'night');
-  assert.equal(ferryMarketSchedule(marketOpen).front,1);assert.equal(ferryMarketSchedule(night).front,1);
+  assert.equal(ferryMarketSchedule(marketOpen).front,1);assert.equal(ferryMarketSchedule(night).front,0);
 });
 
 test('manual weather retains the latest wind bearing and switching back restores the exact live observation',()=>{

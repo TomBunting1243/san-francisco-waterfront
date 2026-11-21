@@ -6,12 +6,13 @@ function progress(minute:number,open:number,close:number){
   return clamp(Math.min((minute-open+30)/30,(close+30-minute)/30));
 }
 
-// Keep the Saturday market layout trading throughout the imagined waterfront's
-// day. The independently operated Market Street artists still set up and pack.
+// The imagined city repeats the Saturday layout daily. The independent
+// Market Street artists keep their own hours. All phases use Pacific time.
 export function ferryMarketSchedule(at:Date){
   const parts=Object.fromEntries(pacific.formatToParts(at).map(p=>[p.type,p.value]));
   const minute=+parts.hour*60 + +parts.minute + +parts.second/60;
-  return {front:1,rear:1,artist:progress(minute,540,960)};
+  const market=progress(minute,8*60,14*60);
+  return {front:market,rear:market,artist:progress(minute,540,960)};
 }
 
 type Stall='produce'|'flowers'|'info'|'tasting';
@@ -76,6 +77,7 @@ export function createFerryMarket(){
   const rounds=batch('Market people, produce and trolley wheels',new THREE.IcosahedronGeometry(.5,0),1200);
   const batches=[boxes,roofs,rounds],dummy=new THREE.Object3D(),colors=new Map<string,THREE.Color>();
   let lastSample=NaN,lastState='',revision=0;
+  let activity={front:0,rear:0,artist:0};
   function update(epoch:number,still=false){
     // Quiet scenes hold a tableau; periodic time checks still catch trading
     // boundaries. Stable schedules reuse the same instance buffers.
@@ -85,7 +87,7 @@ export function createFerryMarket(){
     const schedule=ferryMarketSchedule(new Date(sample));
     const key=[schedule.front,schedule.rear,schedule.artist].join(',');
     if(key===lastState)return revision;
-    lastState=key;revision++;
+    lastState=key;activity=schedule;revision++;
     for(const mesh of batches)mesh.count=0;
     for(const [i,site] of sites.entries()){
       const artist=site.section==='artist',printCounter=site.approach==='prints';
@@ -100,11 +102,13 @@ export function createFerryMarket(){
       }
       const steel='#68726b',wood='#a18260';
       const cartX=.28*(1-range(phase,0,.24))+.09,cartZ=.12;
+      const cartDeck=.0265;
+      const cargoBase=cartDeck+(phase<=.22?.010:0)+(phase<=.18?.011:0);
       if(phase<.88){
-        shape(boxes,cartX,.022,cartZ,.071,.009,.052,steel);
+        shape(boxes,cartX+(site.section==='front'?.016:0),.022,cartZ,site.section==='front'?.112:.071,.009,.058,steel);
         shape(boxes,cartX+.031,.043,cartZ,.004,.044,.044,steel);
-        if(phase<=.22)shape(boxes,cartX,.080,cartZ,.083,.010,.035,wood);
-        if(phase<=.18)shape(boxes,cartX,.091,cartZ,.093,.011,.018,'#d7d6c5');
+        if(phase<=.22)shape(boxes,cartX,cartDeck+.005,cartZ,.083,.010,.035,wood);
+        if(phase<=.18)shape(boxes,cartX,cartDeck+.0155,cartZ,.093,.011,.018,'#d7d6c5');
         for(const wheel of [-.025,.025])for(const axle of [-.021,.021])
           shape(rounds,cartX+wheel,.010,cartZ+axle,.017,.019,.009,'#424945');
       }
@@ -155,7 +159,8 @@ export function createFerryMarket(){
           shape(boxes,x,tableY/2,z,.003,tableY,.003,steel);
         }
       }
-      if(site.section==='front'){
+      const displayed=phase>=.65;
+      if(site.section==='front'&&displayed){
         const cover=site.stall==='info'||site.stall==='tasting'?cloth:tablecloth[i%4];
         const tableWidth=width*.87;
         shape(boxes,0,tableY+.0045,-.031,tableWidth,.002,.056,cover);
@@ -165,6 +170,12 @@ export function createFerryMarket(){
         // market maps and recipes. No lettering or photo textures are needed.
         shape(boxes,-width*.47,.091,-span*.475,.025,.032,.002,'#e7d7ad');
         shape(boxes,-width*.47,.102,-span*.485,.022,.006,.001,'#5e7258');
+      }
+      if(site.section==='front'&&!displayed){
+        const cover=site.stall==='info'||site.stall==='tasting'?cloth:tablecloth[i%4];
+        // Fold the cloth and lay the seller card flat beside the cargo.
+        shape(boxes,cartX+.052,cartDeck+.002,cartZ,.031,.004,.041,cover);
+        shape(boxes,cartX+.052,cartDeck+.0045,cartZ,.025,.001,.032,'#e7d7ad');
       }
       if(printCounter&&phase>.57){
         // Original city drawings are sold as prints as well as on shirts. A
@@ -229,14 +240,23 @@ export function createFerryMarket(){
           shape(boxes,dx,.075,-.039,.018,.019,.001,coats[Math.round((dx+.04)*60)%4]);
         }
       }else if(site.stall==='flowers'){
-        for(const [k,x] of [-.080,-.028,.028,.080].entries()){
-          shape(boxes,x,.067,-.031,.032,.023,.028,'#7f8881');
+        for(const [k,tableX] of [-.080,-.028,.028,.080].entries()){
+          const carried=range(phase,.65+k*.035,.73+k*.035);
+          const x=THREE.MathUtils.lerp(cartX+(k%2-.5)*.034,tableX,carried);
+          const z=THREE.MathUtils.lerp(cartZ+(Math.floor(k/2)-.5)*.028,-.031,carried);
+          const y=THREE.MathUtils.lerp(cargoBase+.0115,.067,carried)+Math.sin(carried*Math.PI)*.035;
+          shape(boxes,x,y,z,.032,.023,.028,'#7f8881');
           for(let j=0;j<3;j++){
             const dx=(j-1)*.010,top=.099+((j+k)%3)*.006;
-            shape(boxes,x+dx/2,(.076+top)/2,-.031,.003,top-.076,.003,'#58774f',-.25*(j-1));
-            shape(rounds,x+dx,top,-.031+(j%2)*.004,.019,.016,.018,flowers[(k+j)%4]);
+            shape(boxes,x+dx/2,y-.067+(.076+top)/2,z,.003,top-.076,.003,'#58774f',-.25*(j-1));
+            shape(rounds,x+dx,y-.067+top,z+(j%2)*.004,.019,.016,.018,flowers[(k+j)%4]);
           }
         }
+      }else if((site.stall==='info'||site.stall==='tasting')&&!displayed){
+        // The program board, paper maps and bowl travel on the same cart.
+        shape(boxes,cartX,cargoBase+.003,cartZ,.079,.006,.057,'#e9dcbc');
+        shape(boxes,cartX-.016,cargoBase+.009,cartZ,.030,.006,.022,'#efe5c8');
+        if(site.stall==='tasting')shape(rounds,cartX+.019,cargoBase+.0135,cartZ,.041,.015,.034,'#d0b286');
       }else if(site.stall==='info'||site.stall==='tasting'){
         for(const x of [-.046,-.007,.034]){
           shape(boxes,x,.059,-.037,.030,.003,.022,'#efe5c8');
@@ -255,7 +275,7 @@ export function createFerryMarket(){
         for(let k=0;k<3;k++){
           const carried=range(phase,.49+k*.09,.66+k*.09);
           const x=THREE.MathUtils.lerp(cartX,(k-1)*(site.stall ? .071 : .040),carried),z=THREE.MathUtils.lerp(cartZ,-.030,carried);
-          const y=THREE.MathUtils.lerp(.034+k*.013,tableY+.011,carried)+Math.sin(carried*Math.PI)*.035;
+          const y=THREE.MathUtils.lerp(cargoBase+.0065+k*.024,tableY+.011,carried)+Math.sin(carried*Math.PI)*.035;
           const binWidth=site.stall ? .064 : .037,binDepth=site.stall ? .044 : .034;
           shape(boxes,x,y,z,binWidth,.013,binDepth,wood);
           if(site.stall){
@@ -278,5 +298,5 @@ export function createFerryMarket(){
     }
     return revision;
   }
-  return {root,update};
+  return {root,update,get activity(){return activity;}};
 }

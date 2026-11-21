@@ -48,3 +48,34 @@ test('street-side EPIC and courtyard-facing Waterbar lettering face the respecti
     }
   }
 });
+test('Waterbar and EPIC trim receives only light from its own active glazing',()=>{
+  const collect=(site,test)=>{const out=[];site.traverse(o=>{if(test(o))out.push(o)});return out;};
+  const receivers=site=>collect(site,o=>typeof o.userData.uplight==='function');
+  const trim=[...receivers(waterbar.site),...receivers(epic.site)];
+  for(const model of [waterbar,epic])assert.ok(receivers(model.site).length>12);
+  let lit=0;
+  for(const surface of trim){
+    const face=surface.parent;
+
+    const panes=face.children.filter(o=>o.userData.signLight);
+    assert.ok(panes.length>0);
+    const positions=surface.geometry.attributes.position,normals=surface.geometry.attributes.normal;
+    const norm=new THREE.Matrix3().getNormalMatrix(surface.matrixWorld);
+    for(let i=0;i<positions.count;i++){
+      const p=new THREE.Vector3().fromBufferAttribute(positions,i).applyMatrix4(surface.matrixWorld);
+      const n=new THREE.Vector3().fromBufferAttribute(normals,i).applyNormalMatrix(norm);
+      const value=surface.userData.uplight(p,n);
+      if(value<=0)continue;
+      lit++;
+      assert.ok(face.worldToLocal(p.clone()).z>=.014);
+      const behind=face.worldToLocal(p.clone());behind.z=-.002;
+      assert.equal(surface.userData.uplight(face.localToWorld(behind),n),0);
+      const levels=panes.map(o=>o.userData.signLight);
+      try{
+        for(const pane of panes)delete pane.userData.signLight;
+        assert.equal(surface.userData.uplight(p,n),0);
+      }finally{panes.forEach((o,i)=>o.userData.signLight=levels[i]);}
+    }
+  }
+  assert.ok(lit>30);
+});

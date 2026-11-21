@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {bindVesselLighting,setVesselLightingPhase,vesselLens} from './vessel-lighting.ts';
 import {waterHeight} from './water-surface.ts';
 
 export const fireboatCycle=120;
@@ -18,7 +19,7 @@ export function fireboatPose(elapsed:number,tideOffset=0){
   return {x,z,y:waterHeight(x,z,elapsed,tideOffset)-.01+Math.sin(elapsed*1.7)*.008,heading:angle,spray,speed:speed*Math.hypot(display.x-dock.x,display.z-dock.z),phase};
 }
 
-export function createFireboat(){
+export function createFireboat(night={value:0}){
   const root=new THREE.Group(),vessel=new THREE.Group();root.name='St Francis inspired fireboat';root.add(vessel);
   const materials=new Map<string,THREE.MeshStandardMaterial>();
   const material=(color:string)=>{if(!materials.has(color))materials.set(color,new THREE.MeshStandardMaterial({color,roughness:.67}));return materials.get(color)!;};
@@ -42,6 +43,12 @@ export function createFireboat(){
   for(const x of [-.455,.535])box(.018,.18,.53,x,.79,0,'#3e646b');
   box(.03,.38,.03,-.07,1.12,0,'#d8dfd1');pole(new THREE.Vector3(-.3,1.24,0),new THREE.Vector3(.16,1.24,0),.014,'#d7dfd2');
   add(new THREE.SphereGeometry(.032,7,5),'#c3573f',-.07,1.34,0);box(.12,.17,.12,-.55,.76,.16,'#465d5f');
+  for(const side of [-1,1]){
+    box(.062,.045,.035,.33,.980,side*.335,side<0?vesselLens.port:vesselLens.starboard);
+    box(.066,.042,.036,-.51,.915,side*.345,vesselLens.work);
+  }
+  box(.052,.043,.053,-.07,1.38,0,vesselLens.mast);
+  box(.028,.047,.061,-1.10,.445,0,vesselLens.stern);
   const monitors=[{x:.76,y:.40,z:0,angle:0,reach:4.9,peak:2.6},{x:.16,y:1.01,z:0,angle:.35,reach:5.4,peak:3.5},{x:-.69,y:.49,z:.26,angle:1.65,reach:4.5,peak:2.8},{x:-.69,y:.49,z:-.26,angle:-1.65,reach:4.5,peak:2.8},{x:-.92,y:.45,z:0,angle:Math.PI,reach:4.2,peak:2.5}];
   for(const m of monitors){box(.07,.10,.07,m.x,m.y-.04,m.z,'#b84f3c');pole(new THREE.Vector3(m.x,m.y,m.z),new THREE.Vector3(m.x+Math.cos(m.angle)*.12,m.y+.06,m.z+Math.sin(m.angle)*.12),.032,'#c4533f');}
   // Batch the boat itself once; animated spray uses fixed instanced buffers.
@@ -64,7 +71,7 @@ export function createFireboat(){
   if(!hullPaint)throw new Error('Fireboat merge failed');
   const body=new THREE.Mesh(hullPaint,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.67}));
   body.name='Fireboat hull, wheelhouse and monitors';body.castShadow=body.receiveShadow=true;
-  vessel.clear();vessel.add(body);
+  vessel.clear();vessel.add(body);bindVesselLighting(root,body,night,.66);
   for(const geometry of painted)geometry.dispose();
   for(const paint of materials.values())paint.dispose();
   const water=new THREE.MeshBasicMaterial({color:'#d8eeee',transparent:true,opacity:.72,depthWrite:false});
@@ -79,6 +86,7 @@ export function createFireboat(){
   function jetPoint(index:number,t:number,strength:number,time:number,out:THREE.Vector3){const m=monitors[index],angle=m.angle+Math.sin(time*.28+index)*.055;return out.set(m.x+Math.cos(angle)*m.reach*t*strength,m.y*(1-t)+landingHeights[index]*t+4*m.peak*strength*t*(1-t),m.z+Math.sin(angle)*m.reach*t*strength);}
   function update(time:number,tideOffset=0){
     const pose=fireboatPose(time,tideOffset);root.position.set(pose.x,pose.y,pose.z);root.rotation.y=pose.heading;vessel.rotation.z=Math.sin(time*1.1)*.012;
+    setVesselLightingPhase(root,pose.phase);
     spray.visible=pose.spray>.001;wake.visible=pose.speed>.025;
     wake.position.set(-1.25,waterHeight(pose.x-1.25*Math.cos(pose.heading),pose.z+1.25*Math.sin(pose.heading),time,tideOffset)-pose.y+.025,0);wake.scale.set(1+pose.speed*.6,.72,1);wake.rotation.z=Math.sin(time*.8)*.08;
     if(!spray.visible)return pose;

@@ -3,16 +3,17 @@ import {createInstancedMesh2From} from '@three.ez/instanced-mesh';
 
 type Cell={ids:number[];bounds:THREE.Box3};
 
-// Each source pane is a centered, one-unit quad in XY. Its two transformed
-// half-axes give its actual support against any clipping plane (including panes
-// viewed edge-on). Test individual panes only in cells crossing a frustum plane.
+// Bound the full night aperture for rooms that can emit. Its bottom and top
+// extend by different amounts; permanently dark rooms retain their unit quad.
 function paneCells(windows:THREE.InstancedMesh){
   const data=windows.instanceMatrix.array,cells=new Map<string,Cell>();
   const owners:Cell[]=[];
+  const glow=windows.geometry.getAttribute('windowGlow');
   function enclose(cell:Cell,id:number){
-    const i=id*16;
+    const i=id*16,lit=glow.getX(id)>0;
     for(let axis=0;axis<3;axis++){
-      const center=data[i+12+axis],half=(Math.abs(data[i+axis])+Math.abs(data[i+4+axis]))*.5;
+      const center=data[i+12+axis]-(lit?.016:0)*data[i+4+axis];
+      const half=(lit?.533:.5)*Math.abs(data[i+axis])+(lit?.538:.5)*Math.abs(data[i+4+axis]);
       cell.bounds.min.setComponent(axis,Math.min(cell.bounds.min.getComponent(axis),center-half));
       cell.bounds.max.setComponent(axis,Math.max(cell.bounds.max.getComponent(axis),center+half));
     }
@@ -41,12 +42,13 @@ function paneCells(windows:THREE.InstancedMesh){
       if(outside)continue;
       if(!mask){ids.set(rooms,count);count+=rooms.length;continue;}
       for(const id of rooms){
-        const i=id*16;
+        const i=id*16,lit=glow.getX(id)>0;
         let visible=true;
         for(let j=0;j<6;j++)if(mask&(1<<j)){
           const {normal:{x,y,z},constant}=frustum.planes[j];
           const distance=x*data[i+12]+y*data[i+13]+z*data[i+14]+constant;
-          const extent=.5*(Math.abs(x*data[i]+y*data[i+1]+z*data[i+2])+Math.abs(x*data[i+4]+y*data[i+5]+z*data[i+6]));
+          const vertical=x*data[i+4]+y*data[i+5]+z*data[i+6];
+          const extent=(lit?.533:.5)*Math.abs(x*data[i]+y*data[i+1]+z*data[i+2])+(lit?.538:.5)*Math.abs(vertical)-(lit?.016:0)*vertical;
           if(distance+extent<0){visible=false;break;}
         }
         if(visible)ids[count++]=id;

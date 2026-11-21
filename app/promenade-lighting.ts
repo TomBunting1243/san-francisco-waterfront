@@ -131,5 +131,12 @@ export function buildPromenadeLighting(root:THREE.Group):number[]{
     finish('Plaza traction standard with twin acorns');
   }
   addPlazaStreetLights(root,halos);
+  // Steuart's two SL-FluteSteel inventory points carry single upright
+  // lanterns, distinct from the neighboring SL-StdSteel roadway masts.
+  // Their supporting sidewalk and gutter were sampled on the final city mesh.
+  for(const [id,x,z,y] of [[283133,-25.5965,-5.6721,.031],[283134,-27.074,-6.3699,.045]]){
+    setOrigin(x,z,y,0);pedestal(false,5.55-.83);lantern(0,5.55,false);
+    finish('Rincon fluted SFPUC '+id);
+  }
   return halos;
 }

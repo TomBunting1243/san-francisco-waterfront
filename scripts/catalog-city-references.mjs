@@ -75,6 +75,7 @@ const types=['Photographs and imagery','Maps and plans','Data and services','Rep
 function sourceType(record){
   const u=new URL(record.url),d=[...record.descriptions.keys()].join(' ').toLowerCase();
   if(/creativecommons.org|opendatacommons.org/.test(u.hostname)||/\/copyright\/?$|\/attribution\.md/i.test(u.pathname)||/^(license|rights)$/.test(d))return types[4];
+  if(u.hostname==='kartaview.org'&&u.pathname.startsWith('/details/'))return types[0];
   if(/tile\.sf\.gov|image(server)?\b.*naip|naip.*imageserver/.test(record.url.toLowerCase()))return types[0];
   if(/\.(?:jpe?g|png|webp|tiff?)$/i.test(u.pathname)||/page.*photo|photograph|photo|aerial|orthoimagery|street view|gallery|panorama/i.test(d))return types[0];
   if(/openstreetmap\.org\/(?:way|node|relation)\//.test(record.url)||/floor plan|site plan|blueprint|elevation drawing|measured drawing|terminal map|survey map|map sheet|architectural drawing/i.test(d))return types[1];
@@ -141,18 +142,25 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
-  'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com'};
+  'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};
+const rideCredits=[...files.get('references/RESEARCH-SOURCES.md').toString().matchAll(
+  /\| (KartaView|Wikimedia Commons) (\d+) \| [^|]+ \| \d{4}-\d{2}-\d{2} \| \[CC[^\]]*\]\(https:\/\/creativecommons\.org\//g
+)].map(([,provider,id])=>(provider==='KartaView'?'RIDE-KARTAVIEW':'RIDE-COMMONS')+':'+id);
+const unregisteredCredits=new Set(rideCredits);
+assert.equal(unregisteredCredits.size,rideCredits.length,'duplicate photo credit');
 const members=new Map(),assetURLs=new Set();
 let assetBytes=0;
 for(const line of registry){
   const [series,id,stored,pointCount,address]=line.split(',');
   const u=new URL(address);
-  assert.ok(id&&Number.isSafeInteger(+stored)&&+stored>0&&u.protocol==='https:'&&u.hostname===assetHosts[series]);
+  assert.ok(id&&Number.isSafeInteger(+stored)&&+stored>0&&u.protocol==='https:'&&[assetHosts[series]].flat().includes(u.hostname));
   assert.ok(!assetURLs.has(address)&&!u.username&&!u.password);assetURLs.add(address);
+  if(series.startsWith('RIDE-'))assert.ok(unregisteredCredits.delete(series+':'+id),'missing or duplicate ride photo credit for '+id);
   const stats=members.get(series)??{count:0,bytes:0,points:0};
   stats.count++;stats.bytes+=+stored;stats.points+=Number(pointCount);
   members.set(series,stats);assetBytes+=+stored;
 }
+assert.equal(unregisteredCredits.size,0,'ride photo credit without a registered source file');
 const sharedAssets=[...assetURLs].filter(u=>sources.has(u)).length;
 const text=[
  '# San Francisco waterfront research catalog','',
@@ -161,6 +169,7 @@ const text=[
  '- [Waterfront reference audit](WATERFRONT-REFERENCE-AUDIT.md) — landmark-by-landmark evidence, survey methods and reconstruction limits.',
  '- [Angler storefront record](ANGLER-FRONTAGE.md) — the architectural elevation, operator photographs and finished sidewalk.',
  '- [Additional field and archive sources](RESEARCH-SOURCES.md) — retained research citations, measured survey input and gaps.',
+ '- [Ride photograph attributions](RESEARCH-SOURCES.md#ride-photograph-attributions) — individual KartaView and Wikimedia Commons views, capture dates, creators and licenses.',
  '- [Exact survey downloads](SURVEY-ASSETS.csv) — public LiDAR octree IDs, orthophoto tile coordinates, original imagery requests and architectural photographs with their measured sizes.',
  '- [Attribution and licenses](../THIRD-PARTY-NOTICES.md) — map data, elevation products, font and adapted artwork.',
  '', '## Scale of the inputs','',

@@ -342,3 +342,29 @@ These original image addresses were matched to retained downloads using the acqu
 - [Cathy Chaplin’s 2007 Taylor’s Automatic Refresher service counter](https://lh3.googleusercontent.com/cathy.danh/RpVBoJ97RJI/AAAAAAAAAeo/Fcc-IFYtCBM/s512/IMG_3347.jpg)
 - [La Chiffonnière public tour turntable, August 2025](https://embarcaderoplaza.com/videos/2025-08-10-la-chiffonniere-render.mp4)
 - [2023 San Francisco Railway Museum exterior photograph](https://sporvognsrejser.dk/foto/san-francisco-railway-museum-2023)
+
+## Ride photograph attributions
+
+The 20 November 2026 review consulted nine KartaView frames and eight Wikimedia Commons photographs. CanadaD’s frame 2052 establishes the yellow left edge and white right edge on the modeled Fremont exit. Jan Senderek’s nighttime photograph independently confirms the pools of light from low fixtures on Pier 14. The other views informed the review of streets, landmarks and historic conditions. The 2020 shore firehouse photograph predates the floating station.
+
+The [asset register](SURVEY-ASSETS.csv) counts one retained JPEG per photograph under its provider ID. Four photographs are represented by the largest retained version and thirteen by the provider preview. Together they occupy 33,910,006 bytes. Four additional previews of those same photographs occupy 930,732 bytes in the research archive and are excluded from the register. Five search candidates returned metadata without a usable image. The city distribution includes the attribution records only.
+
+| Source photograph | Provider ID | Creator | Capture date | License |
+|---|---:|---|---|---|
+| [Elevated westbound curve](https://kartaview.org/details/366261/2045/track-info) | KartaView 37640612 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Two-lane exit approach](https://kartaview.org/details/366261/2049/track-info) | KartaView 37620544 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont exit bend and edge stripes](https://kartaview.org/details/366261/2052/track-info) | KartaView 37620547 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont street-level approach](https://kartaview.org/details/366261/2066/track-info) | KartaView 37620561 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont intersection during construction](https://kartaview.org/details/366261/2071/track-info) | KartaView 37620566 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont vehicle queue](https://kartaview.org/details/8646/1133/track-info) | KartaView 3620384 | JackPav | 2016-06-30 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Northbound Embarcadero toward the ferry clock](https://kartaview.org/details/7458/957/track-info) | KartaView 2212863 | JeremyMa | 2016-06-15 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Embarcadero median and curb](https://kartaview.org/details/10526/4133/track-info) | KartaView 5447503 | CanadaD | 2016-08-02 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Cross street facing the Howard street blade](https://kartaview.org/details/10510/2544/track-info) | KartaView 4880913 | JackPav | 2016-07-26 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [181 Fremont from Folsom and Fremont](https://commons.wikimedia.org/wiki/File:181_Fremont_from_Folsom_and_Fremont.jpg) | Wikimedia Commons 103103338 | Dead.rabbit | 2021-04-04 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| [301 Howard Street](https://commons.wikimedia.org/wiki/File:301_Howard_Street.jpg) | Wikimedia Commons 107524480 | Dead.rabbit | 2021-07-12 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| [Embarcadero street blade and traffic signal](https://commons.wikimedia.org/wiki/File:Cars_and_cyclists_on_the_Embarcadero.jpg) | Wikimedia Commons 34857819 | Runner1928 | 2014-08-16 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
+| [Muni streetcar 1040 at the Ferry Building](https://commons.wikimedia.org/wiki/File:Muni_1040_at_the_Ferry_Building,_June_2017.JPG) | Wikimedia Commons 69665854 | Pi.1415926535 | 2017-06-14 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
+| [Palm-lined rail corridor near Pier 14](https://commons.wikimedia.org/wiki/File:Pista_del_tren_ligero_-_panoramio.jpg) | Wikimedia Commons 56117722 | Bohao Zhao | 2013-01-02 | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0) |
+| [Pier 22½ historic shore firehouse](https://commons.wikimedia.org/wiki/File:Pier_22.5,_January_2020.JPG) | Wikimedia Commons 85617550 | Pi.1415926535 | 2020-01-04 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
+| [N Judah train at Folsom station](https://commons.wikimedia.org/wiki/File:SF_Muni_N_Judah_train_at_The_Embarcadero_and_Folsom_station_January_2026_2.jpg) | Wikimedia Commons 185376097 | 4300streetcar | 2026-01-29 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
+| [Pier 14 deck lighting at night](https://commons.wikimedia.org/wiki/File:San_Francisco_as_seen_from_Pier_14_(Unsplash).jpg) | Wikimedia Commons 61712340 | Jan Senderek | 2017-01-19 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/deed.en) |

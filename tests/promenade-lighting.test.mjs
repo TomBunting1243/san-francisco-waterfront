@@ -111,9 +111,9 @@ test('both curb rows stand on their registered supporting surfaces, including bo
 });
 
 test('HALS plaza flags, black fountain lanterns, curb acorns and park-road standards emit at their physical heads',()=>{
-  const added=root.children.slice(146+58);
+  const added=root.children.slice(146+58).filter(m=>!m.name.startsWith('Rincon'));
   assert.equal(added.length,21);
-  assert.equal(halos.length/3,225+42);
+  assert.equal(halos.length/3,225+42+12);
   let first=225,triangles=0;
   for(const mesh of added){
     const count=mesh.name.startsWith('Plaza traction')?2:mesh.name.startsWith('Park approach')?1:3;
@@ -134,4 +134,62 @@ test('HALS plaza flags, black fountain lanterns, curb acorns and park-road stand
   }
   assert.equal(first,267);
   assert.ok(triangles<7000,triangles);
+});
+
+test('the twelve SFPUC Rincon street fixtures sit on finished surfaces and light their own streets',async()=>{
+  const {addSurveyBlocks}=await import('../app/survey-blocks.ts');
+  const {createStreetField}=await import('../app/street-illumination.ts');
+  const streets=new THREE.Group(),surface=new THREE.MeshBasicMaterial();
+  addSurveyBlocks((geometry,_color,x,y,z)=>{
+    const mesh=new THREE.Mesh(geometry,surface);mesh.position.set(x,y,z);streets.add(mesh);return mesh;
+  });
+  streets.updateMatrixWorld(true);
+  const sampled=new Map([
+    [283133,[-25.5965,-5.6721,'Steuart']],[283134,[-27.074,-6.3699,'Steuart']],
+    [284262,[-25.0696,-4.2232,'Howard']],[284263,[-23.9811,-4.9346,'Howard']],
+    [284265,[-24.3683,-7.1484,'Howard']],[295606,[-36.101,-7.8235,'Folsom']],
+    [296274,[-22.0811,-7.1682,'Steuart']],[300397,[-35.751,-5.4246,'Folsom']],
+    [300628,[-15.9369,-6.9039,'Steuart']],[300630,[-19.97,-6.3008,'Steuart']],
+    [300631,[-17.8927,-7.7952,'Steuart']],[300632,[-23.826,-5.7328,'Steuart']],
+  ]);
+  const fixtures=root.children.filter(o=>o.name.startsWith('Rincon'));
+  assert.equal(fixtures.length,sampled.size);
+  const emitters=halos.slice(-fixtures.length*3),field=createStreetField(emitters);
+  const value=(x,z)=>field.image.data[4*(Math.floor((z+64)/.12)*field.image.width+Math.floor((x+56)/.12))];
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.28);
+  for(const [i,fixture] of fixtures.entries()){
+    const id=Number(fixture.name.split(' ').at(-1)),[x,z,street]=sampled.get(id);
+    sampled.delete(id);
+    const head=new THREE.Vector3().fromArray(emitters,i*3);
+    ray.ray.origin.set(x,.14,z);
+    const hit=ray.intersectObject(streets).find(h=>h.face.normal.y>.6);
+    const bounds=new THREE.Box3().setFromObject(fixture);
+    assert.ok(hit&&Math.abs(bounds.min.y-hit.point.y)<.00002,'grade '+id);
+    const foot=new THREE.Vector3(x,hit.point.y,z);
+    const fluted=id===283133||id===283134;
+    assert.equal(fixture.name.includes('fluted'),fluted);
+    if(fluted){
+      assert.ok(Math.hypot(head.x-x,head.z-z)<.0001);
+    }else{
+      // Compare the overhang to the nearest point on that named road.
+      let nearest,distance=Infinity;
+      for(const road of sfMap.roads.filter(r=>r.name===street+' Street')){
+        for(let k=1;k<road.p.length;k++){
+          const at=p=>new THREE.Vector3(p[0],foot.y,p[1]);
+          const point=new THREE.Line3(at(road.p[k-1]),at(road.p[k])).closestPointToPoint(foot,true,new THREE.Vector3());
+          if(point.distanceTo(foot)<distance){distance=point.distanceTo(foot);nearest=point;}
+        }
+      }
+      const headPlan=new THREE.Vector3(head.x,foot.y,head.z);
+      assert.ok(headPlan.distanceTo(nearest)<distance-.12,'roadward mast arm '+id);
+      assert.ok(value(nearest.x,nearest.z)>32,'receiving lane '+id);
+    }
+    const pos=fixture.geometry.attributes.position,light=fixture.geometry.attributes.signLight;
+    assert.ok(Array.from({length:pos.count},(_,j)=>j).some(j=>light.getX(j)>.86&&
+      new THREE.Vector3().fromBufferAttribute(pos,j).applyMatrix4(fixture.matrixWorld).distanceTo(head)<.027));
+    assert.ok(value(head.x,head.z)>195);
+  }
+  assert.equal(sampled.size,0);
+  assert.equal(value(-29,-10),0);
+  field.dispose();
 });

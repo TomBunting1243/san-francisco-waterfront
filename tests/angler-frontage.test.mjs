@@ -39,6 +39,8 @@ test('Angler has real display openings, a revolving door and separately lit scon
     const [cool]=rgb(first(side*.125,.095));
     assert.ok(hot>.20&&hot>amber*1.35&&hot>cool+.17,'warm falloff around each wall fixture');
     function fromAbove(x,z){ray.set(at(x,.123,z),new THREE.Vector3(0,-1,0));return ray.intersectObject(mesh)[0];}
+    const sill=rgb(fromAbove(side*width*.303,.009));
+    assert.ok(sill[0]>.045&&sill[0]>sill[1]*1.2,'the projecting display sill catches warm dining-room light');
     const table=rgb(fromAbove(side*(width*.303+.004),-.144));
     const floor=rgb(fromAbove(side*.25,-.226));
     const entry=rgb(fromAbove(0,-.035));

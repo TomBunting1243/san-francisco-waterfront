@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {ferryWalkLens} from './ferry-walk-lights.ts';
 import {staticBoxes} from './static-boxes.ts';
 import {facadeExposure} from './facade-exposure.ts';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
@@ -127,6 +128,18 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
     }
     if(profile==='ferry-east-base'){
       band(.393,.044,.15,cream);
+      // The Port leasing brochure shows small security heads near the upper
+      // corners of the louvred plaza frontage. The former restaurant's
+      // upstairs windows are dark in the twilight view on page 2.
+      // https://sfport.com/files/2023-03/1_ferry_plaza_east_-2023_flyer.pdf
+      const mounts=nz<-.8&&len>.9?[-.47,.47]:nz>.8&&len>1?[0]:nx<-.8&&len>1?[0]:[];
+      for(const t of mounts){
+        const x=t*len;
+        if(!exposed(x,.36))continue;
+        box(.037,.026,.048,x,.366,.082,'#73756a',face);
+        const lens=box(.032,.006,.036,x,.351,.090,'#e0dfcf',face);
+        ferryWalkLens(lens,'Ferry Plaza East security light',1.85,.82);
+      }
       for(let x=-len/2+.028;x<len/2;x+=.057)if(exposed(x,.21))box(.025,.37,.044,x,.21,.05,'#555b4b',face);
       continue;
     }
@@ -140,6 +153,12 @@ export function referenceArchitecture(b:Building,buildings:Building[],font:Font)
         const bays=Math.max(1,Math.round(len/.23));
         for(let i=0;i<bays;i++)pane(-len/2+(i+.5)*len/bays,.135,len/bays*.80,.20);
         band(.27,.055,.20,cream);
+        if(nz<-.8&&len>.7){
+          for(const x of [-.28,0,.28]){
+            const lens=box(.027,.004,.023,x,.240,.095,'#d7d8c9',face);
+            ferryWalkLens(lens,'One Ferry Plaza sheltered entrance',1.12,.66);
+          }
+        }
       }
       continue;
     }

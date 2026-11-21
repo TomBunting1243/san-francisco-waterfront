@@ -13,6 +13,7 @@ import { ferryPose, birdPose, sailingPose } from './motion';
 import {waterHeight} from './water-surface';
 import { streetcarPose } from './streets';
 import {ambientStreetcarCall,washingtonDoorOpening} from './washington-call';
+import {setVesselLightingPhase} from './vessel-lighting';
 import {setVehiclePaintLight} from './street-vehicles';
 import type { RideMode } from './driver-rides';
 type Ride = {mode:RideMode; paused:boolean};
@@ -22,7 +23,8 @@ import type {CinematicOpening} from './cinematic-player';
 import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { harborStars, starVisibility } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
-import {bicycleScale,bicycleWheelBottom,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
+import {marketShopperAttendance} from './market-shoppers';
+import {bicycleScale,bicycleWheelBottom,frontMarketShopperStart,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,compactDevice,createQualityMonitor,drawingPixelRatio} from './city-runtime';
 
 const seatMaxZoom=4;
@@ -292,12 +294,16 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       if(conditionsRef.current.weather)applyWeather();
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
       const stars=harborStars(THREE);scene.add(stars);
+      const figureRegion=streetView?variant:undefined;
+      const rearSlots=world.residentPositions.flatMap((p,i)=>p.rearShopper?[world.walkerCount+i]:[]);
+      const marketAttendance=marketShopperAttendance(frontMarketShopperStart(figureRegion),rearSlots);
       let conversation: {person:number;until:number}|null=null, speechCount=0;
       const personMatrix=new THREE.Matrix4(), head=new THREE.Vector3(), foot=new THREE.Vector3();
       const shoes=world.people.group.getObjectByName('Shoes') as InstanceType<typeof THREE.InstancedMesh>;
       const sightRay=new THREE.Raycaster();
       let hoveredSince=0, nextQuip=18;
       function personScreen(index:number){
+        if(world.people.isHidden(index))return {x:0,y:0,fx:0,fy:0,distance:Infinity,visible:false};
         if(index<world.walkerHeads.count){
           world.walkerHeads.getMatrixAt(index,personMatrix);
           head.setFromMatrixPosition(personMatrix).applyMatrix4(world.walkerHeads.matrixWorld);
@@ -347,6 +353,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       };
       type PersonProjection=ReturnType<typeof personScreen>;
       function seen(person:PersonProjection){
+        if(!person.visible)return false;
         // A visible head may project in front of a building across the bay.
         // Only test the actual depth of a candidate when opening a conversation.
         sightRay.setFromCamera(new THREE.Vector2(person.x/width*2-1,1-person.y/height*2),camera);
@@ -795,19 +802,27 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const ink=duskAmount>.55?'#e7eee4':'#24434b';if(ink!==lastInk){host.closest('main')?.setAttribute('data-harbor-light',duskAmount>.55?'dark':'light');host.parentElement?.style.setProperty('--world-ink',ink);host.parentElement?.style.setProperty('--world-halo',duskAmount>.55?'#132536':'#cddbdd');lastInk=ink;}
         stars.material.opacity=starVisibility(duskAmount,cloud,fog);stars.visible=!streetView&&stars.material.opacity>.001;
         setFerryClockTime(world.clockHands,lighting.hours,lighting.minutes);
+        const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
+        const attendanceChanged=marketAttendance.update(world.ferryMarket.activity);
         const motionChanged=elapsed!==lastMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         const pyxisPose=world.ferries.length&&(motionChanged||viewerChanged)?ferryPose(elapsed,0,ferryClock):null;
-        if(motionChanged||viewerChanged){
+        if(motionChanged||viewerChanged||attendanceChanged){
           figureViewX=camera.position.x;figureViewZ=camera.position.z;
           world.people.setViewer(figureViewX,figureViewZ);
           for(let i=0;i<world.walkerCount;i++){
-            const region=streetView?variant:undefined;
-            const poseAt=(offset:number)=>waterfrontWalker(roadSeconds+offset,i,region);
+            if(marketAttendance.absent.has(i)){
+              world.people.hide(i);continue;
+            }
+            const poseAt=(offset:number)=>waterfrontWalker(roadSeconds+offset,i,figureRegion);
             const p=poseAt(0);
             world.people.update(i,p.x,p.z,elapsed,1,p.y,hoveredPerson===i?1:0,p.standing,p.heading,poseAt);
           }
-          world.residentPositions.forEach((p,i)=>world.people.update(world.walkerCount+i,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===world.walkerCount+i?1:(i%7===0&&elapsed%18<3?.7:0),true));
+          world.residentPositions.forEach((p,i)=>{
+            const person=world.walkerCount+i;
+            if(marketAttendance.absent.has(person)){world.people.hide(person);return;}
+            world.people.update(person,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===person?1:(i%7===0&&elapsed%18<3?.7:0),true);
+          });
           if(pyxisPose)world.updateFerryPassengers(world.people,world.walkerCount+world.residentPositions.length,elapsed,pyxisPose,hoveredPerson);
           updatePier14Visitors(world.people,world.seatStart,world.pier14Visitors,elapsed,hoveredPerson);
           world.people.flush();
@@ -833,6 +848,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.sailboats.forEach((boat,i)=>{const p=sailingPose(elapsed,i,tideOffset);boat.position.set(p.x,p.y,p.z);boat.rotation.set(p.heel,p.heading,0,'YXZ');});
         world.ferries.forEach((boat,i)=>{
           const pose=i===0&&pyxisPose?pyxisPose:ferryPose(elapsed,i,ferryClock);
+          setVesselLightingPhase(boat,pose.phase);
           if(i===0)world.updatePyxisBoardingDoor(boat,pose.brow);
           if(i===selectedFerry.current){
             const label=routeLabel(i,pose);
@@ -881,7 +897,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           }
         }
         if(conversation){
-          if(now>conversation.until){conversation=null;setSpeech(null);}
+          if(now>conversation.until||world.people.isHidden(conversation.person)){conversation=null;setSpeech(null);}
           else if(bubble.current){
             const p=personScreen(conversation.person),half=bubble.current.offsetWidth/2+12;
             const x=Math.max(half,Math.min(width-half,p.x));
@@ -896,7 +912,6 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));
         world.sailboats.forEach((boat,i)=>world.hullShadows[i+world.ferries.length].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));
         precipitation.update(camera,width,height,rain,windTarget,chopTarget,duskAmount,still||reducedMotion.current?0:frameMs/1000,snowfall?'snow':'rain',quality);
-        const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
         const visual=[mode,rideSeconds,neighborhoods?.children.length??0,seatLook.current.yaw,seatLook.current.pitch,marketRevision,snowfall,rain.toFixed(3),width,height,target.x.toFixed(4),target.y.toFixed(4),target.z.toFixed(4),yaw.toFixed(4),tilt.toFixed(4),focalLength.toFixed(4),duskAmount.toFixed(4),lighting.hours,lighting.minutes,(scene.background as InstanceType<typeof THREE.Color>).getHexString()].join(',');
         const exploring=Math.hypot(target.x-(shotOrbit?.target[0]??0),target.z-(shotOrbit?.target[2]??0))>.03||Math.abs(magnification-1)>.07||Math.abs(Math.sin((yaw-(shotOrbit?.yaw??startYaw))/2))>.06||Math.abs(tilt)>.06;
         if(host.parentElement?.dataset.exploring!==String(exploring)&&host.parentElement)host.parentElement.dataset.exploring=String(exploring);

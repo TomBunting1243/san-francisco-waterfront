@@ -18,9 +18,9 @@ function scene(market,iso,still=false){
 const section=(array,where)=>array.filter(m=>where==='rear'?m[14]>1:where==='artist'?m[14]<-6:m[14]>-3&&m[14]<-1);
 const position=(matrix)=>matrix.slice(12,15);
 const width=(matrix)=>Math.hypot(...matrix.slice(0,3));
-test('the permanent waterfront market stays stocked through midnight, weekdays, holidays and changes to Pacific time',()=>{
+test('both plazas trade daily on the Pacific clock, including weekdays, holidays and both daylight-saving offsets',()=>{
   const market=createFerryMarket(),open=scene(market,'2026-11-21T20:00Z');
-  for(const iso of ['2026-03-03T18:00Z','2026-03-10T17:00Z','2026-11-26T20:00Z','2026-12-24T20:00Z','2026-12-31T20:00Z','2026-11-21T08:00Z']){
+  for(const iso of ['2026-03-03T18:00Z','2026-03-10T17:00Z','2026-11-26T20:00Z','2026-12-24T20:00Z','2026-12-31T20:00Z']){
     const schedule=ferryMarketSchedule(at(iso));
     assert.equal(schedule.front,1);assert.equal(schedule.rear,1);
     const sample=scene(market,iso);
@@ -30,6 +30,49 @@ test('the permanent waterfront market stays stocked through midnight, weekdays, 
   }
   assert.equal(ferryMarketSchedule(at('2026-11-21T08:00Z')).artist,0);
   assert.equal(ferryMarketSchedule(at('2026-11-21T20:00Z')).artist,1);
+});
+test('both market crews reverse setup at 2 pm and leave by 2:30 Pacific; artists keep trading',()=>{
+  const market=createFerryMarket();
+  for(const offset of ['-07:00','-08:00']){
+    const day=offset==='-07:00'?'2026-07-06':'2026-12-25';
+    for(const [clock,phase] of [['07:29',0],['07:30',0],['07:45',.5],['08:00',1],['14:00',1],['14:15',.5],['14:30',0],['23:59',0]]){
+      const schedule=ferryMarketSchedule(at(day+'T'+clock+offset));
+      assert.equal(schedule.front,phase);assert.equal(schedule.rear,phase);
+    }
+  }
+  const during=scene(market,'2026-11-21T22:15Z'),setup=scene(market,'2026-11-21T15:45Z');
+  for(const key of ['roofs','boxes','people']){
+    assert.deepEqual(during[key].filter(m=>m[14]>-6),setup[key]);
+    assert.ok(setup[key].some(m=>m[14]>1)&&section(setup[key],'front').length);
+  }
+  const packed=scene(market,'2026-11-21T22:27Z');
+  assert.equal(packed.roofs.filter(m=>m[14]>-6).length,0);
+  // At the flower pitch the outgoing cart carries four buckets, all twelve
+  // blooms, a folded cloth and a flat placard. Check actual batch transforms.
+  const cartZ=-1.84+.12,tint=new THREE.Color();
+  const ix=packed.boxes.findIndex((m,i)=>{
+    market.root.children[0].getColorAt(i,tint);
+    return tint.getHexString()==='7f8881'&&m[12]>2.50&&m[12]<2.85&&Math.abs(m[14]-cartZ)<.02;
+  });
+  assert.ok(ix>=0);
+  const bucket=packed.boxes[ix],cx=bucket[12]+.017;
+  const onCart=m=>Math.abs(m[12]-cx)<.073&&Math.abs(m[14]-cartZ)<.035;
+  function cartParts(batch,matrices,color){
+    return matrices.filter((m,i)=>{market.root.children[batch].getColorAt(i,tint);return onCart(m)&&tint.getHexString()===color;});
+  }
+  assert.equal(cartParts(0,packed.boxes,'7f8881').length,4);
+  assert.equal(cartParts(0,packed.boxes,'e7d7ad').length,1);
+  assert.equal(['c46678','dbb350','b15c48','a684ac'].flatMap(color=>cartParts(2,packed.people,color)).length,12);
+  const late=scene(market,'2026-11-21T22:29:59Z');
+  assert.ok(late.boxes.some(m=>m[14]>-6)&&late.people.some(m=>m[14]>-6));
+  for(const still of [false,true]){
+    const clear=scene(market,'2026-11-21T22:30Z',still);
+    for(const key of ['roofs','boxes','people'])assert.ok(clear[key].length&&clear[key].every(m=>m[14]<-6));
+    assert.equal(clear.roofs.length,7);
+  }
+  const night=scene(market,'2026-11-21T08:00Z');
+  assert.ok(market.root.children.every(m=>!m.visible));
+  assert.deepEqual([night.boxes.length,night.roofs.length,night.people.length],[0,0,0]);
 });
 test('fixed-plaza pitches wrap around the south end without obstructing the ferry loop, kiosks or gate approaches',()=>{
   const market=createFerryMarket(),s=scene(market,'2026-11-21T20:00Z');

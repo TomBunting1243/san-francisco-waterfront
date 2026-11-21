@@ -157,7 +157,8 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
         vec2 mask=1.-smoothstep(opening-aa*.5,opening+aa*.5,abs(cell));
         float lod=smoothstep(.27,1.,max(aa.x,aa.y));
         float pane=mix(mask.x*mask.y,4.*opening.x*opening.y,lod);
-        pane*=1.-.75*smoothstep(70.,120.,length(vViewPosition));
+        float visibility=1.-.75*smoothstep(70.,120.,length(vViewPosition));
+        pane*=visibility;
         float bar=(1.-smoothstep(.017-aa.x*.5,.017+aa.x*.5,abs(cell.x)));
         float transom=1.-smoothstep(.018-aa.y*.5,.018+aa.y*.5,abs(cell.y-.14));
         float frame=max(bar,transom*(loft||early?1.:.28))*(1.-lod);
@@ -191,10 +192,22 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
           vec3 warm=vec3(1.,.552,.184),cool=vec3(.738,.815,1.);
           float tint=mix(step(.72,facadeHash(vec2(floor(uv.x/5.),floor(course/2.)),seed+17.)),.28,spread);
           float blinds=mix(.64+.36*id,.82,lod);
-          roomEmission=mix(warm,cool,tint)*on*blinds*pane*(1.-frame);
+          vec3 source=mix(warm,cool,tint)*on*blinds;
+          roomEmission=source*pane*(1.-frame);
+          // The opaque jamb, sill and glazing bars share the room's actual
+          // occupancy, blind and colour. The wall between bays stays dark.
+          vec2 gap=max(abs(cell)-opening,vec2(0.));
+          float below=1.-step(0.,cell.y);
+          vec2 reach=vec2(.074,mix(.055,.13,below));
+          float surround=(1.-smoothstep(0.,1.,length(gap/reach)))*(1.-pane);
+          float receive=surround*mix(.12,.23,below)+pane*frame*.12;
+          // Below one pixel, preserve the mean light on the two jambs, the
+          // shorter head and the wider sill, using the same filtered room.
+          float meanReceive=.5*(4.*opening.y*.074*.12+2.*opening.x*(.055*.12+.13*.23));
+          roomEmission+=source*wall*mix(receive,meanReceive,lod)*visibility*smoothstep(0.,.22,roomNight);
         }
       }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=roomEmission;');
   };
   bindFacadeClock(material,clock);
-  material.customProgramCacheKey=()=> 'measured-downtown-facades-v4';
+  material.customProgramCacheKey=()=> 'measured-downtown-facades-v5';
 }

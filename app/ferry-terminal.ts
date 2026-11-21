@@ -285,7 +285,14 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     }
   }
   const boundary=fixedFerryApron.p, underside=apronY-harborDatum.pierSlabThickness;
-  mesh(footprintGeometry(boundary,harborDatum.pierSlabThickness),'#b9b8a6',0,underside,0,terminal).name='Surveyed fixed ferry apron';
+  const apron=mesh(footprintGeometry(boundary,harborDatum.pierSlabThickness),'#b9b8a6',0,underside,0,terminal);
+  apron.name='Surveyed fixed ferry apron';
+  // BART's existing-conditions assessment records broadly elevated light
+  // across the platform. The Port's leasing photograph shows the exposed
+  // slab between much brighter sources in the shelter and entrance.
+  // https://www.bart.gov/sites/default/files/docs/BART_EQS_EA_ADDENDA_1of3.pdf
+  apron.userData.uplight=(_p:THREE.Vector3,n:THREE.Vector3)=>.235*Math.max(0,n.y);
+  apron.userData.uplightTint=[.91,.76];
   const support=new THREE.Group();support.name='Fixed ferry apron piles';terminal.add(support);
   const guard=new THREE.Group();guard.name='Fixed ferry apron edge guard';terminal.add(guard);
   const tip=waterSurface.level-.32;
@@ -367,7 +374,7 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     cylinder(.015,.56,x,apronY+.28,z,'#657574',terminal);
     box(.080,.023,.052,x,apronY+.567,z,'#788581',terminal);
     const lamp=box(.066,.006,.040,x,apronY+.552,z,'#e8e1ce',terminal);
-    ferryWalkLens(lamp,'Ferry Plaza pedestrian light',1.65,.88);
+    ferryWalkLens(lamp,'Ferry Plaza pedestrian light',2.55,.94);
   }
   // The contractor records the completed E–G passenger-queue canopies;
   // sheet 11 locates their lateral run along the land side of the hinges.
@@ -438,7 +445,11 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
     }
     link(at(-.342,eave-.037,z),at(.342,eave-.037,z),.010,red,waiting);
     const lamp=box(.113,.008,.023,.094,eave-.046,z,'#e7e2d2',waiting);
-    ferryWalkLens(lamp,'Golden Gate waiting shelter luminaire',.99,.88);
+    ferryWalkLens(lamp,'Golden Gate waiting shelter luminaire',1.22,.93);
+    // The Port's evening photograph shows the illuminated plaza-side aisle
+    // running the length of the shelter. Its spill reaches the adjoining apron.
+    const plazaLamp=box(.113,.008,.023,-.29,eave-.046,z,'#e7e2d2',waiting);
+    ferryWalkLens(plazaLamp,'Golden Gate plaza-side aisle light',1.64,.82);
   }
   // Longitudinal purlins and glazing sit beneath the canopy and keep the bays open.
   for(const x of [-.205,0,.205]){
