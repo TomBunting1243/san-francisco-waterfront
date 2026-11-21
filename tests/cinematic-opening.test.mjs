@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import * as THREE from 'three';
 import {selectFilmEdition} from '../app/cinematic-edition.ts';
 import {cinematicOrbit} from '../app/cinematic-camera.ts';
-import {waterfrontShotPose} from '../app/waterfront-shot.ts';
+import {openingSeconds,waterfrontShotPose} from '../app/waterfront-shot.ts';
 import {orbitOffset} from '../app/camera.ts';
 
 function camera(eye,look,lens,dx,dy,w,h){
@@ -40,23 +40,28 @@ for(const shot of ['city-to-bridge','bridge-to-city']){
   });
 }
 
-test('the lens widens gently during the close orbit and arrives smoothly at the selected bridge bearing',()=>{
+test('bearing, pullback and lens move together from frame one through the landing',()=>{
+  assert.equal(openingSeconds,8);
   for(const shot of ['bridge-to-city','city-to-bridge'])for(const [w,h] of [[1280,720],[720,1280]]){
-    const pose=t=>waterfrontShotPose(shot,t,w,h);
-    const first=pose(0),half=pose(.5);
-    const ratio=half.focalLength/first.focalLength;
-    assert.ok(ratio>.86&&ratio<.95);
-    assert.deepEqual(first.look,half.look);
-    assert.ok(Math.hypot(first.eye[0]-half.eye[0],first.eye[2]-half.eye[2])>3);
-    const end=pose(1);
-    assert.ok(end.focalLength<=half.focalLength);
-    if(shot==='bridge-to-city'){
-      assert.ok(Math.abs(Math.atan2(end.eye[0]-end.look[0],end.eye[2]-end.look[2])-1.225)<1e-8);
+    function cameraAt(frame){
+      const pose=waterfrontShotPose(shot,frame/191,w,h);
+      const x=pose.eye[0]-pose.look[0],z=pose.eye[2]-pose.look[2];
+      return {bearing:Math.atan2(x,z),distance:Math.hypot(x,z),lens:pose.focalLength};
     }
+    let previous=cameraAt(0);
+    for(let frame=1;frame<=191;frame++){
+      const next=cameraAt(frame);
+      const turn=Math.atan2(Math.sin(next.bearing-previous.bearing),Math.cos(next.bearing-previous.bearing));
+      assert.ok(shot==='bridge-to-city'?turn<0:turn>0);
+      assert.ok(next.distance>previous.distance,'pullback at frame '+frame);
+      assert.ok(next.lens<previous.lens,'widening lens at frame '+frame);
+      previous=next;
+    }
+    if(shot==='bridge-to-city')assert.ok(Math.abs(previous.bearing-1.225)<1e-8);
   }
 });
 
-const shotTime=fraction=>fraction*(12-1/24);
+const shotTime=fraction=>fraction*(openingSeconds-1/24);
 let session=0;
 async function withPlayer(options,run){
   const old=new Map(),frames=[];
@@ -75,7 +80,7 @@ async function withPlayer(options,run){
       await new Promise(done=>setImmediate(done));
     }});
   });
-  function makeVideo(){const node=Object.assign(new EventTarget(),{style:{},dataset:{},readyState:4,HAVE_FUTURE_DATA:3,duration:12,currentTime:0,playbackRate:1,
+  function makeVideo(){const node=Object.assign(new EventTarget(),{style:{},dataset:{},readyState:4,HAVE_FUTURE_DATA:3,duration:openingSeconds,currentTime:0,playbackRate:1,
     play(){this.paused=false;return Promise.resolve();},pause(){this.paused=true;},setAttribute(){},removeAttribute(name){if(name==='src')this.src=undefined;},load(){},remove(){this.removed=true;}});
     videos.push(node);return node;
   }
@@ -143,13 +148,33 @@ test('a failed stream switches to its endpoint print while the scene loads',asyn
   });
 });
 
-test('native playback slows against measured build time and recovers once the renderer draws',async()=>{
-  await withPlayer({query:'?opening=bridge'},({player,video,clock})=>{
+test('slow construction leaves the native film at its authored rate and holds its landing',async()=>{
+  await withPlayer({query:'?opening=bridge'},({player,video,clock,frames})=>{
     const current=player.currentOpening;
-    clock.now=22000;video.currentTime=shotTime(.2);current.stage(2);
-    const slow=video.playbackRate;assert.ok(slow>=.8&&slow<1);
-    current.drawn(current.progress(),false);video.dispatchEvent(new Event('timeupdate'));
-    assert.ok(video.playbackRate>slow&&video.playbackRate<=1);
+    for(const t of [2,4,7]){
+      clock.now=t*1000;video.currentTime=t;video.dispatchEvent(new Event('timeupdate'));
+      current.drawn(current.progress(),false);
+      assert.equal(video.playbackRate,1);
+      assert.equal(current.progress(),t/shotTime(1));
+    }
+    video.currentTime=openingSeconds;video.dispatchEvent(new Event('ended'));
+    clock.now=22000;current.drawn(.94,true);assert.equal(frames.length,0);
+    assert.equal(current.progress(),1);current.drawn(1,true);assert.equal(frames.length,1);
+  });
+});
+
+test('a slow completed draw cannot rewind the playing film or replay its endpoint',async()=>{
+  await withPlayer({query:''},({player,video,clock,frames})=>{
+    const current=player.currentOpening;
+    video.currentTime=shotTime(.82);
+    const beforeDraw=current.progress();
+    clock.now=700;video.currentTime=shotTime(.91);
+    current.drawn(beforeDraw,true);
+    assert.equal(frames.length,0);assert.equal(current.progress(),.91);
+    clock.now+=shotTime(.04)*1000;current.drawn(current.progress(),true);
+    assert.equal(frames.length,1);
+    clock.now+=1500;assert.equal(current.progress(),1);current.drawn(1,true);
+    clock.now+=5000;assert.equal(current.progress(),1);
   });
 });
 

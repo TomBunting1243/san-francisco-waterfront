@@ -95,7 +95,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
     const paintStep=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
     Promise.all([import('three'), import('./landscape'),import('./harbor-sky'),import('./harbor-rain'),streetView?null:import('./harbor-print'),streetView?null:import('./harbor-instances')]).then(async ([THREE, { landscapeStages,rememberLandscape, createStreetIllumination, setPccFrontDoor, setPccExitDoor, createCityVignette, setFerryClockTime, updateFerryFlag, ferryFlagFlutterRate },{createHarborSky},{createHarborRain},printModule,instanceModule]) => {
       if (disposed) return;
-      setLoadStage(1);cinematic?.stage(1);
+      setLoadStage(1);
       await paintStep();
       if(disposed)return;
       let renderer: InstanceType<typeof THREE.WebGLRenderer>;
@@ -149,7 +149,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         let step=stages.next();
         while(!step.done){
           if(step.value!==shownStage){
-            shownStage=step.value;setLoadStage(shownStage);cinematic?.stage(shownStage);await paintStep();
+            shownStage=step.value;setLoadStage(shownStage);await paintStep();
           }else{
             await new Promise<void>(resolve=>setTimeout(resolve,0));
           }
@@ -160,7 +160,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world=rememberLandscape(step.value);
       }
       if(!streetView){
-        setLoadStage(7);cinematic?.stage(7);
+        setLoadStage(7);
         await paintStep();
         if(disposed)return;
       }

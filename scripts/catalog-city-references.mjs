@@ -140,7 +140,8 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
  // a 3DEP octree member or a raster tile is an address within its source dataset.
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
-const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com'};
+const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
+  'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com'};
 const members=new Map(),assetURLs=new Set();
 let assetBytes=0;
 for(const line of registry){

@@ -427,14 +427,10 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   // Palomino's red horse and capitals looked out over its Hills Plaza terrace.
   const palomino=group('Palomino',[hillsPalomino.x,hillsPalomino.y,hillsPalomino.z]);
   palomino.rotation.y=hillsPalomino.yaw;
-  const terra='#ae7459', red='#ae4338';
-  box(1.56,.44,.097,0,.257,-.016,terra,palomino);
-  box(1.60,.051,.105,0,.513,-.019,'#c19473',palomino);
-  for(const y of [.061,.123,.185,.247,.309,.372,.437])box(1.55,.006,.008,0,y,.035,'#be9478',palomino);
-  for(const x of [-.528,-.165,.2,.557])storefront(x,.039,.211,.285,.275,'#7e6755',palomino);
-  box(1.54,.039,.15,0,.329,.104,'#7d5550',palomino).rotation.x=.23;
-  const marquee=group('Palomino terrace sign',[.55,.04,.485],palomino);
-  marquee.rotation.y=.21;
+  const red='#ae4338';
+  const marquee=group('Palomino terrace sign',[-.70,0,.39],palomino);
+  marquee.scale.setScalar(.33);
+  marquee.rotation.y=.28;
   const plaque=new THREE.Shape();
   plaque.moveTo(-.29,-.064);plaque.lineTo(.29,-.064);plaque.lineTo(.27,.064);
   plaque.quadraticCurveTo(.16,.123,0,.137);plaque.quadraticCurveTo(-.16,.123,-.27,.064);plaque.closePath();
@@ -475,20 +471,22 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
     const horse=new THREE.Shape(horseOutline.map(([x,y])=>new THREE.Vector2(x*side,y)));
     mesh(new THREE.ExtrudeGeometry(horse,{depth:.007,bevelEnabled:false}),red,0,.323,.002,face).name='Palomino running horse';
   }
-  box(1.70,.057,.78,0,.010,.43,'#bbaa8f',palomino);
-  for(let x=-.78;x<.82;x+=.17)box(.008,.008,.74,x,.04,.43,'#a89b85',palomino);
-  rail(-.83,.19,-.83,.81,.037,palomino);
-  rail(.83,.27,.83,.81,.037,palomino);
-  for(const x of [-.53,0,.53]){
-    outdoorTable(x,.53,.040,'#a7634a',palomino,x<0);
-    mesh(new THREE.CylinderGeometry(.056,.059,.009,12),'#e8dfbf',x,.229,.53,palomino);
-    // The plates hold cross-cut waffle fries and crumbs of blue cheese.
+  // Keep the approaches to both pairs of doors open. Each dining set is
+  // modeled at café scale: a 77 cm tabletop with a 46 cm seat height.
+  for(const [index,[u,v]] of [[-.55,.14],[-.55,.31],[-.55,.50],[-.55,.69],[-.31,.63],[-.12,.64],[-.12,.47],[-.18,.14]].entries()){
+    const table=group('Palomino dining set',[u,0,v],palomino);
+    table.scale.setScalar(.25);table.rotation.y=index%2?.23:-.31;
+    outdoorTable(0,0,0,'#b69772',table,false);
+    const plate=mesh(new THREE.CylinderGeometry(.042,.037,.005,12),'#e8dfbf',.044,.187,0,table);
+    plate.name='Plate of gorgonzola waffle fries';
     for(const i of [-1,0,1]){
-      box(.069,.006,.005,x,.235,.53+i*.015,'#cd9d56',palomino);
-      box(.005,.005,.051,x+i*.02,.239,.53,'#d8ad62',palomino);
+      box(.049,.004,.004,.044,.192,i*.010,'#cd9d56',table);
+      box(.004,.003,.031,.044+i*.013,.195,0,'#d8ad62',table);
     }
-    for(const [dx,dz] of [[-.023,-.01],[.013,.012],[.028,-.016]])box(.009,.006,.009,x+dx,.245,.53+dz,'#acaf90',palomino);
   }
+  // A slim railing separates only the raised outer edge from the sidewalk.
+  for(const y of [.033,.062])beam([-.78,y,.827],[.00,y,.827],.004,metal,palomino);
+  for(let i=0;i<=5;i++)box(.005,.063,.005,-.78+i*.156,.0315,.827,metal,palomino);
 
   // Pier 1, south bulkhead. The period exterior and doorway photographs place
   // the two neon words behind the middle transom, under four six-light windows.

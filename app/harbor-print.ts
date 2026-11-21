@@ -1,6 +1,33 @@
 import * as THREE from 'three';
 import {KernelSize, ShaderPass, TiltShiftEffect} from 'postprocessing';
 
+// Queue the opaque street-light programs against the actual print target. Shadow
+// geometry uploads can then run while the driver links the color programs.
+function queueStreetPrograms(renderer:THREE.WebGLRenderer,scene:THREE.Scene,camera:THREE.Camera){
+  scene.updateMatrixWorld();
+  const clip=new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+  const frustum=new THREE.Frustum().setFromProjectionMatrix(clip,camera.coordinateSystem,camera.reversedDepth);
+
+  // compile(subset, camera, scene) collects lights from both arguments. This
+  // traversal view borrows the scene without reparenting meshes or allocating
+  // a Three object whose random UUID would affect later seeded artwork.
+  const subset:THREE.Scene=Object.create(scene);
+  subset.traverseVisible=()=>{};
+  subset.traverse=visit=>scene.traverseVisible(object=>{
+    const mesh=object as THREE.Mesh;
+    // The pane instancer patches its material during the real draw.
+    if(!mesh.isMesh||mesh.type==='InstancedMesh2'||!mesh.layers.test(camera.layers))return;
+    if(!mesh.geometry.drawRange.count)return;
+    const material=mesh.material as THREE.MeshStandardMaterial;
+    if(!material.isMeshStandardMaterial||material.transparent||!material.visible)return;
+    if(!material.customProgramCacheKey().includes('street-surface'))return;
+    if(mesh.frustumCulled&&!frustum.intersectsObject(mesh))return;
+    visit(mesh);
+  });
+  renderer.compile(subset,camera,scene);
+  renderer.getContext().flush();
+}
+
 // The broad square cornices end at the second colonnade. The narrower
 // lantern, mast and flying flag fit within the upper section.
 export function towerPrintFocus(clockCenter:THREE.Vector3){
@@ -105,6 +132,7 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
     `});
   const grade=new ShaderPass(material,'inputBuffer');grade.renderToScreen=true;
   const focus=new THREE.Vector3(),dimensions=new THREE.Vector2();
+  let firstFrame=true;
   return {
     resize(quality=2,compact=false){
       renderer.getDrawingBufferSize(dimensions);
@@ -122,7 +150,9 @@ export function createHarborPrint(renderer:THREE.WebGLRenderer,clockCenter:THREE
       uniforms.strength.value=riding||quality===0?0:1-THREE.MathUtils.smoothstep(zoom,1.3,3.3);
       if(uniforms.strength.value>.004)tower.update(camera);
       uniforms.bounce.value.copy(bounceColor).convertLinearToSRGB();
-      renderer.setRenderTarget(source);renderer.render(scene,camera);
+      renderer.setRenderTarget(source);
+      if(firstFrame){firstFrame=false;queueStreetPrograms(renderer,scene,camera);}
+      renderer.render(scene,camera);
       if(uniforms.strength.value>.004){tilt.offset=(row-.5)*2;tilt.update(renderer,source,0);}
       grade.render(renderer,source,null);
     },

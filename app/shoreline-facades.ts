@@ -1,4 +1,4 @@
-import {hillsArcade,hillsCourt,hillsAtrium} from './hills-plaza.ts';
+import {hillsArcade,hillsCourt,hillsAtrium,hillsPalomino,terraceDoors} from './hills-plaza.ts';
 import * as THREE from 'three';
 import {staticBoxes} from './static-boxes.ts';
 import {center,footprintGeometry} from './sf-map.ts';
@@ -81,7 +81,7 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
         const p=g.localToWorld(new THREE.Vector3(x,bottom+spring*.50,-depth-.010));
         windows.push({x:p.x,y:p.y,z:p.z,ry:g.rotation.y,w:w*.93,h:spring*.88});
       }
-      box(w+.044,.023,.067,x,bottom-.005,.016,courses,g);
+      if(!through&&!(door&&g.name==='Palomino terrace doorway'))box(w+.044,.023,.067,x,bottom-.005,.016,courses,g);
       if(rise&&hills){
         const crown=bottom+spring;
         for(let joint=0;joint<11;joint++){
@@ -133,11 +133,12 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
       box(length+.028,.047,.062,0,h-.026,.021,coping,g);
       box(length+.03,.028,.055,0,h-.081,.018,courses,g);
     }else if(length>.48&&profile){
+      const patioDoor=b.id===-345&&terraceDoors.find(([dx,dz])=>Math.hypot(dx-g.position.x,dz-g.position.z)<.065);
       const floors=profile.floors,floorHeight=(h-base-.092)/floors;
       const bays=Math.max(1,Math.round(length/.43)),spacing=length/bays;
       for(let i=0;i<bays;i++){
         const fx=-length/2+(i+.5)*spacing,w=spacing*(i%3===0?.65:.77);
-        for(let floor=0;floor<floors;floor++){
+        for(let floor=patioDoor?2:0;floor<floors;floor++){
           const lobby=floor===0&&i===Math.floor(bays/2)&&length>1.10&&nz>.1;
           const bottom=base+floor*floorHeight+(floor===0?.095:.070);
           const tall=floorHeight*(lobby?.84:.66);
@@ -152,11 +153,21 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
           }
         }
         if(i%3===0&&exposed(fx+spacing*.43,.025,h*.62)){
-          box(.028,h-.15,.039,fx+spacing*.42,h/2+.011,.013,coping,g);
+          const lower=patioDoor ? .336 : .086,upper=h-.064;
+          box(.028,upper-lower,.039,fx+spacing*.42,(upper+lower)/2,.013,coping,g);
         }
       }
       box(length+.012,.041,.057,0,h-.028,.012,coping,g);
-      box(length,.018,.048,0,base+floorHeight+.061,.014,courses,g);
+      const belt=patioDoor ? .336 : base+floorHeight+.061;
+      box(length,.018,.048,0,belt,.014,courses,g);
+      if(patioDoor){
+        const localDoor=g.worldToLocal(new THREE.Vector3(patioDoor[0],0,patioDoor[1])).x;
+        g.name='Palomino terrace doorway';
+        entries.push({x:localDoor,bottom:hillsPalomino.y+.003,w:.112,h:.143,door:true});
+        for(const side of [-1,1]){
+          entries.push({x:localDoor+side*.164,bottom:hillsPalomino.y+.025,w:.156,h:.121});
+        }
+      }
     }
     openings(g,length,base,h,entries);
   }
@@ -165,17 +176,31 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
     const [a,q]=hillsArcade.map(([x,z])=>new THREE.Vector2(x,z));
     const length=a.distanceTo(q),g=new THREE.Group();g.name='Open Hills Plaza promenade arcade';
     g.position.set((a.x+q.x)/2,0,(a.y+q.y)/2);g.rotation.y=Math.atan2(a.y-q.y,q.x-a.x);root.add(g);
-    const start=.115,top=.692,spacing=length/4;
-    openings(g,length,.093,top,Array.from({length:4},(_,i)=>({x:-length/2+(i+.5)*spacing,w:spacing*.76,bottom:start,h:.496,rise:.16})),true);
-    box(length+.046,.042,.30,0,top,-.10,coping,g);
-    const court=mesh(footprintGeometry(hillsCourt,.052),'#bba58e',0,.062,0,root);
+    const bays=6,spacing=length/bays,start=hillsPalomino.y,top=.518;
+    openings(g,length,.044,top,Array.from({length:bays},(_,i)=>({x:-length/2+(i+.5)*spacing,w:spacing*.77,bottom:start,h:.319,rise:.14})),true);
+    box(length+.024,.023,.30,0,top+.0115,-.145,coping,g);
+    box(length,.016,.025,0,top-.028,.010,courses,g);
+    const circle=[-43.338,-5.431],radius=.526;
+    const pavement=new THREE.Shape(hillsCourt.map(([x,z])=>new THREE.Vector2(x,-z)));
+    const inset=new THREE.Path();inset.absarc(circle[0],-circle[1],radius,0,Math.PI*2,false);pavement.holes.push(inset);
+    const court=mesh(extrusion(pavement,start-.044).rotateX(-Math.PI/2),'#b6a18c',0,.044,0,root);
     court.name='Hills Plaza public passage';
-    box(length+.022,.026,.15,0,top-.062,.013,courses,g);
-    box(length,.043,.30,0,.111,-.15,'#b2a58f',g);
-    for(let i=0;i<4;i++){
+    // Inset, adjoining bands use the same angular samples as the cut in the paving.
+    for(const [inner,outer,tint] of [[0,.215,'#a89583'],[.215,.229,'#d2c5ae'],[.229,.448,'#bdaa98'],[.448,.465,'#d2c5ae'],[.465,radius,'#b9ab98']] as const){
+      mesh(new THREE.RingGeometry(inner,outer,24).rotateX(-Math.PI/2),tint,circle[0],start,circle[1],root);
+    }
+    box(length,start-.044,.30,0,(start+.044)/2,-.15,'#b2a58f',g);
+    for(let i=0;i<bays;i++){
       const x=-length/2+(i+.5)*spacing;
-      for(let step=0;step<4;step++)box(spacing*.76,.021,.061,x,.101-step*.008,.030+step*.05,'#b6ad9b',g);
-      if(i<3)box(.15,.07,.25,x+spacing/2,.121,.134,'#a3a18d',g);
+      for(let step=0;step<8;step++){
+        const height=(start-.045)*(8-step)/8;
+        box(spacing*.77,height,.021,x,.045+height/2,.0105+step*.021,'#b7ae9f',g);
+      }
+      if(i===bays-1)continue;
+      const edge=x+spacing/2;
+      box(spacing*.23,.095,.178,edge,.0925,.079,'#a69e90',g);
+      const leaves=mesh(new THREE.IcosahedronGeometry(1,1),'#6d7953',edge,.149,.075,g);
+      leaves.scale.set(spacing*.106,.027,.085);
     }
   }
   if(b.id===-345){

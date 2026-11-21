@@ -5,12 +5,13 @@ import {readMotionPreference,motionEvent} from './city-runtime.ts';
 export type CinematicOpening={
   shot:WaterfrontShot;
   progress:()=>number;
-  stage:(stage:number)=>void;
   drawn:(progress:number,sceneryReady:boolean)=>void;
   skipToEnd:()=>void;
   unavailable:()=>void;
   dispose:()=>void;
 };
+
+const frameSeconds=1/24;
 
 export let currentOpening:CinematicOpening|undefined;
 
@@ -28,9 +29,9 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
   const network=(navigator as Navigator&{connection?:{saveData?:boolean}}).connection;
   const asset=()=>filmAssetPath(edition,orientation.matches);
   let path=asset();
-  let live=false,stopped=false,failed=false,release=false,disposed=false,progress=0,stage=0,raf=0;
+  let live=false,stopped=false,failed=false,release=false,disposed=false,progress=0,raf=0;
   let liveClock:{from:number;start:number;duration:number}|undefined;
-  const started=performance.now();
+  const shotDuration=()=>Math.max(.1,(Number.isFinite(video.duration)?video.duration:openingSeconds)-frameSeconds);
   function makeVideo(){
     const node=document.createElement('video');
     node.muted=true;node.defaultMuted=true;node.playsInline=true;node.disablePictureInPicture=true;
@@ -42,7 +43,7 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
   function position(){
     if(stopped)return progress;
     if(liveClock)return Math.min(1,liveClock.from+(document.hidden?0:performance.now()-liveClock.start)/liveClock.duration);
-    return Number.isFinite(video.duration)?Math.min(1,video.currentTime/Math.max(.1,video.duration-1/24)):0;
+    return Number.isFinite(video.duration)?Math.min(1,video.currentTime/shotDuration()):0;
   }
   function preferences(){return media.matches||data.matches||network?.saveData===true||readMotionPreference();}
   function stop(at:number){
@@ -62,18 +63,6 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
         if(!scope)layer.remove();
       });
     });
-  }
-  function syncRate(){
-    if(stopped||release||!Number.isFinite(video.duration))return;
-    const t=position();
-    // Ease playback toward the measured build progress. Even a blocked renderer
-    // continues to play, then retains the final frame until the city can draw it.
-    const elapsed=(performance.now()-started)/1000;
-    const complete=(stage+.5)/9;
-    const projectedSecondsLeft=Math.max(1.5,elapsed*(1-complete)/complete);
-    const filmLeft=(1-t)*video.duration;
-    const desired=live?1:Math.max(.8,Math.min(1,filmLeft/projectedSecondsLeft));
-    video.playbackRate+=(desired-video.playbackRate)*.6;
   }
   let requestedControl=false;
   function skip(e:Event){
@@ -129,7 +118,6 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
     });
   }
   function listen(node:HTMLVideoElement){
-    node.addEventListener('timeupdate',()=>{if(node===video&&!pending)syncRate();});
     node.addEventListener('ended',()=>{if(node===video&&!pending)finish();});
     node.addEventListener('error',()=>{if(node===video&&!pending)videoFailed();});
     node.addEventListener('playing',()=>{node.dataset.playing='true';});
@@ -148,15 +136,15 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
     pending=next;video.pause();next.preload='auto';
     function ready(event:Event){
       if(pending!==next||next.readyState<2||next.seeking||!Number.isFinite(next.duration))return;
-      const target=at*Math.max(.1,next.duration-1/24);
-      if(Math.abs(next.currentTime-target)>1/48){if(event.type==='seeked')videoFailed();return;}
+      const target=at*Math.max(.1,next.duration-frameSeconds);
+      if(Math.abs(next.currentTime-target)>frameSeconds/2){if(event.type==='seeked')videoFailed();return;}
       const old=video;pending=undefined;rotationRequest=undefined;video=next;path=nextPath;
-      next.dataset.playing='true';next.playbackRate=old.playbackRate;
+      next.dataset.playing='true';
       listen(next);layer.appendChild(next);discard(old);
       if(!stopped)play(next);
     }
     next.addEventListener('loadedmetadata',()=>{
-      if(pending===next&&Number.isFinite(next.duration))next.currentTime=at*Math.max(.1,next.duration-1/24);
+      if(pending===next&&Number.isFinite(next.duration))next.currentTime=at*Math.max(.1,next.duration-frameSeconds);
     },{once:true});
     next.addEventListener('loadeddata',ready);next.addEventListener('seeked',ready);
     const failedSwap=()=>{if(pending===next)videoFailed();};
@@ -165,7 +153,7 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
     // The public host can ignore Range and return the whole movie. A local
     // Blob supports seeking to the held frame without fetching the film twice.
     async function download(){
-      const timeout=setTimeout(failedSwap,openingSeconds*1000);
+      const timeout=setTimeout(failedSwap,12000);
       try{
         const response=await fetch(nextPath+'.mp4',{signal:request.signal});
         if(!response.ok)throw new Error('Film unavailable');
@@ -182,7 +170,7 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
     delete root.dataset.openingPhase;
     if(currentOpening===opening)currentOpening=undefined;
   }
-  const opening:CinematicOpening={shot,progress:position,stage(value){stage=Math.max(stage,value);syncRate();},skipToEnd(){requestedControl=true;stop(1);if(!release)videoFailed();},unavailable,dispose,
+  const opening:CinematicOpening={shot,progress:position,skipToEnd(){requestedControl=true;stop(1);if(!release)videoFailed();},unavailable,dispose,
     drawn(rendered,sceneryReady){
       if(failed||disposed)return;
       if(release){if(liveClock&&rendered>=1)stop(1);return;}
@@ -195,11 +183,13 @@ export function startCinematicOpening(edition?:FilmEdition,scope?:HTMLElement):C
         if(Math.abs(rendered-progress)>.0001)return;
         cleanup();
       }else{
-        // The native decoder covers construction. As soon as the skyline in
-        // this view is ready, continue the authored orbit in the live city.
-        const duration=(Number.isFinite(video.duration)?video.duration:openingSeconds)-1/24;
-        liveClock={from:rendered,start:performance.now(),duration:Math.max(.1,duration)*1000};
-        video.playbackRate=1;
+        if(!liveClock){
+          // A cold WebGL draw can take several film frames. The decoder keeps
+          // showing the shot while JS is busy, so continue from its current time.
+          liveClock={from:Math.max(rendered,position()),start:performance.now(),duration:shotDuration()*1000};
+        }
+        // Keep the film visible until the city has drawn the takeover position.
+        if((liveClock.from-rendered)*liveClock.duration>frameSeconds*1000)return;
       }
       release=true;raf=requestAnimationFrame(handoff);
     }};

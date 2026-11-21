@@ -1,3 +1,4 @@
+import {addPier33Bulkhead,pier33SurveyPart} from './pier33-bulkhead.ts';
 import {addNorthQuayFront,northQuayFront} from './north-quay-bulkhead.ts';
 import {urbanStreamBytes} from './urban-stream.ts';
 import {indexedNormals} from './packed-normals.ts';
@@ -112,6 +113,13 @@ class Footprint {
       if(n>2&&points[2*start]===points[2*count-2]&&points[2*start+1]===points[2*count-1])closed=true;
     }
     points.length=count*2;holes.length=rings-1;
+    if(x===72&&z===-36){
+      const part=pier33SurveyPart(points[0],points[1]);
+      if(part){
+        if(part==='south')addPier33Bulkhead(surface);
+        return;
+      }
+    }
     const hash=Math.abs(Math.round(points[0]*137+points[1]*91));
     const wall=wallTone?taggedColors[wallTone-1]:walls[tag||hash%walls.length];
     const roof=roofTone?taggedColors[roofTone-1]:roofs[hash%roofs.length];

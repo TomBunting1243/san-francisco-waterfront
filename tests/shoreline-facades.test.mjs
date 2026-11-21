@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as THREE from 'three';
+import {FontLoader} from 'three/addons/loaders/FontLoader.js';
+import fontData from '../app/harbor-font.json' with {type:'json'};
+import {createRememberedWaterfront} from '../app/remembered-waterfront.ts';
 import {mappedBuildings} from '../app/sf-map.ts';
 import {hasShorelineFacade,shorelineFacade} from '../app/shoreline-facades.ts';
 import {architectureProfile} from '../app/reference-architecture.ts';
 
-import {hillsPlant as plant,hillsBuildings,hillsSign,hillsPalomino} from '../app/hills-plaza.ts';
+import {hillsPlant as plant,hillsBuildings,hillsSign,hillsPalomino,terraceDoors} from '../app/hills-plaza.ts';
 
 function rayFrom(g,x,y){
   return new THREE.Raycaster(g.localToWorld(new THREE.Vector3(x,y,1)),
@@ -47,13 +50,40 @@ test('the six-storey plant, 345 Spear atrium and former restaurant face the open
   assert.ok(hillsBuildings.every(hasShorelineFacade));
   assert.ok(insideBuilding(...hillsSign.point,plant.p));
   assert.ok(!insideBuilding(...hillsSign.point,office.p));
-  for(const offset of [-.70,0,.70]){
-    const {x,z,yaw}=hillsPalomino,depth=.52;
-    const X=x+offset*Math.cos(yaw)+depth*Math.sin(yaw),Z=z-offset*Math.sin(yaw)+depth*Math.cos(yaw);
-    assert.ok(insideBuilding(X,Z,hillsCourt));
-    assert.ok(hillsBuildings.every(b=>!insideBuilding(X,Z,b.p)),'dining furniture is out in the open passage');
+  const restaurant=createRememberedWaterfront(new FontLoader().parse(fontData)).getObjectByName('Palomino');
+  restaurant.updateMatrixWorld(true);
+  const seats=restaurant.getObjectsByProperty('name','Palomino dining set');
+  assert.equal(seats.length,8);
+  const courtModel=shorelineFacade(plant,hillsBuildings,'#a9806b').root;
+  courtModel.updateMatrixWorld(true);
+  const floor=courtModel.getObjectByName('Hills Plaza public passage');
+  for(const set of seats){
+    const p=set.getWorldPosition(new THREE.Vector3());
+    assert.ok(insideBuilding(p.x,p.z,hillsCourt));
+    assert.ok(hillsBuildings.every(b=>!insideBuilding(p.x,p.z,b.p)));
+    const support=new THREE.Raycaster(p.clone().add(new THREE.Vector3(0,.02,0)),new THREE.Vector3(0,-1,0)).intersectObject(floor)[0];
+    assert.ok(support&&Math.abs(support.point.y-p.y)<.00001,'chairs and tables stand on the terrace');
+    const tabletop=new THREE.Box3().setFromObject(set.children[0]);
+    assert.ok((tabletop.max.y-p.y)/.06>.72&&(tabletop.max.y-p.y)/.06<.82);
   }
   const model=shorelineFacade(office,hillsBuildings,'#aa8874').root;
+  model.updateMatrixWorld(true);
+  const doors=model.getObjectsByProperty('name','Palomino terrace doorway');
+  assert.equal(doors.length,terraceDoors.length);
+  for(const face of doors){
+    const wall=face.getObjectByName('Punched masonry facade');
+    const panes=face.getObjectsByProperty('name','Recessed sash glazing');
+    const terrace=panes.filter(m=>{m.geometry.computeBoundingBox();return m.geometry.boundingBox.min.y<.30;});
+    assert.equal(terrace.length,3);
+    for(const pane of terrace){
+      const {min,max}=pane.geometry.boundingBox;
+      for(const u of [.1,.5,.9])for(const y of [.169,.209,.254]){
+        const ray=rayFrom(face,min.x+(max.x-min.x)*u,y);
+        assert.equal(ray.intersectObject(wall).length,0,'masonry cuts across the terrace glass');
+      }
+    }
+  }
+  assert.equal(hillsPalomino.y,.129);
   const roofs=model.getObjectByName('Roof deck'),atrium=model.getObjectByName('Sheltered 345 Spear atrium');
   const [x,z]=hillsAtrium.slice(0,-1).reduce(([X,Z],[a,b])=>[X+a/4,Z+b/4],[0,0]);
   const ray=new THREE.Raycaster(new THREE.Vector3(x,5,z),new THREE.Vector3(0,-1,0));

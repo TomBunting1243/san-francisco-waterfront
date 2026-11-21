@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.ts';
+import {chestnutWalkerCount,chestnutWalkerPose} from './chestnut-crossing.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
 import {northWaterfrontGrade,streetPose} from './streets.ts';
 import {pier2931Walk} from './north-quay-promenade.ts';
@@ -166,7 +167,8 @@ const passage:Walk={pose:passageVisitor,count:2};
 const cityRoutes:Walk[]=[
   {line:rinconWalkers,count:12}, {line:ferry,count:10},
   {line:pierSeven,count:10}, {line:northShore,count:8}, {line:southShore,count:10},
-  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {pose:northPierVisitor,count:pierVisitorPhases.length}, crossing, shoppers, passage,
+  {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {pose:northPierVisitor,count:pierVisitorPhases.length},
+  {pose:chestnutWalkerPose,count:chestnutWalkerCount}, crossing, shoppers, passage,
 ];
 const streetRoutes=[cityRoutes[0],cityRoutes[5],cityRoutes[6],{line:southShore,count:5}];
 const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],crossing,shoppers,passage];

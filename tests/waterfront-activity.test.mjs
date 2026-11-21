@@ -401,7 +401,12 @@ test('four visitors pass each other on the graded promenade and pause facing the
   const pavement=surfaces.getObjectByName('Northern Embarcadero street and pier approaches');
   const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0),0,.02);
   const ids=Array.from({length:waterfrontWalkerCount()},(_,i)=>i)
-    .filter(i=>pier2931Walk(waterfrontWalker(0,i).x));
+    .filter(i=>{
+      const p=waterfrontWalker(0,i),apron=pier2931Walk(p.x);
+      // The portal route starts at 82.98. Chestnut also overlaps the apron
+      // survey's x range, and its pedestrians traverse the carriageway.
+      return apron&&p.x>=82.9&&p.z>apron.curbZ&&p.z<apron.wallZ;
+    });
   assert.equal(ids.length,4);
   const visits=ids.map(()=>({south:false,sign:false,north:false}));
   for(let frame=0;frame<=760;frame++){

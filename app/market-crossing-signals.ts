@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {chestnutPedestrianHeads} from './chestnut-signals.ts';
 import type {StreetAssembly} from './street-amenities.ts';
 import {marketPedestrianPhase,signalPeriod} from './waterfront-signals.ts';
 
@@ -19,24 +20,27 @@ export const marketPedestrianHeads=[
   {x:-.6439,z:-6.1515,y:.04064,angle:.147},
   {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+.147},
 ] as const;
-type Head=(typeof marketPedestrianHeads)[number];
+type Head={x:number;y:number;z:number;angle:number;side?:number};
+const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads];
 const lensY=.156,lensZ=.0071;
 function point(h:Head,u:number,y:number,v:number){
   const s=Math.sin(h.angle),c=Math.cos(h.angle);
   return [h.x+c*u+s*v,h.y+y,h.z-s*u+c*v] as const;
 }
-function sideOffset(h:Head){return h.x<-.8||h.z<-5?-.015:.015;}
+function sideOffset(h:Head){return h.side??(h.x<-.8||h.z<-5?-.015:.015);}
 
 export function addMarketPedestrianHousings(a:StreetAssembly){
   const blue='#3a6068',casting='#465251',dark='#262c2c';
-  for(const h of marketPedestrianHeads){
+  for(const h of pedestrianHeads){
     const u=sideOffset(h);
     function box(x:number,y:number,z:number,w:number,d:number,t:number,tone:string){
       const [wx,wy,wz]=point(h,x,y,z);
       const m=a.box(wx,wy,wz,w,d,t,tone);m.rotation.y=h.angle;return m;
     }
-    box(0,.0027,0,.012,.0054,.012,blue);
-    a.add(new THREE.CylinderGeometry(.0035,.0043,.186,9),blue,h.x,h.y+.098,h.z);
+    if(h.side===undefined){
+      box(0,.0027,0,.012,.0054,.012,blue);
+      a.add(new THREE.CylinderGeometry(.0035,.0043,.186,9),blue,h.x,h.y+.098,h.z);
+    }
     box(u/2,lensY,0,Math.abs(u),.0038,.005,blue);
     box(u,lensY,0,.039,.034,.0125,casting);
     box(u,lensY,.0064,.035,.030,.0009,dark);
@@ -55,7 +59,7 @@ type DisplayPart={kind:'walk'|'hand'|'digit';digit:number;segment:number;start:n
 export function appendMarketPedestrianFaces(pos:number[],indices:number[],tints:number[]){
   const ranges:DisplayPart[]=[];
   const walk=new THREE.Color('#fff6e8'),amber=new THREE.Color('#ff8729');
-  for(const h of marketPedestrianHeads){
+  for(const h of pedestrianHeads){
     const draw=(kind:DisplayPart['kind'],shapes:number[][],digit=-1,segment=-1)=>{
       const start=indices.length,color=kind==='walk'?walk:amber;
       for(const coords of shapes){

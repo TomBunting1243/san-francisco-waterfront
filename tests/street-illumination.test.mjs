@@ -10,7 +10,9 @@ import {addSurveyBlocks} from '../app/survey-blocks.ts';
 
 const channelAt=(field,x,z,c=0)=>{
   const {width,data}=field.image;
-  return data[(Math.floor((z+64)/.12)*width+Math.floor((x+56)/.12))*4+c];
+  const row=x>=78?674+Math.floor((z+6.5)/.12):Math.floor((z+64)/.12);
+  const col=Math.floor((x-(x>=78?78:-56))/.12);
+  return data[(row*width+col)*4+c];
 };
 const compile=mat=>{
   const lib=T.ShaderLib.standard,shader={vertexShader:lib.vertexShader,fragmentShader:lib.fragmentShader,uniforms:{}};
@@ -25,7 +27,7 @@ test('representative SFMTA heads stand on the surveyed curb; main and cross traf
   assert.deepEqual([0,32,36,38,58,62,64].map(signalAspects),[[2,0],[1,0],[0,0],[0,2],[0,1],[0,0],[2,0]]);
 });
 test('both Market carriageways see the main aspect from upstream, including their overhead heads',()=>{
-  const market=waterfrontSignals.filter(h=>h.mount),housing=createSignalHousings();
+  const market=waterfrontSignals.filter(h=>h.mount&&!h.surveyed),housing=createSignalHousings();
   const lighting=createStreetIllumination(new T.Group(),[],new T.MeshBasicMaterial()),field=createStreetField([]);
   const lenses=lighting.lenses,colors=lenses.geometry.attributes.color;
   const aspectColors=['#ff4938','#ffc444','#65d98e'].map(c=>new T.Color(c));
@@ -176,7 +178,7 @@ test('field derives from the scene globes, is local, and reaches the same shader
   for(const h of waterfrontSignals){
     const p=signalLensCenter(h);
     assert.ok(channelAt(field,p.x,p.z,h.axis+1)>110);
-    if(h.mount){
+    if(h.mount&&!h.surveyed){
       const base=new T.Raycaster(new T.Vector3(h.x+.009,.14,h.z),down,0,.2)
         .intersectObject(scene.root,true).find(hit=>hit.face?.normal.y>.7)?.point.y;
       assert.ok(Math.abs(base-h.y)<.003,'Market pole on actual landing '+[h.x,h.z,base,h.y]);

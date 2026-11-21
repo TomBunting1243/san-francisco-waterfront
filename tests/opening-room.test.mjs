@@ -14,7 +14,7 @@ test('the gallery selects one native frame, preserves its scrubbed second and ca
   assert.doesNotMatch(markup,/<video[^>]+\bsrc=/);
   const baseURI='https://example.test/openings/',portrait=Object.assign(new EventTarget(),{matches:true});
   const movie=Object.assign(new EventTarget(),{currentSrc:baseURI+'bridge-to-city-portrait.mp4',
-    duration:12,currentTime:7.25,readyState:2,paused:true,seekable:{length:1,end:()=>12},dataset:{},
+    duration:8,currentTime:7.25,readyState:2,paused:true,seekable:{length:1,end:()=>8},dataset:{},
     setAttribute(){},load(){this.currentTime=0;},play(){this.paused=false;return Promise.resolve();}});
   const enter={},errorLink={},error={hidden:true,querySelector:()=>errorLink},groups=[new EventTarget(),new EventTarget()];
   const direction={value:'skyline'},light={value:'day'},requests=[];
@@ -39,8 +39,35 @@ test('the gallery selects one native frame, preserves its scrubbed second and ca
   assert.equal(movie.currentTime,7.25);assert.equal(movie.paused,true);
   assert.equal(movie.dataset.filmSrc,requests[1].src);assert.equal(blobs.length,1);
   assert.equal(enter.href,'../?opening=skyline&film=night');
-  movie.ended=true;movie.currentTime=12;direction.value='bridge';groups[0].dispatchEvent(new Event('change'));
+  movie.ended=true;movie.currentTime=8;direction.value='bridge';groups[0].dispatchEvent(new Event('change'));
   requests[2].resolve();await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(movie.poster,'city-to-bridge-night.webp');assert.equal(movie.currentTime,12);
+  assert.equal(movie.poster,'city-to-bridge-night.webp');assert.equal(movie.currentTime,8);
   assert.equal(enter.href,'../?opening=bridge&film=night');
+});
+
+test('all eight delivered MP4 editions contain eight seconds of film at 24 fps',async()=>{
+  // Read the actual MP4 track sample table in both the portfolio and city
+  // export. These silent clips each contain a single video track.
+  function box(parent,type){
+    for(let at=0;at+8<=parent.length;){
+      const length=parent.readUInt32BE(at);
+      assert.ok(length>=8&&at+length<=parent.length,'valid MP4 box size');
+      if(parent.toString('ascii',at+4,at+8)===type)return parent.subarray(at+8,at+length);
+      at+=length;
+    }
+    assert.fail('Missing MP4 box '+type);
+  }
+  for(const shot of ['bridge-to-city','city-to-bridge'])for(const light of ['','-night'])for(const aspect of ['','-portrait']){
+    const file=shot+light+aspect+'.mp4';
+    const movie=await readFile(new URL('../public/openings/'+file,import.meta.url));
+    const media=box(box(box(movie,'moov'),'trak'),'mdia');
+    assert.equal(box(media,'hdlr').toString('ascii',8,12),'vide',file);
+    const header=box(media,'mdhd'),scale=header.readUInt32BE(header[0]===1?20:12);
+    const table=box(box(box(media,'minf'),'stbl'),'stts');
+    assert.equal(table.readUInt32BE(4),1,'constant cadence in '+file);
+    const frames=table.readUInt32BE(8),ticksPerFrame=table.readUInt32BE(12);
+    assert.equal(frames,192,file);
+    assert.equal(scale/ticksPerFrame,24,file);
+    assert.equal(frames*ticksPerFrame/scale,8,file);
+  }
 });

@@ -1,3 +1,4 @@
+import {fireboatStation,firehouseFloat} from './fireboat-station.ts';
 import {northWaterfrontGrade} from './streets.ts';
 import {hillsBuildings,hillsSign} from './hills-plaza.ts';
 export {setPccFrontDoor,setPccExitDoor} from './streetcar.ts';
@@ -200,7 +201,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(addBechtelPlaza(park,root))return;
     if(park.p.length>3&&park.name!=='Rincon Park'&&park.name!=='Embarcadero Plaza')mesh(footprintGeometry(park.p,.07),'#89a66c',0,.04,0);
   });
-  sfMap.piers.filter(p=>p.closed&&p!==pierThreeFloat&&p!==fixedFerryApron&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,harborDatum.pierSlabThickness),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,harborDatum.pierDeck-harborDatum.pierSlabThickness,0));
+  sfMap.piers.filter(p=>p.closed&&p!==firehouseFloat&&p!==pierThreeFloat&&p!==fixedFerryApron&&!p.name.startsWith('Ferry Building Gate')).forEach(pier=>mesh(footprintGeometry(pier.p,harborDatum.pierSlabThickness),pier.name==='Pier 7'?'#b5a27e':'#ccd0c3',0,harborDatum.pierDeck-harborDatum.pierSlabThickness,0));
   const southernWaterfront=createSouthBeach(font,waterTime);
   root.add(southernWaterfront.root);
   windowPositions.push(...southernWaterfront.windows);
@@ -218,7 +219,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   for(const pier of sfMap.piers.filter(p=>p.closed)){
     const [cx,cz]=center(pier.p);if(cx< -90||cx>65||cz>30)continue;
     const timber=pier.name==='Pier 7';
-    if(pier===pierThreeFloat||pier===fixedFerryApron||pier.name.startsWith('Ferry Building Gate'))continue;
+    if(pier===firehouseFloat||pier===pierThreeFloat||pier===fixedFerryApron||pier.name.startsWith('Ferry Building Gate'))continue;
     for(let e=1;e<pier.p.length;e++){
       const [ax,az]=pier.p[e-1],[bx,bz]=pier.p[e],len=Math.hypot(bx-ax,bz-az);if(len<.3)continue;
       const count=Math.max(1,Math.ceil(len/1.2));
@@ -256,6 +257,9 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const buildingParents=new Set(detailedBuildings.map(b=>b.parent).filter(Boolean));
   function addBuilding(b:typeof detailedBuildings[number]){
     if(['Transamerica Pyramid','Salesforce Tower','San Francisco Ferry Building'].includes(b.name))return;
+    if(b.name==='Fireboat Station 35'){
+      const station=fireboatStation(b,detailedBuildings,font,mesh);root.add(station.root);windowPositions.push(...station.windows);return;
+    }
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;

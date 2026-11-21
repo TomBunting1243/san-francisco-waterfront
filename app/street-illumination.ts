@@ -2,14 +2,18 @@ import * as THREE from 'three';
 import type {FerryWalkPool} from './ferry-walk-lights.ts';
 import {terraceFloodAim} from './plaza-street-lights.ts';
 import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
+import {addChestnutStandards,chestnutVehicleHeads} from './chestnut-signals.ts';
 import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
 
-const width=784,height=672,minX=-56,minZ=-64,pitch=.12;
+const width=784,coreRows=672,minX=-56,minZ=-64,pitch=.12;
+// A narrow extra band in the existing sampler covers the outlying junction.
+// Padding separates the two neighborhoods under bilinear filtering.
+const northX=78,northZ=-6.5,northRows=42,height=coreRows+2+northRows;
 type Axis=0|1;
 type MarketMount={offset:number;rise:number;shared:boolean;arm?:boolean};
-type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount};
+type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount;surveyed?:boolean};
 const fromSouth=-Math.PI/2+.13,fromNorth=Math.PI/2+.13,fromStreet=Math.PI;
 // SFMTA 9323000 (NB) and 9323500 (SB) are separate midblock controls.
 // Their inventory points identify cabinets, not mounting positions. The shared
@@ -31,6 +35,7 @@ export const waterfrontSignals:Signal[]=[
   {x:13.825,z:-2.21,y:.0449,heading:fromSouth,axis:0},
   {x:11.13,z:-3.95,y:.045,heading:fromNorth,axis:0},
   {x:13.78,z:-3.89,y:.045,heading:fromStreet,axis:1},
+  ...chestnutVehicleHeads,
   marketHead(0,-Math.PI/2,.88),marketHead(1,-Math.PI/2,-.44),
   marketHead(3,-Math.PI/2,-4.9,true),
   marketHead(4,Math.PI/2,-.44),marketHead(5,Math.PI/2,.44),
@@ -55,7 +60,7 @@ export function createSignalHousings(){
       const p=facePoint(h,u,y,v);const m=a.box(p.x,p.y,p.z,w*.06,d*.06,t*.06,color);
       m.rotation.y=h.heading;
     };
-    if(h.mount){
+    if(h.mount&&!h.surveyed){
       const {offset,rise,arm,shared}=h.mount;
       const start=shared ? .191 : 0,top=(arm?4.3:4.19+rise)*.06;
       const ink='#426673';
@@ -70,7 +75,7 @@ export function createSignalHousings(){
         const arc=new THREE.QuadraticBezierCurve3(location(h,0,4.2,0),location(h,offset*.39,6.15,0),tip);
         for(let k=0;k<5;k++)strut(arc.getPoint(k/5),arc.getPoint((k+1)/5),.0040-.00033*k,.00367-.00033*k);
       }else strut(location(h,0,4.19+rise,0),location(h,offset,4.19+rise,.01),.0024,.0024);
-    }else{
+    }else if(!h.surveyed){
       component(0,.09,0,.29,.18,.29,'#747f77');
       const pole=a.add(new THREE.CylinderGeometry(.0052,.0069,.286,8),'#778880',h.x,h.y+.143,h.z);pole.castShadow=true;
       component(.24,4.19,.04,.49,.085,.11,'#53635d');
@@ -82,8 +87,9 @@ export function createSignalHousings(){
       for(const u of [.317,.603])component(u,y+.102,.23,.027,.10,.17,'#495247');
     }
   }
+  addChestnutStandards(a);
   addMarketPedestrianHousings(a);
-  return a.bake('SFMTA signal standards at Mission, Market and Washington');
+  return a.bake('SFMTA signal standards at Mission, Market, Washington and Chestnut');
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
@@ -97,8 +103,10 @@ export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
 export function createStreetField(globes:number[],ferryPools:readonly FerryWalkPool[]=[],shelterPools:readonly FerryWalkPool[]=[]){
   const pixels=new Uint8Array(width*height*4);
   const stamp=(x:number,y:number,z:number,r:number,channel:number,heading?:number,plaza=false,strength=1)=>{
-    const col=(x-minX)/pitch-.5,row=(z-minZ)/pitch-.5,bound=r/pitch;
-    for(let j=Math.max(0,Math.ceil(row-bound));j<=Math.min(height-1,Math.floor(row+bound));j++){
+    const north=x>=northX;
+    const first=north?coreRows+2:0,last=north?height-1:coreRows-1;
+    const col=(x-(north?northX:minX))/pitch-.5,row=first+(z-(north?northZ:minZ))/pitch-.5,bound=r/pitch;
+    for(let j=Math.max(first,Math.ceil(row-bound));j<=Math.min(last,Math.floor(row+bound));j++){
       for(let i=Math.max(0,Math.ceil(col-bound));i<=Math.min(width-1,Math.floor(col+bound));i++){
         const dx=(i-col)*pitch,dz=(j-row)*pitch,d=Math.hypot(dx,dz)/r;
         if(d>=1)continue;
@@ -190,8 +198,10 @@ varying vec3 waterfrontLightPosition;
 `;
 const illumination=`
   if(waterfrontStreetNight>.001 && waterfrontLightPosition.y>-.09 && waterfrontLightPosition.y<1.15){
-    vec2 streetUv=(waterfrontLightPosition.xz-vec2(-56.,-64.))/vec2(${(width*pitch).toFixed(2)},${(height*pitch).toFixed(2)});
-    if(all(greaterThan(streetUv,vec2(0.))) && all(lessThan(streetUv,vec2(1.)))){
+    bool north=waterfrontLightPosition.x>=${northX.toFixed(1)};
+    vec2 fieldPoint=waterfrontLightPosition.xz-(north?vec2(${northX.toFixed(1)},${northZ.toFixed(1)}):vec2(-56.,-64.));
+    if(all(greaterThan(fieldPoint,vec2(0.))) && fieldPoint.x<${(width*pitch).toFixed(2)} && fieldPoint.y<(north?${(northRows*pitch).toFixed(2)}:${(coreRows*pitch).toFixed(2)})){
+      vec2 streetUv=(fieldPoint+vec2(0.,north?${((coreRows+2)*pitch).toFixed(2)}:0.))/vec2(${(width*pitch).toFixed(2)},${(height*pitch).toFixed(2)});
       vec4 field=texture2D(waterfrontStreetField,streetUv);
       float lampZ=1.-smoothstep(max(.08,field.a*.84),field.a+.28,waterfrontLightPosition.y);
       // Shielded waterfront luminaires illuminate the walk beneath the lens.

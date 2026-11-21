@@ -14,8 +14,16 @@ export const hillsPlant=building(-157,'Hills Bros Coffee',ring([
   [-47.064,-3.837],[-44.564,-4.212],[-45.248,-8.738],[-47.78,-8.36]]),1.505);
 export const hillsSign={point:plate(254,158),width:2.28};
 export const hillsArcade=[[-44.564,-4.212],[-42.087,-4.584]];
-// The historic arcade has an open court behind its single-bay ceiling.
-export const hillsCourt=ring([[-44.59,-4.52],[-42.09,-4.895],[-41.93,-5.19],[-41.99,-5.70],
+// Suite 100 opens through the two stepped walls at the Folsom end of the arcade.
+export const hillsPalomino={x:-41.38,z:-5.24,y:.129,yaw:Math.atan2(.372,2.477)};
+export const terraceDoors=[[-41.673,-5.208],[-41.349,-4.990]];
+export function patioPoint(u:number,v:number){
+  const {x,z,yaw}=hillsPalomino;
+  return [x+u*Math.cos(yaw)+v*Math.sin(yaw),z-u*Math.sin(yaw)+v*Math.cos(yaw)];
+}
+// Continuous paving between the public stair landing and the dining pocket.
+
+export const hillsCourt=ring([[-44.59,-4.52],patioPoint(-.80,.24),patioPoint(-.80,.84),patioPoint(.01,.84),[-41.29,-4.70],[-41.38,-5.24],[-41.92,-5.17],[-41.992,-5.70],
   [-42.55,-5.63],[-42.64,-6.17],[-43.185,-6.094],[-43.54,-8.36],[-42.71,-8.46],[-42.82,-9.29],
   [-43.28,-9.21],[-43.24,-9.0],[-42.82,-9.06],[-42.76,-8.71],[-45.18,-8.34],
   [-44.99,-7.1],[-44.15,-7.22],[-44.01,-6.32],[-44.85,-6.19]]);
@@ -36,5 +44,3 @@ export const hillsBuildings=[
   building(-348,'345 Spear residential terraces',traced([[878,382],[979,397],[968,461],[868,447]]),2.59,2.23),
   building(-349,'345 Spear terrace',ring([[-42.68,-8.18],[-40.76,-8.47],[-40.91,-9.48],[-42.84,-9.19]]),2.17,1.52),
 ];
-// The East Cut's Hills Plaza inventory places the former restaurant patio on this passage.
-export const hillsPalomino={x:-43.33,z:-6.90,y:.116,yaw:Math.atan2(-2.266,.355)};
