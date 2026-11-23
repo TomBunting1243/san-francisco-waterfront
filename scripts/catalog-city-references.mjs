@@ -118,6 +118,10 @@ const units={
  'approach-soma':'buildings:building features roads:road features ramps:ramp features',
 };
 function measures(key,d){
+  if(key==='authored-street-lamps'){
+    assert.equal(Buffer.from(d.coordinates,'base64').length,4*d.count,'two signed 16-bit coordinates per pole');
+    return num(d.count)+' SFPUC streetlight pole locations';
+  }
   if(key==='urban-context'){const u=packedUrban(d);return num(d.tiles.length)+' scene tiles, '+num(u.buildings)+' building records, '+num(u.roads)+' road records';}
   if(key==='bay-relief'){
     const heights=d.grids.reduce((n,g)=>n+g.rows*g.cols,0),pairs=[...d.buildings,...d.paths].reduce((n,f)=>n+f[1].length,0);
@@ -142,6 +146,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
+  'PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
   'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};
 const rideCredits=[...files.get('references/RESEARCH-SOURCES.md').toString().matchAll(
   /\| (KartaView|Wikimedia Commons) (\d+) \| [^|]+ \| \d{4}-\d{2}-\d{2} \| \[CC[^\]]*\]\(https:\/\/creativecommons\.org\//g

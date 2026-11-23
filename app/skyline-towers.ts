@@ -91,6 +91,9 @@ function lanternMetal(){
 
 function lanternMaterial(night:Clock,time:Clock){
   const map=lanternMetal(),material=new THREE.MeshStandardMaterial({color:'#c4cccb',map,roughness:.67,metalness:.13,side:THREE.DoubleSide});
+  // The passenger camera keeps its near plane inside the car. At the island
+  // the recessed plant can occupy the same depth bucket as the metal skin.
+  material.polygonOffset=true;material.polygonOffsetUnits=-2;
   material.addEventListener('dispose',()=>map.dispose());
   material.onBeforeCompile=shader=>{
     shader.uniforms.lanternNight=night;shader.uniforms.lanternTime=time;
@@ -98,16 +101,32 @@ function lanternMaterial(night:Clock,time:Clock){
     // Original, low-frequency tidal imagery for the model. Campbell's actual
     // Day for Night projects city footage back onto the screen with 11,000 LEDs.
     // https://www.jimcampbell.tv/portfolio/day-for-night
-    shader.fragmentShader='uniform float lanternNight; uniform float lanternTime; varying vec2 lanternUV;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+    shader.fragmentShader=`uniform float lanternNight; uniform float lanternTime; varying vec2 lanternUV;
+      // Integrate the luminous stripe over this fragment's footprint. Thin
+      // crests otherwise jump between adjacent pixels on the bridge approach.
+      float lanternStripe(float distanceToCrest,float sharpness,float width){
+        float halfWidth=max(width*.5,.0001);
+        float lo=distanceToCrest-halfWidth,hi=distanceToCrest+halfWidth;
+        float a=sign(lo)*(1.-exp(-sharpness*abs(lo)));
+        float b=sign(hi)*(1.-exp(-sharpness*abs(hi)));
+        return (b-a)/(sharpness*2.*halfWidth);
+      }
+    `+shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
       if(lanternNight>.01){
         float az=lanternUV.x*6.2831853, y=lanternUV.y;
         float tide=.47+.16*sin(az*2.-lanternTime*.19)+.10*cos(az*3.+lanternTime*.12);
-        float wave=exp(-17.*abs(y-tide))+.30*exp(-26.*abs(y-tide+.17));
+        float distanceToCrest=y-tide;
+        float pixelWidth=fwidth(distanceToCrest);
+        float wave=lanternStripe(distanceToCrest,17.,pixelWidth)+.30*lanternStripe(distanceToCrest+.17,26.,pixelWidth);
+        // Below one useful sample per crest, converge to the two stripes'
+        // combined mean over the screen height (the integral of exp(-k|y|)).
+        float unresolved=smoothstep(.042,.17,fwidth(y));
+        wave=mix(wave,2./17.+.60/26.,unresolved);
         float halo=.09+.14*(1.-smoothstep(.08,.95,y));
         totalEmissiveRadiance+=smoothstep(.05,.96,lanternNight)*(vec3(.54,.68,.78)*wave+vec3(.53,.57,.55)*halo);
       }`);
   };
-  material.customProgramCacheKey=()=>'salesforce-perforated-lantern-v1';
+  material.customProgramCacheKey=()=>'salesforce-perforated-lantern-v2';
   return material;
 }
 

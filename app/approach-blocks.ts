@@ -13,7 +13,7 @@ export function buildApproachBlocks(mesh:ApproachMesh,root:THREE.Group){
   const group=new THREE.Group();group.name='Mapped SoMa warehouses and streets';root.add(group);
   const base=new THREE.BoxGeometry(1,1,1);
   function box(w:number,h:number,d:number,x:number,y:number,z:number,color:string,heading=0){
-    const m=mesh(base,color,x,y,z,group);m.scale.set(w,h,d);m.rotation.y=heading;
+    const m=mesh(base,color,x,y,z,group);m.scale.set(w,h,d);m.rotation.y=heading;return m;
   }
   // Join the detailed waterfront's level base to the regional ground at the
   // back of the inland blocks. The far end follows the same elevation samples.
@@ -39,7 +39,7 @@ export function buildApproachBlocks(mesh:ApproachMesh,root:THREE.Group){
       const count=Math.max(1,Math.ceil(length/1.7)),heading=-Math.atan2(dz,dx);
       for(let j=0;j<count;j++){
         const mx=a[0]+dx*(j+.5)/count,mz=a[1]+dz*(j+.5)/count;
-        box(length/count+.022,.025,street.width,mx,approachGround(mx,mz)+.035,mz,'#8b9c99',heading);
+        box(length/count+.022,.025,street.width,mx,approachGround(mx,mz)+.035,mz,'#8b9c99',heading).userData.roadExposure=1;
       }
     }
   }

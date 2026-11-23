@@ -1,5 +1,6 @@
 import {addPier33Bulkhead,pier33SurveyPart} from './pier33-bulkhead.ts';
 import {addNorthQuayFront,northQuayFront} from './north-quay-bulkhead.ts';
+import {distantRoomsGLSL} from './distant-rooms.ts';
 import {urbanStreamBytes} from './urban-stream.ts';
 import {indexedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
@@ -7,7 +8,7 @@ import {Earcut} from 'three/src/extras/Earcut.js';
 import mapped from '../public/data/urban-context.json' with {type:'json'};
 import approach from '../public/data/approach-soma.json' with {type:'json'};
 import {approachLengths,approachPose} from './approach-road.ts';
-import {bayReliefGround} from './bay-relief.ts';
+import {bayReliefGround,bayReliefBankHeight,drapePavement,type PavementPoint} from './bay-relief.ts';
 
 type Tile = [number, number, string, string, number[]];
 type XZ = [number, number];
@@ -160,9 +161,9 @@ class Footprint {
   }
 }
 
-function roadHeight(x:number,z:number,elevated:boolean){
+function roadHeight(x:number,z:number,elevated:boolean,clearance:number){
+  if(!elevated)return bayReliefBankHeight(x,z)+clearance;
   const ground=bayReliefGround(x,z);
-  if(!elevated)return ground+.025;
   // Both SF Public Works carriageways continue into the same US-101 interchange.
   // Keep the measured approach surface tangent in grade through the dataset boundary.
   let y=ground+.72;
@@ -182,15 +183,21 @@ function addRoad(surface:Surface,path:XZ[],kind:number){
     for(let j=1;j<=n;j++)points.push([ax+(bx-ax)*j/n,az+(bz-az)*j/n]);
   }
   const color=elevated?deckPaint:kind>=9?alleyPaint:streetPaint;
-  let previous:number[]=[],station=0,nextPier=3.4;
+  let previous:number[]=[],previousPoints:PavementPoint[]=[],station=0,nextPier=3.4;
+  // Negative U keeps roads distinct from roofs (-1) and measured facade bays.
+  // The pedestrian and private-road centerlines can cross the public surface.
+  // Give their coincident pavement a consistent depth order at intersections.
+  const clearance=kind===9?.009:kind===10?.022:.036;
+  const roadCode=kind===9?-1:kind===10?-2:elevated?-5:kind<=3?-4:-3;
   const existing=kind===7?approach.west.points:kind===8?approach.east.points:undefined;
   for(let i=0;i<points.length;i++){
     const [x,z]=points[i],[ax,az]=!i&&existing?existing[existing.length-2]:points[Math.max(0,i-1)];
     const [bx,bz]=!i&&existing?points[0]:points[Math.min(points.length-1,i+1)];
     if(i)station+=Math.hypot(x-points[i-1][0],z-points[i-1][1]);
     const len=Math.hypot(bx-ax,bz-az)||1,dx=-(bz-az)/len*half,dz=(bx-ax)/len*half;
-    const ly=roadHeight(x+dx,z+dz,elevated),ry=roadHeight(x-dx,z-dz,elevated);
-    const l=surface.vertex(x+dx,ly,z+dz,color),r=surface.vertex(x-dx,ry,z-dz,color);
+    const ly=roadHeight(x+dx,z+dz,elevated,clearance),ry=roadHeight(x-dx,z-dz,elevated,clearance);
+    const left:PavementPoint=[x+dx,ly,z+dz,-1],right:PavementPoint=[x-dx,ry,z-dz,1];
+    const l=surface.vertex(left[0],ly,left[2],color,roadCode,-1),r=surface.vertex(right[0],ry,right[2],color,roadCode,1);
     const current=[l,r];
     if(elevated){
       current.push(surface.vertex(x+dx,ly-.14,z+dz,beamPaint),surface.vertex(x-dx,ry-.14,z-dz,beamPaint));
@@ -208,13 +215,25 @@ function addRoad(surface:Surface,path:XZ[],kind:number){
       }
     }
     if(i){
-      surface.quad(previous[0],l,r,previous[1]);
+      if(elevated)surface.quad(previous[0],l,r,previous[1]);
+      else{
+        function roadFace(indices:number[],points:PavementPoint[]){
+          const split=drapePavement(points[0],points[1],points[2],clearance);
+          if(!split){surface.triangle(indices[0],indices[1],indices[2]);return;}
+          for(const polygon of split){
+            const ids=polygon.map(([px,py,pz,across])=>surface.vertex(px,py,pz,color,roadCode,across));
+            for(let j=1;j+1<ids.length;j++)surface.triangle(ids[0],ids[j],ids[j+1]);
+          }
+        }
+        roadFace([previous[0],l,r],[previousPoints[0],left,right]);
+        roadFace([previous[0],r,previous[1]],[previousPoints[0],right,previousPoints[1]]);
+      }
       if(elevated){
         surface.quad(previous[2],current[2],current[4],previous[4]);
         surface.quad(previous[5],current[5],current[3],previous[3]);
       }
     }
-    previous=current;
+    previous=current;previousPoints=[left,right];
   }
 }
 
@@ -236,12 +255,17 @@ function tileReader(tile:Tile){
   };
 }
 
-function neighborhoodMaterial(){
+function neighborhoodMaterial(night:{value:number},share:{value:number}){
   const material=new THREE.MeshLambertMaterial({vertexColors:true});
   material.onBeforeCompile=shader=>{
-    shader.vertexShader='varying vec2 facadeUV;\n'+shader.vertexShader.replace('#include <uv_vertex>','#include <uv_vertex>\nfacadeUV=uv;');
+    shader.uniforms.civilNight=night;shader.uniforms.surveyRoomShare=share;
+    shader.vertexShader='varying vec2 facadeUV; varying float surveyWallSeed;\n'+shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
+      facadeUV=uv;
+      surveyWallSeed=floor(dot(position.xz,normal.xz)*2.+.5)+floor(dot(normal.xz,vec2(33.,67.))+.5);
+    `);
     // Fade individual bays below pixel resolution. UVs run along each measured facade.
-    shader.fragmentShader='varying vec2 facadeUV;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+    shader.fragmentShader='uniform float civilNight,surveyRoomShare; varying vec2 facadeUV; varying float surveyWallSeed;\n'+distantRoomsGLSL+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+      vec3 occupiedRooms=vec3(0.);
       if(facadeUV.x>=0.0){
         vec2 cell=facadeUV;
         vec2 fw=max(fwidth(cell),vec2(.002));
@@ -250,7 +274,19 @@ function neighborhoodMaterial(){
         float coverage=aperture.x*aperture.y;
         coverage=mix(coverage,.258,smoothstep(.23,.85,max(fw.x,fw.y)));
         diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.58,.71,.77),coverage*.80);
-      }`);
+        if(civilNight>.001&&surveyRoomShare>.001&&cell.y>=0.)
+          occupiedRooms=surveyRoomLight(cell,fw,coverage,surveyWallSeed,surveyRoomShare)*smoothstep(.03,.80,civilNight);
+      }`).replace('#include <fog_fragment>',`
+        gl_FragColor.rgb+=occupiedRooms;
+        if(facadeUV.x< -1.5){
+          float roadClass=-facadeUV.x;
+          float strength=roadClass<2.5?.36:roadClass<3.5?.65:.88;
+          float across=clamp(abs(facadeUV.y),0.,1.);
+          float widthInPixels=1./max(.001,fwidth(facadeUV.y));
+          float wash=mix(.48,.92+.08*(1.-across),smoothstep(.25,1.8,widthInPixels));
+          gl_FragColor.rgb+=vec3(.143,.108,.068)*strength*wash*smoothstep(.12,.91,civilNight);
+        }
+        #include <fog_fragment>`);
   };
   return material;
 }
@@ -260,13 +296,15 @@ type UrbanContext=THREE.LOD & {
   prepareRideView:(camera:THREE.Camera,budgetMs:number)=>boolean;
   prepareOrbitView:(camera:THREE.Camera,budgetMs:number)=>boolean;
   endRideView:()=>void;
+  setNight:(night:number,share?:number)=>void;
 };
 
 /** Orbit and ride views assemble visible survey tiles in bounded slices.
  * A tile enters the scene only after its geometry is complete. */
 export function createUrbanContext():UrbanContext{
   const root=new THREE.LOD() as UrbanContext;root.name='San Francisco municipal neighborhood survey';
-  const material=neighborhoodMaterial(),frustum=new THREE.Frustum();
+  const night={value:0},share={value:0};root.setNight=(value,occupied=value*.30)=>{night.value=value;share.value=occupied;};
+  const material=neighborhoodMaterial(night,share),frustum=new THREE.Frustum();
   const projection=new THREE.Matrix4(),last=new THREE.Matrix4(),inverseRoot=new THREE.Matrix4();
   const eye=new THREE.Vector3(),center=new THREE.Vector3(),forward=new THREE.Vector3();
   const pending=new Set(tileData.map(data=>{

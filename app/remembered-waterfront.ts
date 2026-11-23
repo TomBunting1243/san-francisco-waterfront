@@ -301,11 +301,14 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   // Its shortened service end leaves walkable connections to both adjacent gates.
   const sinbads=group("Sinbad's",[-9.67,.075,2.64]);
   const blue='#87aeb5', harborBlue='#719ca8', blueTrim='#b9d0ca', rustyRed='#bc623e';
-  function sinbadWordmark(size:number,x:number,y:number,z:number,width:number,parent:THREE.Group){
+  function sinbadWordmark(size:number,x:number,y:number,z:number,width:number,parent:THREE.Group,waterside=false){
     const backing=sign("Sinbad's",size,y,z,width,'#3c5556',parent);
     backing.position.x=x;backing.scale.z=2.4;backing.name='Dark sign returns';
     const face=sign("Sinbad's",size,y,z+.012,width,'#f2db9c',parent);
     face.position.x=x;face.name="SINBAD'S";
+    // The Examiner's waterfront account (19 May 1997) identifies red neon;
+    // Mike Oria's 2012 Pier 14 twilight photograph locates its bright return.
+    if(waterside)face.userData.signLight=[1,.045,.024];
   }
   box(2.04,.15,1.88,0,-.072,.18,timber,sinbads);
   for(const x of [-.91,.91])for(const z of [-.60,.17,1.07]){
@@ -378,7 +381,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
     pane.userData.signLight=x<0?[.31,.22,.14]:[.23,.17,.11];
     pane.userData.ferryWalkPool={radius:1.29,strength:.69};
   }
-  sinbadWordmark(.126,.077,.459,.448,1.14,sinbads);
+  sinbadWordmark(.126,.077,.459,.448,1.14,sinbads,true);
   const fish=new THREE.Shape();
   fish.moveTo(-.095,-.028);fish.lineTo(-.065,0);fish.lineTo(-.095,.026);
   fish.lineTo(-.045,.013);fish.quadraticCurveTo(.02,.06,.092,.009);

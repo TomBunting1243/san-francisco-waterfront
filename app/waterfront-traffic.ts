@@ -24,7 +24,7 @@ export function createWaterfrontTraffic(paint:THREE.MeshStandardMaterial,region?
     for(let i=0;i<count;i++){
       const p=waterfrontCar(elapsed,i,region);
       pose.scale.setScalar(p.active ? .25 : 0);
-      pose.position.set(p.x,p.y,p.z);pose.rotation.y=p.heading;pose.updateMatrix();
+      pose.position.set(p.x,p.y,p.z);pose.rotation.set(0,p.heading,p.grade,'ZYX');pose.updateMatrix();
       traffic[i%types].setMatrixAt(Math.floor(i/types),pose.matrix);
     }
     for(const batch of traffic)batch.instanceMatrix.needsUpdate=true;

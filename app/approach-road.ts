@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { approachLampStart, approachLampSpacing } from './authored-road-light.ts';
 import data from '../public/data/approach-soma.json' with {type:'json'};
 import { bayReliefGround } from './bay-relief.ts';
 import { bridgeLayout } from './bridge-layout.ts';
 import {roadPaintLift} from './bridge-deck.ts';
-import { createStreetVehicle, streetVehicleMaterial } from './street-vehicles.ts';
+import { createStreetVehicle, streetVehicleMaterial, streetVehicleTreadHeight } from './street-vehicles.ts';
 
 export type ApproachMesh = (shape:THREE.BufferGeometry,color:string,x:number,y:number,z:number,parent:THREE.Group) => THREE.Mesh;
 type Knot = {x:number;z:number;s:number;lanes:number};
@@ -143,14 +144,17 @@ function intervals(length:number,knots:Knot[]) {
 function slabGeometry(axis:typeof main[number],from:number,to:number,offsetA:number|((w:number)=>number),offsetB:number|((w:number)=>number),heightA:number,heightB:number) {
   const ease=(offset:number|((w:number)=>number),width:number)=>typeof offset==='number'?offset:offset(width);
   const distances=[from,...intervals(axis.length,axis.knots).filter(s=>s>from&&s<to),to];
-  const vertices:number[]=[];
+  const vertices:number[]=[],station:number[]=[];
+  const wearing=heightA===0&&heightB===0;
   for(let i=1;i<distances.length;i++){
     const a=axis.sample(distances[i-1]),b=axis.sample(distances[i]);
     const c=section(a,ease(offsetA,a.width),heightA),d=section(b,ease(offsetA,b.width),heightA);
     const e=section(b,ease(offsetB,b.width),heightB),f=section(a,ease(offsetB,a.width),heightB);
     vertices.push(...c,...d,...e,...c,...e,...f);
+    if(wearing){const lo=distances[i-1],hi=distances[i];station.push(lo,hi,hi,lo,hi,lo); }
   }
   const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+  if(wearing)geometry.setAttribute('roadExposure',new THREE.Uint16BufferAttribute(station.map(s=>100+Math.round(s*50)),1));
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -162,28 +166,34 @@ function fremontMouthGeometry(){
   const cuts=new Set([0,gore.ramp,...intervals(fremont.length,fremont.knots).filter(s=>s<gore.ramp)]);
   for(const row of mainEdgeRows)if(row.s>fremontFork&&row.s<gore.main)
     cuts.add(bisect(gore.ramp,s=>mouthSlice(s).main<row.s));
-  const bounds=[...cuts].sort((a,b)=>a-b).map(mouthSlice),positions:number[]=[];
+  const stations=[...cuts].sort((a,b)=>a-b),bounds=stations.map(mouthSlice),positions:number[]=[],code:number[]=[];
   for(let i=1;i<bounds.length;i++){
     const a=bounds[i-1],b=bounds[i];
     positions.push(...a.outer,...b.outer,...b.inner,...a.outer,...b.inner,...a.inner);
+    const lo=100+Math.round(stations[i-1]*50),hi=100+Math.round(stations[i]*50);code.push(lo,hi,hi,lo,hi,lo);
   }
   const geometry=new THREE.BufferGeometry();
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.setAttribute('roadExposure',new THREE.Uint16BufferAttribute(code,1));
   geometry.computeVertexNormals();return geometry;
 }
 
 // Use the same two planes per road section as slabGeometry. A dash starting in
 // the middle of a curved grade must lie on the rendered slab, not on a fresh
 // evaluation of the road profile at its endpoints.
-function pavementMarkings(axis:typeof main[number]){
+function pavementRows(axis:typeof main[number]){
   const stations=[...new Set([0,...intervals(axis.length,axis.knots),axis.length])].sort((a,b)=>a-b);
-  const rows=stations.map(s=>{
+  return stations.map(s=>{
     const a=axis.sample(s);
     return {s,w:a.width,left:section(a,-a.width,0),right:section(a,a.width,0)};
   });
+}
+const mainPavement=main.map(pavementRows);
+
+function pavementMarkings(rows:ReturnType<typeof pavementRows>){
   type UV=[number,number];
   return (from:number,to:number,center:(w:number)=>number,width:number)=>{
-    const vertices:number[]=[];
+    const vertices:number[]=[],code:number[]=[];
     for(let j=1;j<rows.length;j++){
       const a=rows[j-1],b=rows[j];
       if(b.s<=from)continue;
@@ -201,6 +211,7 @@ function pavementMarkings(axis:typeof main[number]){
           if(d*e<0)poly.push([lerp(p[0],q[0],d/(d-e)),lerp(p[1],q[1],d/(d-e))]);
         }
         const vertex=([u,v]:UV)=>{
+          code.push(100+Math.round(lerp(a.s,b.s,v)*50));
           for(let k=0;k<3;k++){
             const value=first?a.left[k]+u*(a.right[k]-a.left[k])+v*(b.left[k]-a.left[k]):
               b.right[k]+(1-u)*(b.left[k]-b.right[k])+(1-v)*(a.right[k]-b.right[k]);
@@ -211,6 +222,7 @@ function pavementMarkings(axis:typeof main[number]){
       }
     }
     const g=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    g.setAttribute('roadExposure',new THREE.Uint16BufferAttribute(code,1));
     g.computeVertexNormals();g.userData.roadPaint='SoMa approaches';return g;
   };
 }
@@ -220,8 +232,22 @@ export function approachPose(eastbound:boolean,distance:number,lane:number){
   const laneLimit=Math.max(0,Math.floor((at.lanes-1)/2));
   const laneAlignment=Math.abs(at.lanes%2-1)*.5;
   const offset=(THREE.MathUtils.clamp(lane,-laneLimit,laneLimit)+laneAlignment)*laneWidth;
-  const [x,y,z]=section(at,offset,-.01375);
-  return {x,y,z,heading:at.heading+(eastbound?Math.PI:0)};
+  // Place the wheels on the two triangles supporting the lane paint. Both
+  // edges of a cross-section share elevation, including at the curve apex.
+  const rows=mainPavement[eastbound?1:0];
+  let lo=0,hi=rows.length-1;
+  while(hi-lo>1){
+    const middle=(lo+hi)>>1;
+    if(rows[middle].s<distance)lo=middle;else hi=middle;
+  }
+  const a=rows[lo],b=rows[hi],v=THREE.MathUtils.clamp((distance-a.s)/(b.s-a.s),0,1);
+  const u=.5+offset/(2*lerp(a.w,b.w,v)),first=u+v<=1;
+  const base=first?a.left:b.right,across=first?a.right:b.left,along=first?b.left:a.right;
+  const acrossWeight=first?u:1-u,alongWeight=first?v:1-v;
+  const x=base[0]+acrossWeight*(across[0]-base[0])+alongWeight*(along[0]-base[0]);
+  const z=base[2]+acrossWeight*(across[2]-base[2])+alongWeight*(along[2]-base[2]);
+  const pitch=Math.atan2(b.left[1]-a.left[1],b.s-a.s)*(eastbound?-1:1);
+  return {x,y:lerp(a.left[1],b.left[1],v)-streetVehicleTreadHeight,z,heading:at.heading+(eastbound?Math.PI:0),pitch};
 }
 export const approachLengths=main.map(road=>road.length);
 
@@ -232,7 +258,7 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
   const unit=new THREE.BoxGeometry(1,1,1);
   function box(name:string,w:number,h:number,d:number,color:string,x:number,y:number,z:number,heading=0){
     const m=mesh(unit,color,x,y,z,group);
-    m.name=name;m.scale.set(w,h,d);m.rotation.y=heading;
+    m.name=name;m.scale.set(w,h,d);m.rotation.y=heading;return m;
   }
   for(const [routeIndex,axis] of [...main,...ramps.map(r=>r.ramp)].entries()){
     const branch=routeIndex>1,westbound=routeIndex===0;
@@ -241,7 +267,7 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
     // https://kartaview.org/details/366261/2052/track-info
     const yellowEdge=westbound||axis===fremont?-1:1;
     const bridgeFoot=!branch;
-    const marking=pavementMarkings(axis);
+    const marking=pavementMarkings(mainPavement[routeIndex]??pavementRows(axis));
     const right=(w:number)=>w,left=(w:number)=>-w;
     // Continuous extruded top and side surfaces, with joints between consecutive
     // spans placed in the darker concrete beam and a low cast parapet.
@@ -288,6 +314,19 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
         mesh(marking(s,Math.min(s+.25,axis.length),()=>x,.008),'#cbcbbb',0,0,0,group);
       }
     }
+    // KartaView 366261/2052 shows an overhanging arm at the exit. Positions
+    // and spacing are modeled along each parapet; do not place posts in forks.
+    for(let s=approachLampStart;s<axis.length-.35;s+=approachLampSpacing){
+      if(westbound&&s>fremontFork-.35&&s<gore.main+.35)continue;
+      if(branch&&Math.abs(s-ramps[routeIndex-2].joinDistance)<2.2)continue;
+      const p=axis.sample(s),side=routeIndex===1?-1:1;
+      const at=(offset:number)=>section(p,side*(p.width+offset),0);
+      const [x,,z]=at(-.014),[ax,,az]=at(-.105),[lx,,lz]=at(-.197);
+      box('Skyway light standard',.017,.62,.017,'#899899',x,p.y+.395,z,p.heading);
+      box('Skyway light arm',.017,.018,.19,'#a6b0ab',ax,p.y+.695,az,p.heading);
+      const lens=box('Skyway roadway lens',.060,.018,.047,'#b9bbe0',lx,p.y+.684,lz,p.heading);
+      lens.userData.signLight=[.82,.65,.44];
+    }
     for(let s=branch?1.8:2.6;s<axis.length-1.5;s+=branch?2.8:3.1){
       const p=axis.sample(s),ground=approachGround(p.x,p.z)-.06;
       if(p.y<ground+.46)continue;
@@ -330,7 +369,7 @@ export function buildApproachRoad(mesh:ApproachMesh,root:THREE.Group) {
         const s=THREE.MathUtils.euclideanModulo(seed-elapsed*speed,road.length);
         const pose=approachPose(eastbound,s,lane);
         matrix.position.set(pose.x,pose.y,pose.z);
-        matrix.rotation.y=pose.heading;matrix.updateMatrix();instances.setMatrixAt(i,matrix.matrix);
+        matrix.rotation.set(0,pose.heading,pose.pitch,'YXZ');matrix.updateMatrix();instances.setMatrixAt(i,matrix.matrix);
       }
       instances.instanceMatrix.needsUpdate=true;
     }

@@ -16,6 +16,6 @@ export function addTransbayCrossings(mesh:Surface){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
     g.computeVertexNormals();
-    mesh(g,'#dedbd0',0,0,0).name='Crosswalk paint · '+site.name;
+    const mark=mesh(g,'#dedbd0',0,0,0);mark.userData.roadExposure=1;mark.name='Crosswalk paint · '+site.name;
   }
 }

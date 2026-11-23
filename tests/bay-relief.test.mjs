@@ -183,3 +183,41 @@ test('mask unions overlapping rings and clips half-open edges at exact grid coor
   const diamond=[[2,0],[4,2],[2,4],[0,2]];
   assert.equal(reliefCover(grid,[diamond]).join(''),['00000','01100','11110','01100','00000'].join(''));
 });
+
+test('the mapped Telegraph Hill carriageways stay above the ridge and the walking paths stay unlit',()=>{
+  const roads=relief.root.getObjectByName('Mapped hill streets and park paths');
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  for(const [x,z] of [[74.4931256,-24.2406235],[74.18846733,-24.26053021],[74.71181224,-24.25833835]]){
+    ray.ray.origin.set(x,20,z);
+    const hit=ray.intersectObject(roads,true)[0];
+    assert.ok(hit);assert.ok(hit.point.y>bayReliefGround(x,z)+.003);
+  }
+  const levels=new Set();
+  roads.traverse(o=>{if(o.isMesh)for(const v of o.geometry.getAttribute('roadLight').array)levels.add(v);});
+  assert.deepEqual([...levels].sort((a,b)=>a-b),[0,70,130,185]);
+  const ground=relief.root.getObjectByName('city elevation').children[0];
+  assert.equal(ground.geometry.hasAttribute('roadLight'),false);
+  assert.notEqual(ground.material,roads.children[0].material);
+});
+
+test('regional occupied rooms use only generic vertical housing faces and follow the actual lit share',()=>{
+  for(const name of ['North Beach, Bernal Heights and island buildings','Downtown Oakland skyline']){
+    const housing=relief.root.getObjectByName(name);let walls=0,roofs=0;
+    housing.traverse(mesh=>{
+      if(!mesh.isMesh)return;
+      const g=mesh.geometry,grid=g.getAttribute('surveyRoomGrid'),normal=g.getAttribute('normal');
+      assert.equal(grid.count,normal.count);
+      for(let i=0;i<grid.count;i++){
+        if(grid.getX(i)>0){assert.ok(Math.abs(normal.getY(i))<.03);walls++;}
+        if(normal.getY(i)>.95){assert.equal(grid.getX(i),0);roofs++;}
+      }
+    });
+    assert.ok(walls>30&&roofs>10);
+    const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};
+    housing.children[0].material.onBeforeCompile(shader,{});
+    relief.update(0,1,.4,undefined,465,.11);assert.equal(shader.uniforms.surveyRoomShare.value,.11);
+    relief.update(0,0,.4,undefined,465,0);assert.equal(shader.uniforms.surveyRoomShare.value,0);
+  }
+  const roads=relief.root.getObjectByName('Mapped hill streets and park paths');
+  assert.equal(roads.children[0].geometry.hasAttribute('surveyRoomGrid'),false);
+});

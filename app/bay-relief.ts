@@ -1,5 +1,6 @@
 import {reliefCover} from './relief-cover.ts';
 import {addWaterfrontPlaza,isWaterfrontPlazaFootprint} from './north-quay-inland.ts';
+import {distantRoomsGLSL} from './distant-rooms.ts';
 import {setPackedNormals} from './packed-normals.ts';
 import * as THREE from 'three';
 import {oaklandContainerCranes} from './oakland-cranes.ts';
@@ -158,18 +159,94 @@ export function bayReliefBankHeight(x:number,z:number){return reliefGround(x,z,f
 /** Local support height for paths, footprints and the bridge abutment. */
 export function bayReliefGround(x:number,z:number){return reliefGround(x,z,true);}
 
+export type PavementPoint=[x:number,y:number,z:number,across:number];
+
+/** Split a road face where the elevation mesh changes planes. Flat blocks and
+ * facets with negligible grade change keep the original two road triangles. */
+export function drapePavement(a:PavementPoint,b:PavementPoint,c:PavementPoint,clearance:number){
+  const [lng,lat]=geographicPosition(a[0],a[2]),grid=applicableGrid(lng,lat);
+  type Node={p:PavementPoint;u:number;v:number};
+  function node(p:PavementPoint):Node{
+    const [x,y]=geographicPosition(p[0],p[2]);
+    return {p,u:(x-grid.west)/grid.step,v:(y-grid.south)/grid.step};
+  }
+  const first=[node(a),node(b),node(c)];
+  const lowU=Math.floor(Math.min(...first.map(q=>q.u))),lowV=Math.floor(Math.min(...first.map(q=>q.v)));
+  const highU=Math.floor(Math.max(...first.map(q=>q.u))),highV=Math.floor(Math.max(...first.map(q=>q.v)));
+  if(lowU<0||lowV<0||highU+1>=grid.cols||highV+1>=grid.rows)return;
+  // Most of the municipal network is flat. Consult the same memoized height
+  // nodes as the terrain before building any clipping polygons.
+  const level=groundVertex(grid,lowU,lowV);
+  let flat=true;
+  for(let v=lowV;flat&&v<=highV+1;v++)for(let u=lowU;u<=highU+1;u++)
+    if(Math.abs(groundVertex(grid,u,v)-level)>.0005){flat=false;break;}
+  if(flat)return;
+  let pieces=[first];
+  for(let axis=0;axis<3;axis++){
+    const coord=(q:Node)=>axis===0?q.u:axis===1?q.v:q.u+q.v;
+    const low=Math.min(...first.map(coord)),high=Math.max(...first.map(coord));
+    for(let boundary=Math.floor(low)+1;boundary<high-.0000001;boundary++){
+      const next:Node[][]=[];
+      for(const polygon of pieces){
+        if(!polygon.some(q=>coord(q)<boundary-1e-7)||!polygon.some(q=>coord(q)>boundary+1e-7)){next.push(polygon);continue;}
+        const left:Node[]=[],right:Node[]=[];
+        for(let i=0;i<polygon.length;i++){
+          const q=polygon[i],r=polygon[(i+1)%polygon.length],d=coord(q)-boundary,e=coord(r)-boundary;
+          if(d<=1e-7)left.push(q);
+          if(d>=-1e-7)right.push(q);
+          if(d*e<0&&Math.min(Math.abs(d),Math.abs(e))>1e-7){
+            const t=d/(d-e),mix=(x:number,y:number)=>x+(y-x)*t;
+            const cut:Node={u:mix(q.u,r.u),v:mix(q.v,r.v),p:[mix(q.p[0],r.p[0]),mix(q.p[1],r.p[1]),mix(q.p[2],r.p[2]),mix(q.p[3],r.p[3])]};
+            left.push(cut);right.push(cut);
+          }
+        }
+        if(left.length>=3)next.push(left);
+        if(right.length>=3)next.push(right);
+      }
+      pieces=next;
+    }
+  }
+  if(pieces.length===1)return;
+  let bent=false;
+  const faces=pieces.map(polygon=>polygon.map(({p}):PavementPoint=>{
+    const y=bayReliefBankHeight(p[0],p[2])+clearance;
+    if(y-p[1]>Math.min(.006,clearance*.60))bent=true;
+    return [p[0],y,p[2],p[3]];
+  }));
+  return bent?faces:undefined;
+}
+
 class ColoredTriangles {
   readonly positions: number[] = [];
   readonly colors: number[] = [];
+  private road?:number[];
+  private rooms?:number[];
 
-  vertex(x: number, y: number, z: number, color: THREE.Color) {
+  vertex(x: number, y: number, z: number, color: THREE.Color, road?:number) {
+    if(road!==undefined)(this.road??=[]).push(road);
     this.positions.push(x, y, z);
     this.colors.push(color.r, color.g, color.b);
   }
 
-  geometry() {
+  wallVertex(x:number,y:number,z:number,color:THREE.Color,bay:number,floor:number){
+    const i=this.positions.length/3*2;
+    const grid=this.rooms??=[];
+    // Survey face corners are whole bay boundaries. A quarter-floor grade
+    // retains sloping bases in two bytes per vertex. Zero X reserves the roof.
+    grid[i]=1+Math.min(254,Math.round(bay));
+    grid[i+1]=Math.min(255,Math.max(0,Math.round((floor+8)*4)));
+    this.vertex(x,y,z,color);
+  }
+
+  geometry(roomWalls=false) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
+    if(roomWalls){
+      const grid=new Uint8Array(this.positions.length/3*2);
+      if(this.rooms)grid.set(this.rooms);
+      geometry.setAttribute('surveyRoomGrid',new THREE.Uint8BufferAttribute(grid,2));
+    }
+    if(this.road)geometry.setAttribute('roadLight',new THREE.Uint8BufferAttribute(this.road,1,true));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.colors, 3));
     setPackedNormals(geometry);
     geometry.computeBoundingSphere();
@@ -308,7 +385,7 @@ function islandShore(material: THREE.Material) {
 }
 
 // Spatial batches let the renderer drop whole neighborhoods when the camera faces the Bay.
-function spatialBatches(name: string, material: THREE.Material) {
+function spatialBatches(name: string, material: THREE.Material,roomWalls=false) {
   const batches = new Map<string, ColoredTriangles>();
   function at(x: number, z: number) {
     const key = Math.floor(x / 64) + ',' + Math.floor(z / 64);
@@ -319,7 +396,7 @@ function spatialBatches(name: string, material: THREE.Material) {
   function group() {
     const root = new THREE.Group();
     root.name = name;
-    for (const batch of batches.values()) root.add(new THREE.Mesh(batch.geometry(), material));
+    for (const batch of batches.values()) root.add(new THREE.Mesh(batch.geometry(roomWalls), material));
     return root;
   }
   return { at, group };
@@ -328,8 +405,8 @@ function spatialBatches(name: string, material: THREE.Material) {
 const facadeColors = ['#c3b6a2', '#a9aba0', '#b0a594', '#b3b7a8', '#c5b6a9'].map(color => new THREE.Color(color));
 const roofColors = ['#9b9186', '#a49f95', '#9da49d', '#b29b8d'].map(color => new THREE.Color(color));
 function* neighborhoods(material: THREE.Material, shouldYield:()=>boolean) {
-  const buildings = spatialBatches('North Beach, Bernal Heights and island buildings', material);
-  const skyline = spatialBatches('Downtown Oakland skyline', material);
+  const buildings = spatialBatches('North Beach, Bernal Heights and island buildings', material,true);
+  const skyline = spatialBatches('Downtown Oakland skyline', material,true);
   const skylineFacade = new THREE.Color('#9ba6aa'), skylineRoof = new THREE.Color('#a1a0a0');
   for(const [i,[meters,footprint,district]] of data.buildings.entries()){
     if(i%64===0&&shouldYield())yield;
@@ -351,12 +428,15 @@ function* neighborhoods(material: THREE.Material, shouldYield:()=>boolean) {
       for (let n = 0; n < points.length; n++) {
         const next = (n + 1) % points.length;
         const a = points[n], b = points[next];
-        triangles.vertex(a.x, floors[n], a.y, wallColor);
-        triangles.vertex(b.x, floors[next], b.y, wallColor);
-        triangles.vertex(b.x, roofY, b.y, wallColor);
-        triangles.vertex(a.x, floors[n], a.y, wallColor);
-        triangles.vertex(b.x, roofY, b.y, wallColor);
-        triangles.vertex(a.x, roofY, a.y, wallColor);
+        const bays=Math.max(1,Math.round(a.distanceTo(b)/.195));
+        const storeys=Math.max(1,Math.round(meters/(oakland?3.7:3.15))),pitch=(roofY-ground)/storeys;
+        const first=(floors[n]-ground)/pitch,last=(floors[next]-ground)/pitch;
+        triangles.wallVertex(a.x,floors[n],a.y,wallColor,0,first);
+        triangles.wallVertex(b.x,floors[next],b.y,wallColor,bays,last);
+        triangles.wallVertex(b.x,roofY,b.y,wallColor,bays,storeys);
+        triangles.wallVertex(a.x,floors[n],a.y,wallColor,0,first);
+        triangles.wallVertex(b.x,roofY,b.y,wallColor,bays,storeys);
+        triangles.wallVertex(a.x,roofY,a.y,wallColor,0,storeys);
       }
     }
     for (const face of THREE.ShapeUtils.triangulateShape(points, [])) {
@@ -406,6 +486,7 @@ function* streets(material: THREE.Material, shouldYield:()=>boolean) {
     if(walking!==foot)continue;
     const width = foot ? .055 : kind === 'motorway' || kind === 'primary' ? .36 : kind === 'service' ? .11 : .23;
     const color = foot ? trail : paved;
+    const lighting=foot?0:kind==='service'?70:kind==='primary'||kind==='motorway'?185:130;
     for (let i = 1; i < line.length; i++) {
       const [ax, az] = bayReliefPosition(...line[i-1]), [bx, bz] = bayReliefPosition(...line[i]);
       const length = Math.hypot(bx - ax, bz - az);
@@ -419,7 +500,8 @@ function* streets(material: THREE.Material, shouldYield:()=>boolean) {
         if (Math.min(y1, y2) < waterSurface.level + .07) continue;
         const roads = streets.at(sx, sz);
         const lx = dz * width / 2, lz = -dx * width / 2;
-        const outline:PathPoint[]=[[sx-lx,y1+.055,sz-lz],[tx-lx,y2+.055,tz-lz],[tx+lx,y2+.055,tz+lz],[sx+lx,y1+.055,sz+lz]];
+        const outline:PathPoint[]=([[sx-lx,sz-lz],[tx-lx,tz-lz],[tx+lx,tz+lz],[sx+lx,sz+lz]] as const)
+          .map(([x,z])=>[x,bayReliefBankHeight(x,z)+.015,z]);
         const pad=foot?roadCutMargin:0;
         const minX=Math.min(sx,tx)-Math.abs(lx)-pad,maxX=Math.max(sx,tx)+Math.abs(lx)+pad;
         const minZ=Math.min(sz,tz)-Math.abs(lz)-pad,maxZ=Math.max(sz,tz)+Math.abs(lz)+pad;
@@ -433,7 +515,11 @@ function* streets(material: THREE.Material, shouldYield:()=>boolean) {
         let exposed=[outline];
         for(const crossing of crossings)exposed=exposed.flatMap(piece=>outsidePavement(piece,crossing.outline));
         for(const piece of exposed)for(let k=1;k+1<piece.length;k++){
-          roads.vertex(...piece[0],color);roads.vertex(...piece[k],color);roads.vertex(...piece[k+1],color);
+          const points=[piece[0],piece[k],piece[k+1]].map(([x,,z]):PavementPoint=>[x,bayReliefBankHeight(x,z)+.015,z,0]);
+          const split=drapePavement(points[0],points[1],points[2],.015);
+          for(const polygon of split??[points])for(let j=1;j+1<polygon.length;j++)for(const q of [polygon[0],polygon[j],polygon[j+1]]){
+            roads.vertex(q[0],q[1],q[2],color,lighting);
+          }
         }
       }
     }
@@ -591,8 +677,33 @@ export function* bayReliefStages(shouldYield:()=>boolean) {
   const slit = material({color:'#657579'}, 110);
   for(const grid of grids)root.add(yield* terrain(grid,ground,shouldYield));
   root.add(islandShore(ground));
-  root.add(...yield* neighborhoods(masonry,shouldYield));
-  root.add(yield* streets(ground,shouldYield));
+  const housing=material({vertexColors:true},105),roomShare={value:0},housingCompile=housing.onBeforeCompile;
+  housing.onBeforeCompile=function(shader,renderer){
+    housingCompile.call(this,shader,renderer);shader.uniforms.surveyRoomShare=roomShare;
+    shader.vertexShader='attribute vec2 surveyRoomGrid; varying vec2 surveyUV; varying float surveyWallSeed;\n'+shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+      surveyUV=vec2(surveyRoomGrid.x-1.,surveyRoomGrid.y*.25-8.);
+      surveyWallSeed=floor(dot(position.xz,normal.xz)*2.+.5)+floor(dot(normal.xz,vec2(33.,67.))+.5);`);
+    shader.fragmentShader='uniform float surveyRoomShare; varying vec2 surveyUV; varying float surveyWallSeed;\n'+distantRoomsGLSL+shader.fragmentShader.replace('float depth = length(vViewPosition);',`
+      if(surveyRoomShare>.001&&reliefNight>.001&&surveyUV.x>=0.&&surveyUV.y>=0.){
+        vec2 fw=max(fwidth(surveyUV),vec2(.002)),cell=abs(fract(surveyUV)-.5);
+        vec2 aperture=1.-smoothstep(vec2(.23,.28)-.5*fw,vec2(.23,.28)+.5*fw,cell);
+        float area=mix(aperture.x*aperture.y,.258,smoothstep(.23,.85,max(fw.x,fw.y)));
+        gl_FragColor.rgb+=surveyRoomLight(surveyUV,fw,area,surveyWallSeed,surveyRoomShare)*smoothstep(.03,.80,reliefNight);
+      }
+      float depth = length(vViewPosition);`);
+  };
+  housing.customProgramCacheKey=()=>'bay-relief-survey-rooms-v1';
+  root.add(...yield* neighborhoods(housing,shouldYield));
+  const roadPaint=material({vertexColors:true},85,true);
+  const groundCompile=roadPaint.onBeforeCompile;
+  roadPaint.onBeforeCompile=function(shader,renderer){
+    groundCompile.call(this,shader,renderer);
+    shader.vertexShader='attribute float roadLight; varying float civilRoadLight;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncivilRoadLight=roadLight;');
+    shader.fragmentShader='varying float civilRoadLight;\n'+shader.fragmentShader.replace('float depth = length(vViewPosition);',
+      'gl_FragColor.rgb+=vec3(.143,.108,.068)*civilRoadLight*smoothstep(.12,.91,reliefNight);\nfloat depth = length(vViewPosition);');
+  };
+  roadPaint.customProgramCacheKey=()=>'bay-relief-road-grade-v1';
+  root.add(yield* streets(roadPaint,shouldYield));
   root.add(coitTower(concrete, slit));
   const aircraftPaint = material({ color:'#d1d9d8', emissive:'#b8c6cf', emissiveIntensity:.10,
     transparent:true, depthWrite:false }, 160);
@@ -600,7 +711,8 @@ export function* bayReliefStages(shouldYield:()=>boolean) {
   plane.rotation.set(0, -Math.atan2(approachDirection.z, approachDirection.x),
     Math.atan2(approachDirection.y, Math.hypot(approachDirection.x, approachDirection.z)), 'YXZ');
   root.add(plane);
-  function update(time: number, night: number, mist: number, horizonColor?: THREE.Color, visibilityRange=465) {
+  function update(time: number, night: number, mist: number, horizonColor?: THREE.Color, visibilityRange=465,occupiedShare=night*.30) {
+    roomShare.value=occupiedShare;
     nightAmount.value = THREE.MathUtils.clamp(night, 0, 1);
     mistAmount.value = THREE.MathUtils.clamp(mist, 0, 1);
     visibilityFalloff.value = 2.8 * Math.max(0, 1 / Math.max(28, visibilityRange) - 1 / 465);

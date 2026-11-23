@@ -305,6 +305,18 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
           float crests=smoothstep(.33,.82,.54+.30*windCrest+.21*swell+.23*(lanes-.5));
           float strokes=(.08+.92*crests)*detail*clear*bayNight;
           totalEmissiveRadiance+=strokes*(hall*vec3(.086,.042,.016)+clock*vec3(.35,.216,.102));
+          // Mike Oria's 2012 Pier 14 exposure resolves a narrow, broken red
+          // reflection. Project the face of Sinbad's sign into the same open-
+          // water mask, outside the historical deck and behind its outer rail.
+          float signTravel=(3.10-p.y)/mirrorRay.z;
+          if(signTravel>0. && p.y>3.75 && abs(p.x+signTravel*mirrorRay.x+9.593)<1.){
+            vec2 hit=vec2(p.x+signTravel*mirrorRay.x+crossShift,bayElevation+signTravel*mirrorRay.y+heightShift);
+            vec2 missSign=abs(hit-vec2(-9.593,.534));
+            float red=(1.-smoothstep(.10,.56,missSign.x))*(1.-smoothstep(.035,.15,missSign.y));
+            float ripples=sin(p.y*48.+2.2*sin(p.x*12.+harborTime*.58)+harborTime*1.4);
+            float broken=smoothstep(.20,.86,ripples)*smoothstep(-.30,.55,windCrest+.45*swell);
+            totalEmissiveRadiance+=strokes*red*broken*vec3(.32,.012,.006);
+          }
         }
       }
       diffuseColor.rgb*=mix(vec3(.85,.94,1.01),vec3(1.13,1.06,.93),windStrength);
@@ -325,6 +337,6 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=> 'bay-shore-reflections-v9-'+hulls.length;
+  material.customProgramCacheKey=()=> 'bay-shore-reflections-v10-'+hulls.length;
   return {ferryWakes,baySun:sun,baySunset:sunset,bayHorizon:horizon,bayWind:wind,bayChop:chop};
 }

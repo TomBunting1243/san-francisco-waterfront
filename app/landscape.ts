@@ -1,3 +1,4 @@
+import {padelScreenName} from './park-padel.ts';
 import {fireboatStation,firehouseFloat} from './fireboat-station.ts';
 import {northWaterfrontGrade} from './streets.ts';
 import {hillsBuildings,hillsSign} from './hills-plaza.ts';
@@ -166,11 +167,12 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   water.rotation.x = -Math.PI / 2; water.position.y = waterSurface.level; water.receiveShadow = true; root.add(water);
   addSurveyShore(mesh,bayReliefBankHeight);
   if(shouldYield())yield 1;
-  function linePath(points:number[][],width:number,y:number,color:string){
+  function linePath(points:number[][],width:number,y:number,color:string,road=false){
     for(let i=1;i<points.length;i++){
       const [ax,az]=points[i-1],[bx,bz]=points[i],length=Math.hypot(bx-ax,bz-az);
       if(length<.02)continue;
       const m=box(width,.028,length,(ax+bx)/2,y,(az+bz)/2,color);m.rotation.y=Math.atan2(bx-ax,bz-az);
+      if(road)m.userData.roadExposure=1;
     }
   }
   function northRoadStrip(points:number[][],width:number,lift:number,color:string){
@@ -187,7 +189,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       vertices.push(...left,...right,...nextLeft,...nextLeft,...right,...nextRight);
     }
     const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
-    geometry.computeVertexNormals();mesh(geometry,color,0,0,0);
+    geometry.computeVertexNormals();mesh(geometry,color,0,0,0).userData.roadExposure=1;
   }
   addSurveyBlocks(mesh);
   outsideSurveyRoads.forEach(road=>{
@@ -195,8 +197,8 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(road.name==='The Embarcadero'&&road.p.every(([x])=>x>=35)){
       northRoadStrip(road.p,width,0,'#889b9a');northRoadStrip(road.p,.027,.0009,'#d4d3ba');
     }else{
-      linePath(road.p,width,.04,'#889b9a');
-      if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba');
+      linePath(road.p,width,.04,'#889b9a',true);
+      if(road.name.includes('Embarcadero'))linePath(road.p,.027,.062,'#d4d3ba',true);
     }
   });
   sfMap.parks.forEach(park=>{
@@ -458,10 +460,11 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   for(const deck of [deckLow,deckHigh]){
     // Butt the lead-in to the span. Recess the upper concrete beneath the wearing surface.
     const westbound=deck===deckHigh;
-    box(1.4,westbound?.126:.15,leadLength,0,deck-(westbound?.012:0),leadMiddle,'#91a1a0',bridge);
+    const lead=box(1.4,westbound?.126:.15,leadLength,0,deck-(westbound?.012:0),leadMiddle,'#91a1a0',bridge);
+    if(!westbound)lead.userData.roadExposure=4;
     if(!westbound)for(const side of [-1,1])box(.065,.19,leadLength,side*.69,deck+.12,leadMiddle,'#a9b4a8',bridge);
   }
-  box(1.135,.023,leadLength,0,deckHigh+.064,leadMiddle,'#728383',bridge);
+  box(1.135,.023,leadLength,0,deckHigh+.064,leadMiddle,'#728383',bridge).userData.roadExposure=3;
   addUpperParapet(bridge,mesh,bridgeEnd,bridgeEnd+leadLength,deckHigh+.0755);
   addBridgeMarkings(bridge,mesh,bridgeEnd,bridgeEnd+leadLength,deckHigh+.0755,true);
   for(const side of [-1,1])box(.19,2,1.05,side*.81,deckHigh-.60,bridgeEnd+8.6,'#a79e89',bridge);
@@ -696,7 +699,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
   }
-  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -1053,7 +1056,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   source.root.traverse(o=>{if(o instanceof THREE.Mesh&&o.material===source.coffeeMaterial&&variant==='street'){const copy=copyMesh(o);copy.matrix.copy(o.matrixWorld);copy.matrix.decompose(copy.position,copy.quaternion,copy.scale);root.add(copy);}});
   // The plaza shares the fountain geometry while following its own pausable clock.
   if(variant==='plaza'){
-    for(const name of ['Market granite and herringbone promenade','Halprin brick court']){
+    for(const name of ['Market granite and herringbone promenade','Halprin brick court',padelScreenName]){
       const paving=source.root.getObjectByName(name) as THREE.Mesh;
       const walk=copyMesh(paving);
       paving.matrixWorld.decompose(walk.position,walk.quaternion,walk.scale);root.add(walk);

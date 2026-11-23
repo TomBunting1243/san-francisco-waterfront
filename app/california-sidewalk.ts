@@ -62,26 +62,31 @@ export function frostCurbRuns(runs:Run[]){
 type Surface=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 export const replacedMarketCrossings=new Set([550660826,667569470,667569471]);
 export function addCaliforniaSidewalk(mesh:Surface,railHead:(z:number)=>number){
-  type Tile={positions:number[];colors:number[]};
-  const paving:Tile={positions:[],colors:[]},paint:Tile={positions:[],colors:[]};
+  type Tile={positions:number[];colors:number[];road:number[]};
+  const paving:Tile={positions:[],colors:[],road:[]},paint:Tile={positions:[],colors:[],road:[]};
   const pigment=new THREE.Color();
+  let roadClass=0;
   function triangle(batch:Tile,points:number[][],color:string,vertical=false){
     const [a,b,c]=points;
     const normal=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]);
     if(!vertical&&Math.abs(normal)<1e-11)return;
     pigment.set(color);
     for(const v of vertical||normal>0?[a,b,c]:[a,c,b]){
-      batch.positions.push(...v);batch.colors.push(pigment.r,pigment.g,pigment.b);
+      batch.road.push(roadClass);batch.positions.push(...v);batch.colors.push(pigment.r,pigment.g,pigment.b);
     }
   }
   function top(tris:number[][][],height:(x:number,z:number)=>number,c:string,batch=paving){
     for(const t of tris)triangle(batch,t.map(([x,z])=>[x,height(x,z),z]),c);
   }
+  roadClass=1;
   top(data.asphalt,()=>road,'#899692');
+  roadClass=0;
   top(data.concrete,frostWalkHeight,'#c6c0af');
   top(data.warnings,frostWalkHeight,'#bca565');
+  roadClass=1;
   top(data.railBed,(_x,z)=>railHead(z)-.0021,'#a59e8c');
   for(const bars of Object.values(frostCrossings))top(bars,()=>road+.00012,'#e0dcd0',paint);
+  roadClass=0;
   // The old general curb runs have been clipped through both ramp openings.
   // Split the new curb at the rails: the embedded tracks run flush through the mouth.
   const railBoundary=data.railBed;
@@ -108,6 +113,7 @@ export function addCaliforniaSidewalk(mesh:Surface,railHead:(z:number)=>number){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.Float32BufferAttribute(batch.positions,3));
     g.setAttribute('color',new THREE.Float32BufferAttribute(batch.colors,3));
+    g.setAttribute('roadExposure',new THREE.Uint8BufferAttribute(batch.road,1));
     g.computeVertexNormals();g.userData.paintVertices=true;
     if(batch===paint)g.userData.roadPaint='Market and Drumm crossings';
     mesh(g,'#ffffff',0,0,0).name=name;

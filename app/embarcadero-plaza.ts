@@ -1,3 +1,4 @@
+import {addParkPadel} from './park-padel.ts';
 import * as THREE from 'three';
 import {westMarketGround,westParkPlans} from './curb-survey.ts';
 import {fountainPavingCut} from './remembered-waterfront.ts';
@@ -183,20 +184,9 @@ export function embarcaderoPlaza(){
   field.polygon(trace([[159,324],[373,294],[387,383],[169,414]]),level(.144),grass);
   field.polygon(trace([[221,330],[367,308],[377,361],[229,383]]),level(.146),'#c5c1b2');
   field.polygon(trace([[229,334],[363,314],[369,338],[234,359]]),level(.147),'#aaa99c');
-  // Two courts appear together in the 2024 orthophoto. Mark their playing
-  // surfaces at real size while retaining the surrounding brick pavement.
-  for(const area of landscape.areas.filter(a=>[1442051147,1442051148].includes(a.id))){
-    const [a,d,c,b]=area.p as Plan[];
-    const at=(u:number,v:number):Plan=>[(1-v)*((1-u)*a[0]+u*b[0])+v*((1-u)*d[0]+u*c[0]),(1-v)*((1-u)*a[1]+u*b[1])+v*((1-u)*d[1]+u*c[1])];
-    const surface=[a,b,c,d],top=.136;
-    field.polygon(surface,level(top),'#859069');
-    for(const u of [.10,.335,.665,.90])strip(field,at(u,.17),at(u,.83),.0035,level(top+.001),'#d4d6b9');
-    for(const v of [.17,.83])strip(field,at(.1,v),at(.9,v),.0035,level(top+.001),'#d4d6b9');
-    strip(field,at(.10,.5),at(.335,.5),.0035,level(top+.001),'#d4d6b9');
-    strip(field,at(.665,.5),at(.90,.5),.0035,level(top+.001),'#d4d6b9');
-  }
   fountainWalk(field);
   plantRows(root,field);
   root.add(field.mesh('Granite terraces, lawns and walks'),bricks.mesh('Halprin brick court',brickMaterial()));
+  addParkPadel(root,(x,z)=>plazaStandingHeight(root,x,z));
   return root;
 }

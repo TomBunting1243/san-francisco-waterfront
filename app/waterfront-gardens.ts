@@ -21,6 +21,21 @@ type Area={id:number;name:string;kind:string;sport?:string|null;p:number[][]};
 type Path={id:number;kind:string;p:number[][];layer:string;level?:string;bridge?:string;width?:string};
 export const waterfrontLandscape=landscapeData as {areas:Area[];paths:Path[];trees:{id:number;p:number[];species:string;height:string|null;diameter:string|null}[]};
 const surveyedTrees:Record<string,{sfId:number;species:string;dbhInches:number|null}>=treeSurvey.trees;
+// Registered against the modeled pavement at the OSM stem and around its
+// .038-unit basal ring. On battered or split-level curbs the lowest edge
+// anchors the wood, allowing the uphill side to enter the soil.
+const tramTreeFoot=new Map<number,number>();
+for(const [y,ids] of [
+  [0.031,[10828325149,10828325156,10828325287,12793548824,12793548826,12793548828,12793548830,12793548831,12793548832,12793548834]],
+  [0.0315,[10828325157,10828325161,12793548837]],
+  [0.0316,[10828325280,12793548833,12793548836]],
+  [0.0337,[12793548835]],
+  [0.0406,[10828325159,12793548823]],
+  [0.0436,[12793548838]],
+  [0.045,[12793548822,12793548825,12793548827,12793548829]],
+  [0.054,[13605228878,13605283524,13605283526,13605283528]],
+  [0.068,[13605228873,13605228874,13605228875,13605228876,13605228877,13605228879,13605228880,13605228881,13605283521,13605283522,13605283523,13605283525,13605283527]],
+] as const)for(const id of ids)tramTreeFoot.set(id,y);
 const brickPlaza=sfMap.parks.find(park=>park.name==='Embarcadero Plaza')!;
 const rinconPaving=sfMap.parks.find(park=>park.name==='Rincon Park')!;
 const contains=(p:number[],area:Area)=>insideBuilding(p[0],p[1],area.p);
@@ -111,8 +126,14 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     // the battered Don Chee curb. The nearest level .045 sidewalk supports
     // the complete 18-inch trunk ring 0.052 units toward the planting side.
     const medianPalm=record?.sfId===194324,plantZ=medianPalm?z+.052:z;
-    const localGrade=onMarketRamp?westMarketGround(x,z)+.00035:medianPalm?.045:undefined;
+    const localGrade=onMarketRamp?westMarketGround(x,z)+.00035:medianPalm?.045:tramTreeFoot.get(node.id);
     const support=localGrade??harryBridgesGround(x,z)??(area?(biermanParcel(area.id)?y:y+.024):inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
+    // At these two stems the surveyed curb back stops just short of the
+    // sidewalk. Fill the narrow open joint beneath the roots with earth.
+    if(node.id===10828325157||node.id===10828325159){
+      const bed=mesh(new THREE.CylinderGeometry(.032,.032,.035,12),'#655947',x,support-.0175,plantZ);
+      bed.name='Tram median root soil';bed.castShadow=false;
+    }
     if(record)treeWell(mesh,record.sfId,x,support,plantZ,-Math.atan(.15));
     if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,plantZ,palms,record?.species??node.species,trunkRadius)){
       treeAnchors.push({id:node.id,x,y:support,z:plantZ});

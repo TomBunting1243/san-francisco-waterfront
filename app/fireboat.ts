@@ -72,6 +72,25 @@ export function createFireboat(night={value:0}){
   const body=new THREE.Mesh(hullPaint,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.67}));
   body.name='Fireboat hull, wheelhouse and monitors';body.castShadow=body.receiveShadow=true;
   vessel.clear();vessel.add(body);bindVesselLighting(root,body,night,.66);
+  // The two aft work lamps face the working deck. Keep this receiver in hull
+  // coordinates as the boat heels and turns. Brightness at berth is inferred.
+  const vesselCompile=body.material.onBeforeCompile.bind(body.material);
+  body.material.onBeforeCompile=(shader,renderer)=>{
+    vesselCompile(shader,renderer);
+    shader.vertexShader='varying vec3 fireboatPosition; varying vec3 fireboatNormal;\n'+
+      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nfireboatPosition=position;fireboatNormal=normal;');
+    shader.fragmentShader='varying vec3 fireboatPosition; varying vec3 fireboatNormal; uniform float vesselState;\n'+
+      shader.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+        if(vesselState>.5 && fireboatPosition.x<-.47 && fireboatPosition.y>.23 && fireboatPosition.y<.71){
+          vec3 p=fireboatPosition;
+          vec3 toLamp=vec3(-.51,.915,.345*sign(p.z))-p;
+          float footprint=1.-smoothstep(.03,.49,length(vec2(p.x+.83,(abs(p.z)-.27)*1.4)));
+          float incident=max(0.,dot(normalize(fireboatNormal),normalize(toLamp)));
+          totalEmissiveRadiance+=diffuseColor.rgb*vec3(.68,.55,.34)*footprint*incident
+            *smoothstep(.12,.93,vesselNight)*(vesselState<1.5?.59:1.);
+        }`);
+  };
+  body.material.customProgramCacheKey=()=>'fireboat-work-deck-v1';
   for(const geometry of painted)geometry.dispose();
   for(const paint of materials.values())paint.dispose();
   const water=new THREE.MeshBasicMaterial({color:'#d8eeee',transparent:true,opacity:.72,depthWrite:false});

@@ -7,7 +7,7 @@ import {northWaterfrontGrade,streetPose} from './streets.ts';
 import {pier2931Walk} from './north-quay-promenade.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
-import {streetVehicleNose} from './street-vehicles.ts';
+import {streetVehicleNose,streetVehicleTreadHeight} from './street-vehicles.ts';
 import {harborDatum} from './water-surface.ts';
 import {rinconPoint} from './rincon-park.ts';
 
@@ -204,7 +204,19 @@ export function waterfrontWalker(time:number,index:number,region?:Region){
 // sampled out of order or while paused without changing any vehicle's state.
 export const waterfrontCarCount=(region?:Region)=>region?20:56;
 const streetStart=-80,streetEnd=80,step=.10;
-const carriageways=[-1,1].map(direction=>Array.from({length:1601},(_,i)=>streetPose(streetStart+i*step,direction)));
+const carriageways=[-1,1].map(direction=>Array.from({length:1601},(_,i)=>{
+  const p=streetPose(streetStart+i*step,direction);
+  // The mapped bay-side centerline grazes the narrow rail refuge curb.
+  // Register the wheel track inside the road, including the wider Howard flare.
+  if(direction>0){
+    const howard=1-THREE.MathUtils.smoothstep(Math.abs(p.x+23.2),.35,1.2);
+    const south=.055*(1-THREE.MathUtils.smoothstep(p.x,-47,-45));
+    const folsom=.22*(1-THREE.MathUtils.smoothstep(Math.abs(p.x+36.8),.3,1.8));
+    const north=.027*THREE.MathUtils.smoothstep(p.x,11,13)*(1-THREE.MathUtils.smoothstep(p.x,23,25));
+    p.z+=(south+folsom+.063*howard+north)/Math.cos(p.heading);
+  }
+  return p;
+}));
 export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-26,37]:[streetStart,streetEnd];
 const reactionDelay=[0,1.12,2.6,4.05,5.42,6.85,8.28]; // response delay accumulated down a queue
 const queueSpace=[0,.65,1.33,1.98,2.71,3.36,4.06]; // allowance to the front bumper in scene units
@@ -249,7 +261,11 @@ export function waterfrontCar(time:number,index:number,region?:Region){
   const along=active?inlet+k:outlet-(k-span)/transfer*span;
   const x=dir*along,u=Math.max(0,Math.min(1600,(x-streetStart)/step));
   const i=Math.min(1599,Math.floor(u)),lane=carriageways[north?1:0],a=lane[i],b=lane[i+1];
-  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:northWaterfrontGrade(x)+.00925,heading:a.heading,active};
+  // Bridge traffic shares this mesh. Its local tire origin is above zero.
+  // Pitch the rigid car through both axle stations on the graded north quay.
+  const halfAxle=.085,back=northWaterfrontGrade(x-halfAxle),front=northWaterfrontGrade(x+halfAxle);
+  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:(back+front)*.5-streetVehicleTreadHeight,
+    grade:Math.atan2(front-back,halfAxle*2),heading:a.heading,active};
 }
 
 export function waterfrontCyclist(time:number,index:number){

@@ -161,3 +161,39 @@ test('a completed background slice cannot report a different camera skyline read
     assert.deepEqual(tile.geometry.attributes.position.array,reference.children[i].geometry.attributes.position.array);
   }
 });
+
+test('the municipal approach to Coit follows the ridge and carries only a road-surface night treatment',()=>{
+  const group=createUrbanContext(),cam=new THREE.PerspectiveCamera(30,1.5,.35,1800);
+  cam.position.set(77,15,-18);cam.lookAt(77,4,-24);cam.updateMatrixWorld();group.update(cam);group.updateMatrixWorld(true);
+  const corners=[[76.862152,-22.454052],[77.481178,-24.085947],[76.684517,-22.545948]];
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  for(const [a,b] of [[.3,.3],[.06,.47],[.47,.47],[.12,.75]]){
+    const x=a*corners[0][0]+b*corners[1][0]+(1-a-b)*corners[2][0];
+    const z=a*corners[0][1]+b*corners[1][1]+(1-a-b)*corners[2][1];
+    ray.ray.origin.set(x,22,z);
+    const hits=ray.intersectObject(group,true);
+    const path=hits.find(h=>h.uv?.x===-1);
+    assert.ok(path);assert.ok(path.point.y>bayReliefGround(x,z)+.003);
+    if(b===.75){
+      const street=hits.find(h=>h.uv?.x< -1.5);
+      assert.ok(street);assert.ok(street.point.y>path.point.y+.010);
+    }
+  }
+  const shader={uniforms:{},vertexShader:THREE.ShaderLib.lambert.vertexShader,fragmentShader:THREE.ShaderLib.lambert.fragmentShader};
+  group.children[0].material.onBeforeCompile(shader,{});
+  group.setNight(1);assert.equal(shader.uniforms.civilNight.value,1);
+  group.setNight(0);assert.equal(shader.uniforms.civilNight.value,0);
+  assert.match(shader.fragmentShader,/if\(facadeUV.x< -1.5\)/);
+});
+
+test('municipal rooms share the measured daytime aperture, clock occupancy and subpixel filter',()=>{
+  const group=createUrbanContext(),cam=new THREE.PerspectiveCamera(40,1.6,.013,1800);
+  cam.position.set(-12.15,4.39,168.33);cam.lookAt(-12.76,4.39,165.80);cam.updateMatrixWorld();
+  assert.ok(group.prepareRideView(cam,Infinity));
+  const shader={uniforms:{},vertexShader:THREE.ShaderLib.lambert.vertexShader,fragmentShader:THREE.ShaderLib.lambert.fragmentShader};
+  group.children[0].material.onBeforeCompile(shader,{});
+  assert.match(shader.fragmentShader,/surveyRoomLight\(cell,fw,coverage,surveyWallSeed,surveyRoomShare\)/);
+  assert.match(shader.fragmentShader,/if\(facadeUV.x>=0.0\)/);
+  group.setNight(1,.17);assert.equal(shader.uniforms.surveyRoomShare.value,.17);
+  group.setNight(0,0);assert.equal(shader.uniforms.surveyRoomShare.value,0);
+});

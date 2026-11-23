@@ -127,8 +127,9 @@ function sedan(){
   const left=-.56,right=1.22;
   for(const x of [left,right]){
     const topX=x===left?-.61:1.13;
-    g.side(x,-1.08,-.31,-.73,1.70,'#555d59');
-    g.side(x,-.34,-.30,-.73,1.70,'#878779');
+    const sillBottom=-.34;
+    g.side(x,-1.08,sillBottom,-.73,1.70,'#555d59');
+    g.side(x,sillBottom,-.30,-.73,1.70,'#878779');
     g.panel([x,-.30,.32],[x,-.30,.41],[topX,.48,.39],[topX,.48,.31],'#666963');
     g.panel([x,-.30,1.47],[x,-.30,1.70],[topX,.48,1.30],[topX,.48,1.15],'#88877a');
     g.panel([x,-.30,-.73],[topX,.48,-.43],[topX,.48,-.48],[x,-.30,-.78],'#73756b');

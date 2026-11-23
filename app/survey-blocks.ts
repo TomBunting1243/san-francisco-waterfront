@@ -28,12 +28,14 @@ class Tile {
   positions:number[]=[];
   colors:number[]=[];
   indices:number[]=[];
+  roadExposure:number[]=[];
+  roadClass=0;
   palette=new Map<string,THREE.Color>();
   vertices(points:Vertex[],color:string) {
     let pigment=this.palette.get(color);
     if(!pigment)this.palette.set(color,pigment=new THREE.Color(color));
     const first=this.positions.length/3;
-    for(const p of points){this.positions.push(...p);this.colors.push(pigment.r,pigment.g,pigment.b);}
+    for(const p of points){this.roadExposure.push(this.roadClass);this.positions.push(...p);this.colors.push(pigment.r,pigment.g,pigment.b);}
     return first;
   }
   quad(a:Vertex,b:Vertex,c:Vertex,d:Vertex,paint:string){
@@ -61,6 +63,7 @@ class Tile {
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.Float32BufferAttribute(this.positions,3));
     geo.setAttribute('color',new THREE.Float32BufferAttribute(this.colors,3));
+    if(this.roadExposure.some(Boolean))geo.setAttribute('roadExposure',new THREE.Uint8BufferAttribute(this.roadExposure,1));
     geo.setIndex(this.indices);geo.computeVertexNormals();
     geo.userData.paintVertices=true;
     return geo;
@@ -138,15 +141,18 @@ function addSightlineStreets(mesh:Surface){
     const [height,color]=kind==='bars'?[.034,'#d6d0b9']:pavement[kind];
     for(const plan of extensions[kind]){
       const tile=plan[0][0][0]>0?quay:market;
+      tile.roadClass=kind==='street'||kind==='bars'?1:0;
       tile.top(plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
     }
   }
+  market.roadClass=0;quay.roadClass=1;
   const markingColors={cycle:'#739983',lane:'#e3dfcb',yellow:'#d9bb79'} as const;
   for(const key of ['cycle','lane','yellow'] as const){
     for(const plan of extensions.chestnutPaint[key])quay.top(plan,0,markingColors[key],northWaterfrontGrade);
   }
   // The Port-side promenade meets the bay edge of the street curb. Its
   // perimeter and the street facets were cut together by the importer.
+  quay.roadClass=0;
   for(const plan of extensions.pierWalk)quay.top(plan,.018,'#c9c7b9',northWaterfrontGrade);
   // Give the formerly flat survey curb an exposed stone face toward the
   // roadway. The top and bottom share its measured grade stations.
@@ -238,7 +244,11 @@ export function addSurveyBlocks(mesh:Surface){
         const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
         if(!tile)walkTiles.set(id,tile=new Tile());
         tile.top(piece,height,'#c4bdac');
-      }else at(piece).top(piece,height,color);
+      }else{
+        const tile=at(piece);
+        tile.roadClass=kind==='street'?1:kind==='alley'||kind==='private'?2:0;
+        tile.top(piece,height,color);tile.roadClass=0;
+      }
     }
   }
   for(const [id,tile] of walkTiles){

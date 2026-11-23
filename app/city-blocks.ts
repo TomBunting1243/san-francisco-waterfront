@@ -108,6 +108,10 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   const normals = new Int16Array(vertices * 3);
   const colors = new Uint8Array(vertices * 3);
   const signLights = parts.some(mesh=>mesh.userData.signLight||mesh.userData.uplight||mesh.userData.authoredWindowSpill||mesh.geometry.hasAttribute('signLight')) ? new Uint8Array(vertices * 3) : null;
+  // Only freeway stations need 16 bits; district and bridge masks use one byte.
+  const roadExposure=parts.some(m=>m.geometry.getAttribute('roadExposure')?.array instanceof Uint16Array)
+    ?new Uint16Array(vertices)
+    :parts.some(m=>m.userData.roadExposure||m.geometry.hasAttribute('roadExposure'))?new Uint8Array(vertices):null;
   const indices = vertices > 65535 ? new Uint32Array(faces) : new Uint16Array(faces);
   const facadeGrid=parts[0].geometry.hasAttribute('facadeGrid')?new Float32Array(vertices*4):null;
   const printAttribute=parts[0].geometry.hasAttribute('kioskPrint')?'kioskPrint':'billboardPrint';
@@ -201,6 +205,14 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
       signLights[j+1]=Math.min(255,signLights[j+1]+Math.round(Math.sqrt(colors[j+1]*255)*spill*.65));
       signLights[j+2]=Math.min(255,signLights[j+2]+Math.round(Math.sqrt(colors[j+2]*255)*spill*.36));
     }
+    if(roadExposure){
+      const source=geometry.getAttribute('roadExposure');
+      if(source)roadExposure.set(source.array,vertex);
+      else if(mesh.userData.roadExposure)for(let i=0;i<pos.count;i++){
+        // Quantized world normals identify the wearing face even on graded boxes.
+        if(normals[base+3*i+1]>24000)roadExposure[vertex+i]=mesh.userData.roadExposure;
+      }
+    }
     const sourceIndices=geometry.index?.array;
     if(sourceIndices){
       for(let i=0;i<sourceIndices.length;i++)indices[face++]=vertex+sourceIndices[i];
@@ -215,6 +227,7 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
   geo.setAttribute('color',new THREE.BufferAttribute(colors,3,true));
   if(facadeGrid)geo.setAttribute('facadeGrid',new THREE.BufferAttribute(facadeGrid,4));
   if(printUv)geo.setAttribute('uv',new THREE.BufferAttribute(printUv,2));
+  if(roadExposure)geo.setAttribute('roadExposure',new THREE.BufferAttribute(roadExposure,1));
   if(walkPanel)geo.setAttribute('walkPanel',new THREE.BufferAttribute(walkPanel,2));
   if(signLights)geo.setAttribute('signLight',new THREE.BufferAttribute(signLights,3,true));
   geo.setIndex(new THREE.BufferAttribute(indices,1));

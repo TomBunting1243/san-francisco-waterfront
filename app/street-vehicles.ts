@@ -16,6 +16,7 @@ const profiles = [
 // Street and bridge vehicles both apply .25, giving the map scale of .06 units/metre.
 const metresToModel = .24;
 const roadOffset = .055;
+export const streetVehicleTreadHeight=roadOffset*.25;
 // The front bumper projects 0.014 m beyond the body half length. Both traffic
 // batches use quarter-scale meshes, yielding scene units here.
 export const streetVehicleNose=(index:number)=>(profiles[index%profiles.length].length/2+.014)*metresToModel*.25;
@@ -115,15 +116,16 @@ export function streetVehicleMaterial() {
             carFrame=carFrame*batchingMatrix;
           #endif
           vec2 away=normalize(vehicleCast.xy);
-          vec2 carX=normalize(carFrame[0].xz),carZ=normalize(carFrame[2].xz);
-          vec2 drift=vec2(dot(away,carX),dot(away,carZ))*min(.45,.085*vehicleCast.z);
+          vec3 carX=carFrame[0].xyz/max(.00001,length(carFrame[0].xz));
+          vec3 carZ=carFrame[2].xyz/max(.00001,length(carFrame[2].xz));
+          vec2 drift=vec2(dot(away,carX.xz),dot(away,carZ.xz))*min(.45,.085*vehicleCast.z);
           #ifdef USE_BATCHING
             // Keep bridge marks on the roadway at the outside rail.
             drift.y=clamp(drift.y,-.018,.018);
           #endif
           vec2 reach=max(sign(drift)*vehiclePaint.xy,0.)*drift;
-          vec2 push=carX*reach.x+carZ*reach.y;
-          mvPosition+=viewMatrix*vec4(push.x,0.,push.y,0.);
+          // Extend the contact shadow along the grade under both axles.
+          mvPosition+=viewMatrix*vec4(carX*reach.x+carZ*reach.y,0.);
           gl_Position=projectionMatrix*mvPosition;
         }`);
     shader.fragmentShader='uniform vec3 vehicleSky; varying vec3 vehicleMark;\n'+

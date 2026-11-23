@@ -164,6 +164,24 @@ test('boarding builds only the selected vehicle and binds PCC printing to an alr
   fallback.dispose();
 });
 
+test('both sedan side-window sills meet their door panels with a single visible finish',()=>{
+  const {root,show,dispose}=createRideInteriors();
+  show('sedan');
+  const cab=root.children[0];
+  for(const x of [-.56,1.22]){
+    const direction=new T.Vector3(Math.sign(x),0,0);
+    for(const z of [.1,.85])for(const [height,finish] of [[-.37,'#555d59'],[-.335,'#878779'],[-.32,'#878779'],[-.305,'#878779']]){
+      const target=new T.Vector3(x,height,z).multiplyScalar(.06);
+      const origin=target.clone().addScaledVector(direction,-.006);
+      const hits=new T.Raycaster(origin,direction,0,.012).intersectObject(cab,false);
+      assert.equal(hits.length,1,'sill contact at '+[x,height,z]);
+      const paint=new T.Color().fromBufferAttribute(cab.geometry.attributes.color,hits[0].face.a);
+      assert.equal(paint.getHexString(),finish.slice(1));
+    }
+  }
+  dispose();
+});
+
 test('sedan wheel and instruments read through the open spokes with no separate cockpit draw',()=>{
   const {root,show,dispose}=createRideInteriors();show('sedan');
   const mesh=root.children[0];

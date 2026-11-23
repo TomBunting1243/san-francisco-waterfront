@@ -17,7 +17,10 @@ test('both traffic decks share one draw and twelve painted geometries through re
       batch.getMatrixAt(i,matrix);point.setFromMatrixPosition(matrix);
       const west=car.rotation.y>0;
       assert.ok(bridgeLaneCenters.some(x=>Math.abs(x-point.x)<.00001));
-      assert.ok(Math.abs(point.y-(west?bridgeLayout.upperDeck+.063:bridgeLayout.lowerDeck+.044))<.00001);
+      const shape=car.children[0].geometry;
+      if(!shape.boundingBox)shape.computeBoundingBox();
+      const tread=point.y+shape.boundingBox.min.y*car.scale.y;
+      assert.ok(Math.abs(tread-(west?bridgeLayout.upperDeck+.0755:bridgeLayout.lowerDeck+.058))<.00001);
       assert.ok(point.z>=0&&point.z<bridgeLayout.length+(west?8.6:0));
       assert.ok(axis.clone().transformDirection(matrix).z*(west?-1:1)>.999);
       assert.ok(car.position.distanceTo(point)<.00002);

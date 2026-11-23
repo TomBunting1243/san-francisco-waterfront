@@ -57,7 +57,7 @@ test('the Fremont exit has yellow on the driver’s left and white on the right 
   }
 });
 
-test('approach traffic updates in four batches and construction stays finite',()=>{
+test('four approach traffic batches seat both axles on the supported freeway slabs',()=>{
   const root=new THREE.Group();
   const update=buildApproachRoad(addMesh,root);
   const traffic=root.children[0].children.filter(o=>o instanceof THREE.InstancedMesh);
@@ -65,10 +65,31 @@ test('approach traffic updates in four batches and construction stays finite',()
   const matrix=new THREE.Matrix4();
   traffic[0].getMatrixAt(0,matrix);
   const before=matrix.clone();
-  update(3);
+  update(3.71);
   traffic[0].getMatrixAt(0,matrix);
   assert.ok(!before.equals(matrix));
   assert.ok(traffic.every(o=>o.count===15&&o.instanceMatrix.array.every(Number.isFinite)));
+  root.updateMatrixWorld(true);
+  const road=root.children[0].children.filter(m=>m.geometry?.hasAttribute('roadExposure')&&!m.geometry.userData.roadPaint);
+  const down=new THREE.Vector3(0,-1,0);
+  for(const batch of traffic){
+    const pos=batch.geometry.attributes.position;
+    batch.geometry.computeBoundingBox();
+    const treads=new Map();
+    for(let i=0;i<pos.count;i++)if(pos.getY(i)<batch.geometry.boundingBox.min.y+1e-6){
+      const tread=new THREE.Vector3().fromBufferAttribute(pos,i);
+      treads.set(tread.toArray().join(','),tread);
+    }
+    for(let i=0;i<batch.count;i++){
+      batch.getMatrixAt(i,matrix);
+      for(const tread of treads.values()){
+        const wheel=tread.clone().applyMatrix4(matrix);
+        const ray=new THREE.Raycaster(wheel.clone().addScaledVector(down,-.02),down,0,.04);
+        assert.ok(ray.intersectObjects(road,false).some(hit=>Math.abs(hit.point.y-wheel.y)<.001),
+          'both axles follow the approach slab at '+wheel.toArray());
+      }
+    }
+  }
   const piers=root.children[0].children.filter(o=>o.name==='Concrete pier');
   assert.ok(piers.length>100);
   assert.ok(piers.every(o=>o.scale.y>.09&&Number.isFinite(o.position.y)));

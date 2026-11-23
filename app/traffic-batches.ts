@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {bridgeLayout} from './bridge-layout.ts';
 import {bridgeLaneCenters} from './bridge-deck.ts';
-import {createStreetVehicle} from './street-vehicles.ts';
+import {createStreetVehicle,streetVehicleTreadHeight} from './street-vehicles.ts';
 
 /** Pack colored rigid parts once; only their transforms and visibility change in the renderer. */
 export function batchTraffic(poses:THREE.Group,material:THREE.Material,name:string){
@@ -49,7 +49,8 @@ export function createBridgeTraffic(material:THREE.MeshStandardMaterial){
       for(let row=0;row<count;row++){
         const car=models[fleet.length%models.length].clone();
         car.scale.setScalar(.25);
-        car.position.set(x,westbound?bridgeLayout.upperDeck+.063:bridgeLayout.lowerDeck+.044,0);
+        const roadTop=westbound?bridgeLayout.upperDeck+.0755:bridgeLayout.lowerDeck+.058;
+        car.position.set(x,roadTop-streetVehicleTreadHeight,0);
         car.rotation.y=westbound?Math.PI/2:-Math.PI/2;
         poses.add(car);
         // At launch the driver is .95 short of the wrap. Exactly bisect

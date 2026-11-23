@@ -724,6 +724,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.setFacadeClock(lighting.hours,lighting.minutes,duskAmount,lighting.litShare);
         if(mode)streetIllumination.setCabLamp(lampPosition,lampAim,2.1*Math.max(duskAmount,Math.min(.36,fog*.4+rain*.22)));
         interiors?.setNight(duskAmount);
+        neighborhoods?.setNight(duskAmount,lighting.litShare);
         world.transit?.setNight(duskAmount);
         interiors?.updateRain(snowfall?0:rain,dt,still||reducedMotion.current);
         const directSun=nightPrint?0:directSunVisibility(lighting.altitude,cloud,fog);
@@ -906,7 +907,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
             bubble.current.style.visibility=p.visible?'visible':'hidden';
           }
         }
-        if(!streetView)world.relief.update(elapsed,duskAmount,.74-.2*duskAmount,world.bayHorizon.value,weatherNow.w);
+        if(!streetView)world.relief.update(elapsed,duskAmount,.74-.2*duskAmount,world.bayHorizon.value,weatherNow.w,lighting.litShare);
         world.waterTime.value=elapsed;
         if(!streetView)world.updateMarina(tideOffset);
         world.ferries.forEach((boat,i)=>world.hullShadows[i].set(boat.position.x,boat.position.z,Math.cos(boat.rotation.y),-Math.sin(boat.rotation.y)));

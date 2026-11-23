@@ -175,11 +175,11 @@ export function distantEastSpan(project:Project, surface:number, material:THREE.
     const [a,b]=[knots[i-1],knots[i]];
     return THREE.MathUtils.lerp(a[1],b[1],fraction(station,a[0],b[0]))+(westbound?4:-4)*(1-fraction(station,-440,-180));
   }
-  const vertices:number[]=[],colors:number[]=[],indices:number[]=[];
+  const vertices:number[]=[],colors:number[]=[],indices:number[]=[],roadway:number[]=[];
   const palette=new Map<string,THREE.Color>();
   function quad(a:THREE.Vector3,b:THREE.Vector3,c:THREE.Vector3,d:THREE.Vector3,paint:string) {
     const offset=vertices.length/3, shade=palette.get(paint)??new THREE.Color(paint);palette.set(paint,shade);
-    for(const p of [a,b,c,d]){vertices.push(tx+p.x*scale,surface+p.y*scale,tz+p.z*scale);colors.push(shade.r,shade.g,shade.b);}
+    for(const p of [a,b,c,d]){vertices.push(tx+p.x*scale,surface+p.y*scale,tz+p.z*scale);colors.push(shade.r,shade.g,shade.b);roadway.push(paint===pavement?1:0);}
     indices.push(offset,offset+1,offset+2,offset,offset+2,offset+3);
   }
   // A closed member of rectangular section, including tapered pier heads and tower shafts.
@@ -255,6 +255,18 @@ export function distantEastSpan(project:Project, surface:number, material:THREE.
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
   geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
   geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingSphere();
+  geometry.setAttribute('eastRoadway',new THREE.Uint8BufferAttribute(roadway,1));
+  // MTC's Lighting the East Span documents a continuous white roadway wash
+  // from 1,121 fixtures. Both wearing surfaces receive it before aerial haze.
+  // https://mtc.ca.gov/sites/default/files/SFOBB_lighting_fact_sheet.pdf
+  const previous=material.onBeforeCompile.bind(material),programKey=material.customProgramCacheKey();
+  material.onBeforeCompile=(shader,renderer)=>{
+    previous(shader,renderer);
+    if(!shader.uniforms.reliefNight)return;
+    shader.vertexShader='attribute float eastRoadway; varying float eastDeck;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\neastDeck=eastRoadway;');
+    shader.fragmentShader='varying float eastDeck;\n'+shader.fragmentShader.replace('#include <opaque_fragment>','outgoingLight+=vec3(.080,.083,.081)*eastDeck*smoothstep(.12,.91,reliefNight);\n#include <opaque_fragment>');
+  };
+  material.customProgramCacheKey=()=>programKey+'|eastern-road-led-v1';
   const mesh=new THREE.Mesh(geometry,material);mesh.name='Eastern span from Yerba Buena Island to Oakland';
   return mesh;
 }

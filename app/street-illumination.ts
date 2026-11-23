@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {authoredStreetField,approachLampStart,approachLampSpacing} from './authored-road-light.ts';
+import {bridgeLayout} from './bridge-layout.ts';
 import type {FerryWalkPool} from './ferry-walk-lights.ts';
 import {terraceFloodAim} from './plaza-street-lights.ts';
 import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
@@ -229,6 +231,34 @@ const illumination=`
   }
 `;
 
+// One road-only attribute survives the rigid bake. 1/2 identify municipal
+// pavement and alleys, 3/4 the west bridge levels; approach values above
+// 100 encode distance along the actual curved carriageway at .02-unit steps.
+const roadIllumination=`
+  if(waterfrontStreetNight>.001 && civilRoad>.5){
+    float flux=0.;
+    if(civilRoad<2.5){
+      vec2 uv=(waterfrontLightPosition.xz-measuredRoadBounds.xy)/measuredRoadBounds.zw;
+      float measured=all(greaterThanEqual(uv,vec2(0.)))&&all(lessThanEqual(uv,vec2(1.)))?texture2D(measuredRoadField,uv).r:0.;
+      flux=civilRoad<1.5?.14+.65*measured:.065+.42*measured;
+    }else if(civilRoad<4.5){
+      vec2 offset=waterfrontLightPosition.xz-vec2(${bridgeLayout.origin.join(',')});
+      float along=dot(offset,vec2(${Math.sin(bridgeLayout.angle)},${Math.cos(bridgeLayout.angle)}));
+      float across=dot(offset,vec2(${Math.cos(bridgeLayout.angle)},${-Math.sin(bridgeLayout.angle)}));
+      float index=floor((along-1.2)/2.45+.5);
+      float dz=along-(1.2+2.45*index),dx=across-mix(-.47,.47,mod(index,2.));
+      flux=civilRoad<3.5?.23+.58/(1.+2.*dz*dz+2.*dx*dx):.21+.26/(1.+2.*dz*dz);
+    }else if(civilRoad>=99.){
+      float station=(civilRoad-100.)/50.;
+      float delta=(fract((station-${approachLampStart})/${approachLampSpacing}+.5)-.5)*${approachLampSpacing};
+      flux=.21+.46/(1.+2.2*delta*delta);
+    }
+    // The same SFPUC pole may already have a detailed fixture. Only make
+    // up the difference below that source, never add a second pool over it.
+    outgoingLight+=waterfrontStreetNight*(.035+.86*diffuseColor.rgb)*vec3(1.,.73,.45)*max(0.,flux-existingRoadLamp);
+  }
+`;
+
 // Match the cab's 5.4-unit, .35-radian spotlight with 78% penumbra
 // and zero decay. Evaluate the same Three material response without changing
 // the scene's light count when a driver enters or leaves a ride.
@@ -259,9 +289,10 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
   const field=createStreetField(globes,root.userData.ferryWalkPools,root.userData.shelterPools),night={value:0},wet={value:0},main={value:new THREE.Color()},cross={value:new THREE.Color()};
   const cabPosition={value:new THREE.Vector3()},cabDirection={value:new THREE.Vector3(0,0,-1)},cabIntensity={value:0};
   const lenses=signalLenses();root.add(lenses.mesh);
-  const materials=new Set<THREE.MeshStandardMaterial>();
+  const materials=new Set<THREE.MeshStandardMaterial>(),roadMaterials=new Set<THREE.Material>();
   root.traverse(o=>{if(o instanceof THREE.Mesh)for(const m of Array.isArray(o.material)?o.material:[o.material])
-    if(m instanceof THREE.MeshStandardMaterial&&!m.transparent&&m!==water&&m.colorWrite)materials.add(m);});
+    if(m instanceof THREE.MeshStandardMaterial&&!m.transparent&&m!==water&&m.colorWrite){materials.add(m);if(o.geometry.hasAttribute('roadExposure'))roadMaterials.add(m);}});
+  const roads=roadMaterials.size?authoredStreetField():undefined;
   const restore:Array<()=>void>=[];
   for(const mat of materials){
     const previous=mat.onBeforeCompile,cache=mat.customProgramCacheKey,key=cache.call(mat);
@@ -290,10 +321,17 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
         waterfrontLightPosition=(modelMatrix*lightSpace).xyz;
       `);
       const uniforms=hasWorldPosition?fragment.replace('varying vec3 waterfrontLightPosition;','#define waterfrontLightPosition harborPosition'):fragment;
-      shader.fragmentShader=uniforms+shader.fragmentShader.replace('#include <opaque_fragment>',illumination+'\n#include <opaque_fragment>');
+      let surfaceLight=illumination;
+      if(roads&&roadMaterials.has(mat)){
+        shader.uniforms.measuredRoadBounds={value:roads.bounds};shader.uniforms.measuredRoadField={value:roads.texture};
+        shader.vertexShader='attribute float roadExposure; varying float civilRoad;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncivilRoad=roadExposure;');
+        shader.fragmentShader='varying float civilRoad; uniform vec4 measuredRoadBounds; uniform sampler2D measuredRoadField;\n'+shader.fragmentShader;
+        surfaceLight='float existingRoadLamp=0.;\n'+illumination.replace('vec3 spill=shelterSpill','existingRoadLamp=field.r*lampZ*.82;\n      vec3 spill=shelterSpill')+roadIllumination;
+      }
+      shader.fragmentShader=uniforms+shader.fragmentShader.replace('#include <opaque_fragment>',surfaceLight+'\n#include <opaque_fragment>');
     };
     const installed=mat.onBeforeCompile;
-    mat.customProgramCacheKey=()=>key+(enableRides?'|street-surface-cab-v1':'|street-surface-light-v1');mat.needsUpdate=true;
+    mat.customProgramCacheKey=()=>key+(roadMaterials.has(mat)?'|authored-road-v1':'')+(enableRides?'|street-surface-cab-v1':'|street-surface-light-v1');mat.needsUpdate=true;
     restore.push(()=>{if(mat.onBeforeCompile===installed){mat.onBeforeCompile=previous;mat.customProgramCacheKey=cache;mat.needsUpdate=true;}});
 
   }
@@ -308,5 +346,5 @@ export function createStreetIllumination(root:THREE.Group,globes:number[],water:
     cabIntensity.value=intensity;
     if(intensity>.08){cabPosition.value.copy(position);cabDirection.value.copy(direction).normalize();}
   }
-  return {update,setCabLamp,dispose(){restore.forEach(reset=>reset());field.dispose();},lenses:lenses.mesh};
+  return {update,setCabLamp,dispose(){restore.forEach(reset=>reset());field.dispose();roads?.texture.dispose();},lenses:lenses.mesh};
 }

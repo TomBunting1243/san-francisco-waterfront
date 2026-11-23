@@ -11,7 +11,7 @@ import {addRinconPathLighting} from '../app/rincon-path-lighting.ts';
 import {fireboatStation} from '../app/fireboat-station.ts';
 import {buildFerryTerminal} from '../app/ferry-terminal.ts';
 import {collectFerryWalkPools} from '../app/ferry-walk-lights.ts';
-import {createStreetField} from '../app/street-illumination.ts';
+import {createStreetField,collectStreetGlobes} from '../app/street-illumination.ts';
 import {seawallAt} from '../app/survey-shore.ts';
 
 const font=new FontLoader().parse(fontData),material=new THREE.MeshStandardMaterial();
@@ -101,4 +101,66 @@ test('the fixed Ferry Plaza lights its concrete face, entrances and queue while 
     assert.ok(value(field,x,z)>36,'approach at '+[x,z,value(field,x,z)]);
   for(const roof of root.getObjectsByProperty('name','Galvanized roof panel'))assert.equal(roof.userData.signLight,undefined);
   field.dispose();
+});
+
+test('the Ferry Hall keeps unlit roofing between its three skylights and focuses spill around the tower',async()=>{
+  const {ferryHall,ferryPublicRealm}=await import('../app/ferry-architecture.ts');
+  const hall=ferryHall(font),roof=hall.root.getObjectByName('Ferry hall joined roof and portico');
+  const p=roof.geometry.attributes.position,c=roof.geometry.attributes.signLight;
+  const byX=new Set();let dark=0,nearTower=0;
+  for(let i=0;i<p.count;i++){
+    const r=c.getX(i),x=p.getX(i),z=p.getZ(i);
+    if(!r){dark++;continue;}
+    assert.ok(r>=c.getY(i)&&c.getY(i)>=c.getZ(i));
+    if(Math.abs(x-hall.towerX)<.92&&Math.abs(z-hall.towerZ)<.92){nearTower++;continue;}
+    assert.ok(Math.abs(z+.18)<.12&&r<.105,'only nave skylight glass emits on outer wings');
+    byX.add(Math.round(x));
+  }
+  assert.ok(dark>p.count*.85&&nearTower>10&&byX.size>=4);
+  const pools=collectFerryWalkPools(hall.root),field=createStreetField(collectStreetGlobes(ferryPublicRealm(),[]),pools);
+  for(const x of [-5,2,5])assert.ok(value(field,x,-1.9)>70,'west tenant forecourt');
+  for(const x of [2,5])assert.ok(value(field,x,2.2)>90,'east dining terrace');
+  assert.equal(value(field,2,3.5),0,'distant open apron');
+  field.dispose();
+});
+
+test("only Sinbad's waterside lettering glows red at night",async()=>{
+  const {createRememberedWaterfront}=await import('../app/remembered-waterfront.ts');
+  const root=createRememberedWaterfront(font),faces=root.getObjectsByProperty('name',"SINBAD'S");
+  assert.equal(faces.length,3);
+  const lit=faces.filter(o=>o.userData.signLight);
+  assert.equal(lit.length,1);assert.equal(lit[0].parent.name,"Sinbad's");
+  assert.equal(lit[0].material.color.getHexString(),'f2db9c');
+  assert.ok(lit[0].userData.signLight[0]>12*lit[0].userData.signLight[1]);
+  assert.ok(root.getObjectsByProperty('name','Dark sign returns').every(o=>!o.userData.signLight));
+  const {configureBayWater}=await import('../app/bay-water.ts');
+  const water=new THREE.MeshStandardMaterial(),clock={value:0},shader={...THREE.ShaderLib.standard,uniforms:{}};
+  configureBayWater(water,clock,Array.from({length:5},()=>new THREE.Vector4()),clock,clock);
+  water.onBeforeCompile(shader);
+  const face=lit[0].getWorldPosition(new THREE.Vector3());
+  assert.ok(Math.abs(face.z-3.10)<.001);
+  assert.ok(Math.abs(face.x+9.593)<.001&&Math.abs(face.y-.534)<.001);
+  assert.ok(shader.fragmentShader.includes('float signTravel=(3.10-p.y)/mirrorRay.z'));
+  assert.ok(shader.fragmentShader.includes('abs(hit-vec2(-9.593,.534))'));
+  const mask=shader.uniforms.ferryReflectionWater.value.image;
+  const sample=(x,z)=>mask.data[Math.floor(z*mask.height/24)*mask.width+Math.floor((x+16)*mask.width/32)];
+  assert.equal(sample(face.x,5),255,'water in front of the sign');
+  assert.equal(sample(-4.13,9.58),0,'adjacent terminal float');
+  water.dispose();
+});
+
+test('the fireboat work deck receives its existing aft lamps through the berth and underway states',async()=>{
+  const {createFireboat}=await import('../app/fireboat.ts');
+  const {root,update}=createFireboat(),body=root.getObjectByName('Fireboat hull, wheelhouse and monitors');
+  const shader={...THREE.ShaderLib.standard,uniforms:{}};
+  body.material.onBeforeCompile(shader);
+  const role=body.geometry.attributes.vesselLamp,p=body.geometry.attributes.position;
+  const lamps=[];
+  for(let i=0;i<role.count;i++)if(role.getX(i)===3)lamps.push([p.getX(i),p.getY(i),p.getZ(i)]);
+  for(const side of [-1,1])assert.ok(lamps.some(([x,y,z])=>x<-.47&&y>.88&&side*z>.32));
+  assert.match(shader.fragmentShader,/fireboatPosition.x<-.47/);
+  assert.match(shader.fragmentShader,/smoothstep\(\.12,\.93,vesselNight\)\*\(vesselState<1.5/);
+  update(0);assert.equal(shader.uniforms.vesselState.value,1);
+  update(18);assert.equal(shader.uniforms.vesselState.value,2);
+  assert.equal(root.getObjectsByProperty('isLight',true).length,0);
 });

@@ -13,7 +13,7 @@ export function addBridgeMarkings(parent:THREE.Group,mesh:BridgeMesh,from:number
   plane.userData.roadPaint='West span';
   function stripe(x:number,a:number,b:number,width:number,color:string,name:string){
     const m=mesh(plane,color,x,asphalt+roadPaintLift,(a+b)/2,parent);
-    m.scale.set(width,1,b-a);m.name=name;
+    m.scale.set(width,1,b-a);m.name=name;m.userData.roadExposure=westbound?3:4;
   }
   const left=westbound?-1:1;
   stripe(left*.548,from,to,.011,'#c4ab72','Left shoulder');
@@ -63,8 +63,8 @@ export function addBridgeDeck(bridge: THREE.Group, mesh: BridgeMesh, length: num
   const topChord=upper-.037, bottomChord=lower-.064;
   box(floorHalfWidth*2,.094,length,0,lower,length/2,'#9ba59f','Lower eastbound deck slab');
   box(floorHalfWidth*2,.102,length,0,upper,length/2,'#a7aaa0','Upper westbound deck slab');
-  box(1.135,.016,length,0,lower+.050,length/2,'#65797c');
-  box(1.135,.023,length,0,upper+.064,length/2,'#728383');
+  box(1.135,.016,length,0,lower+.050,length/2,'#65797c').userData.roadExposure=4;
+  box(1.135,.023,length,0,upper+.064,length/2,'#728383').userData.roadExposure=3;
   for (const side of [-1,1]) {
     const x=side*.628;
     box(.11,.10,length,x,bottomChord,length/2,low,'Lower chord web');

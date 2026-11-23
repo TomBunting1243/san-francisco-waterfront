@@ -53,19 +53,32 @@ test('the perforated lantern presents continuous metal coverage as the camera mo
   assert.ok(!metal.transparent&&metal.depthWrite&&metal.alphaTest===0&&!metal.alphaToCoverage);
   assert.ok(metal.map.generateMipmaps&&metal.map.minFilter===THREE.LinearMipmapLinearFilter);
   assert.equal(metal.map.image.width,256);
+  assert.ok(metal.polygonOffset&&metal.polygonOffsetUnits===-2&&metal.polygonOffsetFactor===0,
+    'retain recessed plant depth separation at the passenger camera near plane');
+  const shaft=root.getObjectByName('Rounded-square glazed shaft');
+  const fins=root.getObjectByName('Floor sunshades and vertical mullions');
+  const plant=root.getObjectByName('Recessed crown plant');
   const ray=new THREE.Raycaster(),eye=new THREE.Vector3(),point=new THREE.Vector3(),side=new THREE.Vector3();
   for(const angle of [-1.4,0,.67,1.9])for(const distance of [6,95,190]){
     eye.set(center.x+Math.cos(angle)*distance,center.y-.07*distance,center.z+Math.sin(angle)*distance);
     side.set(-Math.sin(angle),0,Math.cos(angle));
     for(const scale of [-.33,0,.33])for(let i=1;i<20;i++){
       point.copy(center).addScaledVector(side,scale);point.y=THREE.MathUtils.lerp(b.min.y,b.max.y,i/20);
-      ray.set(eye,point.sub(eye).normalize());assert.ok(ray.intersectObject(screen).length);
+      ray.set(eye,point.sub(eye).normalize());
+      const face=ray.intersectObject(screen)[0];assert.ok(face);
+      for(const other of ray.intersectObjects([shaft,fins,plant],false)){
+        assert.ok(Math.abs(other.distance-face.distance)>.005,'crown faces must not share depth with a tower overlay');
+      }
     }
   }
   const shader={...THREE.ShaderLib.standard,uniforms:{}};
   metal.onBeforeCompile(shader,{});
   assert.equal(shader.uniforms.lanternNight,night);assert.equal(shader.uniforms.lanternTime,time);
   assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance+=')&&shader.fragmentShader.includes('#include <fog_fragment>'));
+  assert.match(shader.fragmentShader,/pixelWidth=fwidth\(distanceToCrest\)/);
+  assert.match(shader.fragmentShader,/lanternStripe\(distanceToCrest,17\.,pixelWidth\)/);
+  assert.match(shader.fragmentShader,/lanternStripe\(distanceToCrest\+\.17,26\.,pixelWidth\)/);
+  assert.match(shader.fragmentShader,/wave=mix\(wave,2\.\/17\.\+\.60\/26\.,unresolved\)/);
   const alpha=metal.map.image.data;
   for(let i=3;i<alpha.length;i+=4)assert.equal(alpha[i],255);
   metal.dispose();

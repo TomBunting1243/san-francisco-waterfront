@@ -164,6 +164,14 @@ export function ferryHall(font:Font) {
         aperture.position.set(x,.27,-.014);
         aperture.userData.ferryWalkPool={radius:1.49,strength:.81};street.add(aperture);
       }
+      if(!taylors){
+        // Light escaping a recessed shop reaches the pedestrian forecourt;
+        // retain genuinely open passages and vary the weaker gallery fronts.
+        const mouth=new THREE.Object3D();mouth.name='West shop opening onto the forecourt';
+        mouth.position.set(x,.26,-.016);
+        mouth.userData.ferryWalkPool={radius:gallery?1.08:1.42,strength:i%5===0?.22:gallery?.35:.50};
+        street.add(mouth);
+      }
       if(gallery){
         box(pitch,.013,.40,x,.354,-.224,'#939382',street);
         if(i%3===1)box(.029,.009,.029,x,.337,-.196,'#dfd3af',street).userData.signLight=[.35,.24,.13];
@@ -310,7 +318,7 @@ export function ferryHall(font:Font) {
         }
       }
       const lens=mesh(new THREE.CylinderGeometry(.013,.013,.003,10),'#e9dfc7',x,.371,-.027,bay);
-      ferryWalkLens(lens,'East arcade recessed downlight',.81,dining?.89:coffee?.57:.50,true);
+      ferryWalkLens(lens,'East arcade recessed downlight',dining?1.25:coffee?1.02:.81,dining?.89:coffee?.57:.50,true);
       if(i%4===1||i%5===3)box(bayPitch*.91,.025,.036,x,.307,-.155,'#939e90',bay);
     }
   }
@@ -373,13 +381,22 @@ export function ferryHall(font:Font) {
     {start:1.145,ridge:1.403,end:roofEast,low:.882,high:.967,tone:'#768078'},
   ];
   const roofPoints:number[]=[],roofColors:number[]=[],roofIndices:number[]=[];
-  const pigment=new THREE.Color();
+  const pigment=new THREE.Color(),roofSpill=new Map<number,number>();
   // Each patch meets its neighbour edge-to-edge. The ridge cap, seam paint,
   // glazing and flashings are part of the skin, with no superposed planes.
-  function strip(a:number,b:number,z0:number,y0:number,z1:number,y1:number,tone:string,underside=false){
+  function strip(a:number,b:number,z0:number,y0:number,z1:number,y1:number,tone:string,underside=false,glazed=false){
     if(b-a<.00001)return;
     const i=roofPoints.length/3;
     roofPoints.push(a,y0,z0,a,y1,z1,b,y1,z1,b,y0,z0);
+    // Sample the modeled glass and individual short sheet-metal bays. The
+    // long unsegmented trim must not interpolate shaft light along a whole wing.
+    if(!underside&&z1>z0&&b-a<.60)for(let j=i;j<i+4;j++){
+      const dx=Math.max(0,Math.abs(roofPoints[3*j]-towerX)-shaft);
+      const dz=Math.max(0,Math.abs(roofPoints[3*j+2]-towerZ)-shaft);
+      const fall=Math.max(0,1-(dx*dx+dz*dz)/.34);
+      const light=fall*fall*.22+(glazed?.095:0);
+      if(light>0)roofSpill.set(j,light);
+    }
     pigment.set(tone);
     for(let j=0;j<4;j++)roofColors.push(pigment.r,pigment.g,pigment.b);
     if(underside)roofIndices.push(i,i+2,i+1,i,i+3,i+2);
@@ -441,8 +458,8 @@ export function ferryHall(font:Font) {
       if(raised){
         const curb=high+(i===0?.036:.066),top=curb+(i===0?.035:.021);
         strip(a,b,ridge-cap,y0,ridge-cap,curb,'#798782');
-        strip(a,b,ridge-cap,curb,ridge,top,seam?'#a4ada1':i===0?'#879b97':'#949f96');
-        strip(a,b,ridge,top,ridge+cap,curb,seam?'#a4ada1':i===0?'#839694':'#929b93');
+        strip(a,b,ridge-cap,curb,ridge,top,seam?'#a4ada1':i===0?'#879b97':'#949f96',false,i===0&&!seam);
+        strip(a,b,ridge,top,ridge+cap,curb,seam?'#a4ada1':i===0?'#839694':'#929b93',false,i===0&&!seam);
         strip(a,b,ridge+cap,curb,ridge+cap,y1,'#72827e');
         for(const edge of [a,b]){
           if(!ranges.some(pair=>pair.some(v=>Math.abs(roofL+span*v-edge)<.00001)))continue;
@@ -501,6 +518,14 @@ export function ferryHall(font:Font) {
   skin.setIndex(roofIndices);skin.computeVertexNormals();skin.userData.paintVertices=true;
   const roof=mesh(skin,'#ffffff',0,0,0);roof.material=roof.material.clone();
   roof.material.vertexColors=true;roof.name='Ferry hall joined roof and portico';
+  // HLB locates the tower floods on the roof. The short return from the
+  // illuminated shaft touches the nearest roofing; bare outer pitches stay dark.
+  const roofNight=new Uint8Array(roofPoints.length);
+  for(const [index,warm] of roofSpill){
+    const k=index*3;
+    roofNight[k]=Math.round(warm*255);roofNight[k+1]=Math.round(warm*182);roofNight[k+2]=Math.round(warm*112);
+  }
+  skin.setAttribute('signLight',new THREE.Uint8BufferAttribute(roofNight,3,true));
   // The sign is split across two steel racks at either side of the clock tower.
   const waterfrontSign=new THREE.Group();waterfrontSign.name='PORT OF SAN FRANCISCO';
   const signZ=.193;
