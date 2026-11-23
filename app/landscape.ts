@@ -1,3 +1,4 @@
+import {howardGlassName} from './301-howard-front.ts';
 import {padelScreenName} from './park-padel.ts';
 import {fireboatStation,firehouseFloat} from './fireboat-station.ts';
 import {northWaterfrontGrade} from './streets.ts';
@@ -699,7 +700,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
   }
-  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -1054,6 +1055,10 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   const traffic=convoy.traffic;root.add(convoy.root);
   source.root.updateMatrixWorld(true);
   source.root.traverse(o=>{if(o instanceof THREE.Mesh&&o.material===source.coffeeMaterial&&variant==='street'){const copy=copyMesh(o);copy.matrix.copy(o.matrixWorld);copy.matrix.decompose(copy.position,copy.quaternion,copy.scale);root.add(copy);}});
+  if(variant==='street'){
+    const sourceGlass=source.root.getObjectByName(howardGlassName) as THREE.Mesh;
+    const glass=copyMesh(sourceGlass);sourceGlass.matrixWorld.decompose(glass.position,glass.quaternion,glass.scale);root.add(glass);
+  }
   // The plaza shares the fountain geometry while following its own pausable clock.
   if(variant==='plaza'){
     for(const name of ['Market granite and herringbone promenade','Halprin brick court',padelScreenName]){

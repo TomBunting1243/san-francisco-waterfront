@@ -1,3 +1,4 @@
+import {setPackedNormals} from './packed-normals.ts';
 import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {addFolsomPortal,folsomPavement} from './folsom-portal.ts';
 import {addRinconCurbEdge} from './rincon-curb-edge.ts';
@@ -64,7 +65,7 @@ class Tile {
     geo.setAttribute('position',new THREE.Float32BufferAttribute(this.positions,3));
     geo.setAttribute('color',new THREE.Float32BufferAttribute(this.colors,3));
     if(this.roadExposure.some(Boolean))geo.setAttribute('roadExposure',new THREE.Uint8BufferAttribute(this.roadExposure,1));
-    geo.setIndex(this.indices);geo.computeVertexNormals();
+    geo.setIndex(this.indices);setPackedNormals(geo);
     geo.userData.paintVertices=true;
     return geo;
   }

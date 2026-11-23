@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {howardPodiumId,howardOpenings,howardInterior,howardGlass} from './301-howard-front.ts';
 import records from '../public/data/surveyed-shopfronts.json' with {type:'json'};
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
 
@@ -10,9 +11,9 @@ const grade=.045;
 // Split only the original six wall vertices that correspond to the surveyed
 // street edge. All other faces, including rooftop contours, stay as authored.
 // Interpolating the original facadeGrid keeps upper windows in their own bays.
-function openWall(g:THREE.BufferGeometry,record:Record){
+function openWall(g:THREE.BufferGeometry,record:Pick<Record,'edge'|'center'|'width'|'head'>){
   const pos=g.getAttribute('position'),normal=g.getAttribute('normal');
-  if(g.index||!g.hasAttribute('facadeGrid'))return;
+  if(!g.hasAttribute('facadeGrid'))return;
   const [a,b]=record.edge,dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),tx=dx/len,tz=dz/len;
   const dl=record.center*len-record.width/2,dr=dl+record.width;
   if(dl<=0||dr>=len)return;
@@ -25,7 +26,7 @@ function openWall(g:THREE.BufferGeometry,record:Record){
       if(Math.abs(x*tz-z*tx)>.001||Math.min(Math.abs(d),Math.abs(d-len))>.001)break;
       matched++;ends[(d>len/2?1:0)+(h>.005?2:0)]=j;top=Math.max(h,top);
     }
-    if(matched!==6||ends.some(j=>j<0)||top<record.head+.02)continue;
+    if(matched!==6||ends.some(j=>j<0)||top<record.head+.004)continue;
     const nx=normal.getX(i),nz=normal.getZ(i),cuts=[[0,len,record.head,top],[0,dl,0,record.head],[dr,len,0,record.head],[dl,dr,0,grade]];
     const weights=cuts.flatMap(([l,r,bottom,head])=>[[l,bottom],[l,head],[r,head],[r,bottom]]);
     for(const [key,attribute] of Object.entries(g.attributes)){
@@ -41,7 +42,8 @@ function openWall(g:THREE.BufferGeometry,record:Record){
       });
       g.setAttribute(key,new THREE.BufferAttribute(values,size));
     }
-    const index=Array.from({length:pos.count},(_,j)=>j).filter(j=>j<i||j>=i+6);
+    const source=g.index?Array.from(g.index.array):Array.from({length:pos.count},(_,j)=>j);
+    const index=source.filter(j=>j<i||j>=i+6);
     for(let j=pos.count;j<pos.count+weights.length;j+=4){
       if(tz*nx-tx*nz>0)index.push(j,j+1,j+2,j,j+2,j+3);
       else index.push(j,j+2,j+1,j,j+3,j+2);
@@ -83,8 +85,19 @@ function interior(r:Record,frame:NonNullable<ReturnType<typeof openWall>>){
   return f;
 }
 
-/** Wrap the generic facade factory. Only the two matched ground sections are modified. */
+/** Intercept the matched ground section before baking it into the surrounding block. */
 export function surveyedShopfrontFactory(b:{id:number},mesh:Factory):Factory{
+  if(b.id===howardPodiumId)return (geometry,color,x,y,z)=>{
+    const shell=mesh(geometry,color,x,y,z);
+    if(x!==0||y!==0||z!==0)return shell;
+    const panes=new FacadePanels();
+    for(const opening of howardOpenings){
+      const frame=openWall(geometry,opening);
+      if(frame)mesh(howardInterior(opening,frame,panes),'#ffffff',0,0,0).name='301 Howard · '+opening.name;
+    }
+    if(panes.indices.length)shell.parent?.add(howardGlass(panes));
+    return shell;
+  };
   const record=fronts.get(b.id);
   if(!record)return mesh;
   let built=false;

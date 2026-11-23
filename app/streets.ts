@@ -5,13 +5,36 @@ import extensions from '../public/data/sightline-streets.json' with {type:'json'
 export {northWaterfrontGrade};
 import tracks from '../public/data/embarcadero-tracks.json' with {type:'json'};
 const segments=map.roads.filter(r=>r.name==='The Embarcadero').flatMap(r=>r.p.slice(1).map((b,i)=>({a:r.p[i],b}))).filter(s=>Math.abs(s.b[0]-s.a[0])>.01);
+// A station bucket retains the source order, including overlapping road
+// segments at junctions. Both travel directions share the same lookup.
+const stationSegments=new Map<number,typeof segments>();
+for(const segment of segments){
+  const first=Math.floor(Math.min(segment.a[0],segment.b[0]));
+  const last=Math.floor(Math.max(segment.a[0],segment.b[0]));
+  for(let station=first;station<=last;station++){
+    const bucket=stationSegments.get(station);
+    if(bucket)bucket.push(segment);
+    else stationSegments.set(station,[segment]);
+  }
+}
+export function streetPoses(x:number){
+  const local=stationSegments.get(Math.floor(x));
+  let choices=local?.filter(({a,b})=>x>=Math.min(a[0],b[0])&&x<=Math.max(a[0],b[0]));
+  if(!choices?.length){
+    const distance=({a,b}:typeof segments[number])=>Math.min(Math.abs(x-a[0]),Math.abs(x-b[0]));
+    choices=[segments.reduce((best,s)=>distance(s)<distance(best)?s:best)];
+  }
+  const positions=choices.map(({a,b})=>{
+    const t=Math.max(0,Math.min(1,(x-a[0])/(b[0]-a[0])));
+    return {z:a[1]+(b[1]-a[1])*t,slope:(b[1]-a[1])/(b[0]-a[0])};
+  }).sort((a,b)=>a.z-b.z);
+  const pose=(p:typeof positions[number],rotation:number)=>({x,z:p.z,heading:-Math.atan(p.slope)+rotation});
+  return [pose(positions[0],Math.PI),pose(positions[positions.length-1],0)] as const;
+}
+
 /** Sample the actual curved carriageways, retaining their mapped separation. */
 export function streetPose(x:number,direction=1){
-  let choices=segments.filter(s=>x>=Math.min(s.a[0],s.b[0])&&x<=Math.max(s.a[0],s.b[0]));
-  if(!choices.length)choices=[segments.reduce((best,s)=>Math.min(Math.abs(x-s.a[0]),Math.abs(x-s.b[0]))<Math.min(Math.abs(x-best.a[0]),Math.abs(x-best.b[0]))?s:best)];
-  const positions=choices.map(({a,b})=>{const t=Math.max(0,Math.min(1,(x-a[0])/(b[0]-a[0])));return {z:a[1]+(b[1]-a[1])*t,slope:(b[1]-a[1])/(b[0]-a[0])};}).sort((a,b)=>a.z-b.z);
-  const p=direction>0?positions[positions.length-1]:positions[0];
-  return {x,z:p.z,heading:-Math.atan(p.slope)+(direction>0?0:Math.PI)};
+  return streetPoses(x)[direction>0?1:0];
 }
 
 // Both directions follow mapped tram ways. Gauge is measured between the

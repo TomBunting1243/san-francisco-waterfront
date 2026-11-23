@@ -368,3 +368,20 @@ The [asset register](SURVEY-ASSETS.csv) counts one retained JPEG per photograph 
 | [Pier 22½ historic shore firehouse](https://commons.wikimedia.org/wiki/File:Pier_22.5,_January_2020.JPG) | Wikimedia Commons 85617550 | Pi.1415926535 | 2020-01-04 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | [N Judah train at Folsom station](https://commons.wikimedia.org/wiki/File:SF_Muni_N_Judah_train_at_The_Embarcadero_and_Folsom_station_January_2026_2.jpg) | Wikimedia Commons 185376097 | 4300streetcar | 2026-01-29 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | [Pier 14 deck lighting at night](https://commons.wikimedia.org/wiki/File:San_Francisco_as_seen_from_Pier_14_(Unsplash).jpg) | Wikimedia Commons 61712340 | Jan Senderek | 2017-01-19 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/deed.en) |
+
+## Street-level comparisons, November 2026
+
+The links reopen the viewpoints inspected for a passenger-route and waterfront spot check. Google identifies the capture month. The Apple viewer did not display a capture date. At Pier 29, Maps selected a contributor’s sidewalk panorama when given a point in the traffic lane.
+
+| Location | Provider | Capture | Detail visible |
+| --- | --- | --- | --- |
+| [Beale café corner, 2026](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.7898003%2C-122.3941659&heading=200&pitch=0&fov=80&pano=Eq4vLqWIuvL5Cs7WIDORdA) | Google Street View | 2026-09 | Glazed double door, recessed shadow beneath the podium, window logo, street tree and chalkboard. |
+| [Beale café corner, 2021](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.7897857%2C-122.3942029&heading=200&pitch=0&fov=80&pano=Z8_nlEMdoaIw38kpkj8vtQ) | Google Street View | 2021-06 | Earlier café frontage and street trees at substantially the same corner. |
+| [Upper deck toward San Francisco](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.7989009%2C-122.3772000&heading=224&pitch=0&fov=80&pano=1fsygZcNJOqwQ948ttNC8Q) | Google Street View | 2026-09 | Skyline on the passenger side, narrow walkway behind the right edge line, steel barrier face, cable hangers and overhead sign gantry. |
+| [Fremont exit ramp](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.7852339%2C-122.3941931&heading=278&pitch=0&fov=80&pano=ul5YJ5nycZqqtFgaKK8fZA) | Google Street View | 2026-09 | White right edge line, curving parapet and one-arm standards; large 333 frontage on the left and stair down the hillside on the right. |
+| [Ferry Building from the north](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.7959411%2C-122.3945597&heading=128&pitch=0&fov=80&pano=yTvNAYwZvw3AdLievNA-Uw) | Google Street View | 2026-09 | Curbside outdoor tables, protected green cycle strip, bollards, bicycle racks and a tree-lined median. |
+| [Pier 29 frontage](https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=37.8052307%2C-122.4032212&heading=65&pitch=0&fov=80&pano=CIHM0ogKEICAgICCrqrSPQ) | Google Street View · Mathew Trent | 2020-08 | Contributor panorama on sidewalk, not in the car lane. Rolling shutter, drainage seam, green cycle marking and twin-arm lights. Heading is viewer setting, not surveyed optical north. |
+| [301 Howard café glazing](https://maps.apple.com/look-around?coordinate=37.7896200,-122.3943100) | Apple Look Around | Unknown | Native viewer, looking south per compass. Full-height reflective window, narrow mullion, café window graphic and small round tables behind glass. |
+| [Ferry Building, landward entrance](https://maps.apple.com/look-around?place-id=IBE1F65094A7A13B1) | Apple Look Around | Unknown | Native viewer looking east per compass. Upper arched glazing over the three central entries, striped plaza paving, pedestrian railings and pendant streetlights. |
+
+The 301 Howard lobby study also used a [photograph by David Wakely](https://static.wixstatic.com/media/28ce1d_af6f6a6982fe46a3ba17f000ad76a17c~mv2.jpg) published by [Huntsman Architectural Group](https://www.huntsmanag.com/portfolio/301-howard-street/4). The measured file appears in the survey register.

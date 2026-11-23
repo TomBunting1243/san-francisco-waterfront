@@ -146,7 +146,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
-  'PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
+  'HUNTSMAN-WAKELY':'static.wixstatic.com','PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
   'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};
 const rideCredits=[...files.get('references/RESEARCH-SOURCES.md').toString().matchAll(
   /\| (KartaView|Wikimedia Commons) (\d+) \| [^|]+ \| \d{4}-\d{2}-\d{2} \| \[CC[^\]]*\]\(https:\/\/creativecommons\.org\//g
