@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
-import {ferryWalkLens} from './ferry-walk-lights.ts';
 import {floatingFirehouse} from './fireboat-house.ts';
 import type {buildingCharacter} from './building-character.ts';
 import {footprintGeometry,sfMap} from './sf-map.ts';
@@ -17,6 +16,33 @@ const historic=sfMap.buildings.find(b=>b.id===104599984)!;
 export const firehouseFloat=sfMap.piers.find(p=>p.closed&&p.p.some(([x,z])=>x===-44.787&&z===4.9))!;
 const foot=.3048*.06,shore=harborDatum.pierDeck,floatTop=waterSurface.level+5*foot;
 const steel='#909d9a',dark='#495c5c',timber='#796f5c';
+
+// SKA project image 44 shows four paired pools on the vehicle gangway.
+// Store incident light on its walking surface; the existing tidal vertex
+// weights then keep each patch by its rail from low through high water.
+function rampWithDeckLights(width:number,length:number,stations:number[]){
+  const shell=new THREE.BoxGeometry(width,.021,length);
+  const xyz=Array.from(shell.attributes.position.array),normal=Array.from(shell.attributes.normal.array);
+  const indices=Array.from(shell.index!.array).filter((_,i)=>i<12||i>=18); // remove the +Y face
+  const rgb=Array(xyz.length).fill(0);
+  const xFractions=[-.5,-.44,-.36,-.24,0,.24,.36,.44,.5];
+  const distances=[0,length,...stations.flatMap(l=>[-.18,-.095,-.035,0,.035,.095,.18].map(d=>l+d))]
+    .filter(z=>z>=0&&z<=length).sort((a,b)=>a-b);
+  for(let row=0;row<distances.length;row++)for(let col=0;col<xFractions.length;col++){
+    const z=distances[row],x=xFractions[col]*width,i=xyz.length/3;
+    xyz.push(x,.0105,z-length/2);normal.push(0,1,0);
+    const dx=(Math.abs(x)-(width/2-.027))/.085;
+    const dz=Math.min(...stations.map(s=>Math.abs(z-s)))/.146;
+    const intensity=.83*Math.max(0,1-dx*dx-dz*dz)**2;
+    rgb.push(Math.round(255*intensity),Math.round(206*intensity),Math.round(146*intensity));
+    if(row&&col){const prev=i-xFractions.length;indices.push(prev-1,i-1,i,prev-1,i,prev);}
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setIndex(indices);
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(xyz,3));
+  geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normal,3));
+  geometry.setAttribute('signLight',new THREE.Uint8BufferAttribute(rgb,3,true));
+  shell.dispose();return geometry;
+}
 
 export function fireboatStation(b:Building,font:Font,mesh:MeshFactory){
   const root=new THREE.Group(),floating=new THREE.Group();
@@ -47,16 +73,19 @@ export function fireboatStation(b:Building,font:Font,mesh:MeshFactory){
     const dx=bay[0]-land[0],dz=bay[1]-land[1],run=Math.hypot(dx,dz);
     group.position.set(land[0],shore,land[1]);group.rotation.y=Math.atan2(dx,dz);
     const dy=floatTop-shore,length=Math.hypot(run,dy);
-    const deck=box(width,.021,length,0,dy/2-.008,run/2,'#b6b8aa',group);
+    const posts=Math.ceil(run/.18),lampStations:number[]=[];
+    if(width>.3)for(let i=1;i<=posts;i+=3)lampStations.push(length*i/posts);
+    const deck=lampStations.length?mesh(rampWithDeckLights(width,length,lampStations),'#b6b8aa',0,dy/2-.008,run/2,group)
+      :box(width,.021,length,0,dy/2-.008,run/2,'#b6b8aa',group);
     deck.rotation.x=-Math.atan2(dy,run);deck.name=name+' deck';
     for(const side of [-1,1]){
-      const x=side*(width/2-.006),posts=Math.ceil(run/.18);
+      const x=side*(width/2-.006);
       for(let i=0;i<=posts;i++){
         const t=i/posts;box(.008,.068,.008,x,dy*t+.035,run*t,steel,group);
         if(width>.3&&i%3===1){
           box(.014,.011,.025,x-side*.005,dy*t+.055,run*t,dark,group);
           const lens=box(.009,.003,.019,x-side*.009,dy*t+.048,run*t,'#d7dad0',group);
-          ferryWalkLens(lens,'Station 35 ramp guardrail downlight',.36,.58);
+          lens.name='Station 35 ramp guardrail downlight';lens.userData.signLight=[1,.84,.64];
         }
       }
       for(const y of [.036,.069]){

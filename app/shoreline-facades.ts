@@ -5,8 +5,8 @@ import {center,footprintGeometry} from './sf-map.ts';
 import {insideBuilding} from './building-character.ts';
 
 type Building={id:number;name:string;p:number[][];h:number;minH?:number;part?:boolean;parent?:number;material?:string};
-type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
-type Opening={x:number;bottom:number;w:number;h:number;rise?:number;door?:boolean};
+type Pane={x:number;y:number;z:number;ry:number;w:number;h:number;nightMinimum?:number};
+type Opening={x:number;bottom:number;w:number;h:number;rise?:number;door?:boolean;nightMinimum?:number};
 
 export const hillsParts=new Set([-157,944986473]);
 const streetProfiles=new Map([
@@ -67,7 +67,10 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
       const {x,bottom,w,h,rise=0,door}=op,spring=h-rise;
       if(!through){
         const pane=new THREE.Shape();contour(pane,op);
-        mesh(extrusion(pane,.006),door?'#526361':glass,0,0,-depth-.017,g).name='Recessed sash glazing';
+        const sash=mesh(extrusion(pane,.006),door?'#526361':glass,0,0,-depth-.017,g);
+        sash.name='Recessed sash glazing';
+        // The curved portion above the instanced rectangular light is real sash.
+        if(!plant&&op.nightMinimum)sash.userData.signLight=[.50,.39,.21];
         const transom=bottom+spring*(door?.74:.45);
         box(w-.003,.012,.014,x,transom,-depth+.001,frame,g);
         for(const split of door?[-.33,0,.33]:[-.25,0,.25]){
@@ -79,7 +82,7 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
         }
         g.updateWorldMatrix(true,false);
         const p=g.localToWorld(new THREE.Vector3(x,bottom+spring*.50,-depth-.010));
-        windows.push({x:p.x,y:p.y,z:p.z,ry:g.rotation.y,w:w*.93,h:spring*.88});
+        windows.push({x:p.x,y:p.y,z:p.z,ry:g.rotation.y,w:w*.93,h:spring*.88,...(op.nightMinimum?{nightMinimum:op.nightMinimum}:{})});
       }
       if(!through&&!(door&&g.name==='Palomino terrace doorway'))box(w+.044,.023,.067,x,bottom-.005,.016,courses,g);
       if(rise&&hills){
@@ -91,7 +94,8 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
           block.lineTo(x+outside*Math.cos(start),crown+outerRise*Math.sin(start));
           block.lineTo(x+outside*Math.cos(end),crown+outerRise*Math.sin(end));
           block.lineTo(x+inside*Math.cos(end),crown+rise*Math.sin(end));block.closePath();
-          mesh(extrusion(block,.022),[courses,'#a8836b','#b18a70'][joint%3],0,0,.004,g);
+          const stone=mesh(extrusion(block,.022),[courses,'#a8836b','#b18a70'][joint%3],0,0,.004,g);
+          if(!plant&&op.nightMinimum)stone.userData.signLight=[.21,.17,.09];
         }
       }
     }
@@ -116,7 +120,10 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
         if(exposed(pos,spacing*.65,.31))entries.push({x:pos,w:spacing*.68,bottom:.098,h:.38,rise:.114,door:bay===2||bay===4});
         for(const split of [-.23,.23])for(let floor=0;floor<5;floor++){
           const fx=pos+split*spacing,bottom=.528+floor*.166,w=spacing*.295;
-          if(exposed(fx,w,bottom+.08))entries.push({x:fx,w,bottom,h:.127,rise:floor===4?.039:undefined});
+          // Angritt's night photograph and Jim Nix's blue-hour view show paired
+          // occupied rooms under the sign, with gaps between their groups.
+          const litPair=index===0&&(floor===2&&(bay===0||bay===1||bay===4)||floor===3&&(bay===1||bay===3));
+          if(exposed(fx,w,bottom+.08))entries.push({x:fx,w,bottom,h:.127,rise:floor===4?.039:undefined,nightMinimum:litPair?.73:undefined});
         }
         box(.04,.845,.033,pos-spacing/2+.028,1.0,.018,'#a4816e',g);
       }
@@ -126,7 +133,7 @@ export function shorelineFacade(b:Building,neighbors:Building[],color:string){
       const bays=length>1.3?4:length>.61?2:0,spacing=length/Math.max(1,bays);
       for(let slot=0;slot<bays;slot++){
         const x=-length/2+(slot+.5)*spacing,w=spacing*.54,y=h-.35;
-        if(exposed(x,w,y))entries.push({x,w,bottom:y,h:.241,rise:.056});
+        if(exposed(x,w,y))entries.push({x,w,bottom:y,h:.241,rise:.056,nightMinimum:plant?undefined:.92});
         const spring=Math.max(base,1.43);
         box(.034,h-spring,.043,x+spacing*.4,(h+spring)/2,.016,courses,g);
       }

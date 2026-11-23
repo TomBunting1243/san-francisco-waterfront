@@ -6,6 +6,10 @@ type MeshFactory=(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,par
 type WindowBand=readonly [number,number,number,number,number,number?];
 const metal='#b9bdba',joint='#929d9b',glass='#547073',frame='#414e50',base='#50595b';
 const foot=.3048*.06;
+// Room-to-room values are interpreted from the visible patches in the photographs.
+const crewBays=[.47,.67,.30,.81,.75,.59,.28,.76,.87,.62,.44];
+const shoreDoors=[.51,.67,.89,.81,.73];
+const shoreClerestory=[.42,.56,.74,.81,.66,.52,.57,.72,.75,.63,.44];
 
 // Port plan, sheets 12 and 15: the living quarters and observation deck face
 // the bay. Abraham's completed exterior photographs resolve the glazing,
@@ -32,9 +36,14 @@ export function floatingFirehouse(p:number[][],deckY:number,parent:THREE.Group,m
     if(!points){points=[];byColor.set(color,points);}
     points.push(left,bottom,depth,right,bottom,depth,right,top,depth,left,top,depth);
   }
+  // The SF Public Works offshore photograph (Russell Abraham) and the
+  // architect's shore approach image 44 resolve the normally lit end rooms.
+  // https://sfpublicworks.org/fireboat-station-35
+  // https://skarc.com/projects/san-francisco-fireboat-station-35/
+  const roomLight=new Map<THREE.Group,number[]>();
   // Bands use fractions of each elevation, left to right as seen from outside.
   // Masonry, glazing and frame grids partition the face at their true heights.
-  function elevation(g:THREE.Group,w:number,low:number,high:number,bands:readonly WindowBand[],setback=0){
+  function elevation(g:THREE.Group,w:number,low:number,high:number,bands:readonly WindowBand[],setback=0,room?:'shore'|'crew'){
     const ribs:number[]=[];
     for(let y=.18;y<high-.004;y+=.035)if(y>=low){ribs.push(y,y+.002);}
     const sections=[...new Set([low,high,...(low<.152&&.152<high?[.152]:[]),...ribs,...bands.flatMap(b=>[b[2],b[3]])])].sort((a,b)=>a-b);
@@ -55,6 +64,25 @@ export function floatingFirehouse(p:number[][],deckY:number,parent:THREE.Group,m
       for(let j=0;j<cols;j++)for(let k=0;k<rows;k++){
         const x=left+(j+.5)*step,cy=y+(k+.5)*row,iw=step-.008,ih=row-.007;
         patch(g,x-iw/2,x+iw/2,cy-ih/2,cy+ih/2,setback+.002,glass);
+        if(room){
+          let channels=roomLight.get(g);
+          if(!channels){
+            // The offshore wall already contains its original lower glazing.
+            const previous=(faces.get(g)!.get(glass)!.length-12);
+            channels=Array(previous).fill(0);roomLight.set(g,channels);
+          }
+          const clerestory=room==='shore'&&y>.28;
+          const bay=room==='crew'?crewBays:clerestory?shoreClerestory:shoreDoors;
+          // Cooler corridor glass behind the louvers; retain a shaded sill
+          // and more variation in the inhabited lower half of the bay room.
+          const intensity=bay[j]*(k===0?(room==='crew'?.60:.84):1);
+          const green=clerestory?.94:.83,blue=clerestory?.81:.60;
+          for(let v=0;v<4;v++){
+            const value=Math.round(255*intensity*(v<2&&k===0?.79:1));
+            channels.push(value,Math.round(value*green),Math.round(value*blue));
+          }
+          continue;
+        }
         // The city glass shader uses polygon offset. Register its instances to
         // individual panes so a long bright rectangle cannot erase its muntins.
         if(rows===1||y>=.28||cols<=3){
@@ -101,14 +129,14 @@ export function floatingFirehouse(p:number[][],deckY:number,parent:THREE.Group,m
     for(const station of stations)apronLight(side,station*length);
   const shore=face(0,0,Math.PI);
   apronLight(shore,-width*.445);
-  elevation(shore,width,0,height,[[.047,.95,.374,.557,11,2],[.46,.95,.008,.236,5,2]]);
+  elevation(shore,width,0,height,[[.047,.95,.374,.557,11,2],[.46,.95,.008,.236,5,2]],0,'shore');
   for(let i=0;i<11;i++)patch(shore,-width*.45,width*.45,.245+i*.026,.251+i*.026,.008,frame);
   for(let i=0;i<8;i++)patch(shore,-width*.45,-width*.055,.018+i*.025,.024+i*.025,.008,frame);
   const water=face(0,length,0),stepBack=.112;
   for(const side of [-1,1])apronLight(water,width*.478*side);
   elevation(water,width,0,.280,[[.055,.28,.011,.252,2,3],[.29,.948,.008,.254,7,3]]);
   for(let i=0;i<8;i++)patch(water,-width*.21,width*.45,.023+i*.028,.031+i*.028,.007,joint);
-  elevation(water,width,.28,height,[[.047,.953,.30,.565,11,2]],-stepBack);
+  elevation(water,width,.28,height,[[.047,.953,.30,.565,11,2]],-stepBack,'crew');
   // The lateral returns and slab form the recessed bay-end balcony.
   for(const side of [-1,1]){
     const x=side*width*.5;
@@ -148,6 +176,19 @@ export function floatingFirehouse(p:number[][],deckY:number,parent:THREE.Group,m
     const geometry=new THREE.BufferGeometry(),indices:number[]=[];
     for(let i=0;i<points.length/3;i+=4)indices.push(i,i+1,i+2,i,i+2,i+3);
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(points,3));
+    const emission=roomLight.get(g);
+    if(color===glass&&emission){
+      geometry.setAttribute('signLight',new THREE.Uint8BufferAttribute(emission,3,true));
+      // Recover the cool daylight value of the retired upper glass overlay.
+      // The lower apparatus doors retain their original, darker pigment.
+      const raw=new THREE.Color(glass),sky=new THREE.Color('#8698a7'),day:number[]=[];
+      for(let i=0;i<points.length;i+=3){
+        if(points[i+1]>.285)day.push(sky.r/raw.r,sky.g/raw.g,sky.b/raw.b);
+        else day.push(1,1,1);
+      }
+      geometry.setAttribute('color',new THREE.Float32BufferAttribute(day,3));
+      geometry.userData.paintVertices=true;
+    }
     geometry.setIndex(indices);geometry.computeVertexNormals();
     mesh(geometry,color,0,0,0,g);
   }

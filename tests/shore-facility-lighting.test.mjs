@@ -12,6 +12,8 @@ import {fireboatStation} from '../app/fireboat-station.ts';
 import {buildFerryTerminal} from '../app/ferry-terminal.ts';
 import {collectFerryWalkPools} from '../app/ferry-walk-lights.ts';
 import {createStreetField,collectStreetGlobes} from '../app/street-illumination.ts';
+import {bakeRigidChunk} from '../app/city-blocks.ts';
+import {createTideUpdater} from '../app/tidal-berths.ts';
 import {seawallAt} from '../app/survey-shore.ts';
 
 const font=new FontLoader().parse(fontData),material=new THREE.MeshStandardMaterial();
@@ -75,12 +77,47 @@ test('Station 35 everyday safety lights stay on the floating house and the broad
   const station=fireboatStation(sfMap.buildings.find(b=>b.name==='Fireboat Station 35'),font,mesh);
   const house=station.root.getObjectByName('Floating firehouse'),ramp=station.root.getObjectByName('Station 35 broad access ramp');
   lenses(house,'Station 35 shielded apron light',11);
-  const rampLenses=lenses(ramp,'Station 35 ramp guardrail downlight',8);
+  const rampLenses=ramp.getObjectsByProperty('name','Station 35 ramp guardrail downlight');
+  assert.equal(rampLenses.length,8);
   const field=fieldFor(station.root);
   for(const lamp of rampLenses){
     assert.ok(Math.abs(lamp.position.x)>.13&&Math.abs(lamp.position.x)<.17);
-    const p=lamp.getWorldPosition(new THREE.Vector3());
-    assert.ok(value(field,p.x,p.z)>100);
+    assert.ok(lamp.userData.signLight&&!lamp.userData.ferryWalkPool,'attached deck owns the spill');
+  }
+  station.root.updateMatrixWorld(true);
+  const deck=ramp.getObjectByName('Station 35 broad access ramp deck');
+  const chunk=bakeRigidChunk('Station 35 ramp',[deck],material),geo=chunk.geometry;
+  const tide=createTideUpdater([chunk]),light=geo.getAttribute('signLight'),pos=geo.getAttribute('position');
+  const local=deck.geometry.getAttribute('position');
+  for(const i of Array.from({length:local.count},(_,i)=>i).filter(i=>Math.abs(local.getX(i))<.01))assert.equal(light.getX(i),0);
+  const rooms=[];
+  house.traverse(m=>{if(m.isMesh&&m.geometry.hasAttribute('signLight'))rooms.push(m);});
+  assert.equal(rooms.length,2,'one regular glass batch per end elevation');
+  const glassChunk=bakeRigidChunk('Station 35 end rooms',rooms,material);
+  const glass=glassChunk.geometry,glassPos=glass.getAttribute('position'),glassTint=glass.getAttribute('signLight');
+  const glassRest=glassPos.array.slice(),glassPaint=glassTint.array.slice();
+  assert.equal(Array.from({length:glassTint.count},(_,i)=>glassTint.getX(i)).filter(x=>x>0).length,54*4);
+  const floatTide=createTideUpdater([glassChunk]);
+  for(const offset of [-.09,.09,0]){
+    floatTide(offset);
+    for(let i=0;i<glassPos.count;i++)assert.ok(Math.abs(glassPos.getY(i)-glassRest[i*3+1]-offset)<1e-6);
+    assert.deepEqual(glassTint.array,glassPaint);
+  }
+  const hot=new Set();
+  for(let i=0;i<pos.count;i++)if(light.getX(i)>.80){
+    hot.add(local.getZ(i).toFixed(3)+':'+Math.sign(local.getX(i)));
+  }
+  assert.equal(hot.size,8,'eight distinct edge peaks');
+  const rest=pos.array.slice(),tint=light.array.slice();
+  const {fixed,floating}=ramp.userData.tideAttachment;
+  const dx=floating[0]-fixed[0],dz=floating[1]-fixed[1],run=dx*dx+dz*dz;
+  for(const offset of [-.09,.09,0]){
+    tide(offset);
+    for(let i=0;i<pos.count;i++){
+      const weight=Math.max(0,Math.min(1,((pos.getX(i)-fixed[0])*dx+(pos.getZ(i)-fixed[1])*dz)/run));
+      assert.ok(Math.abs(pos.getY(i)-rest[i*3+1]-offset*weight)<1e-6);
+    }
+    assert.deepEqual(light.array,tint);
   }
   assert.equal(value(field,-46.9,4.0),0);
   field.dispose();

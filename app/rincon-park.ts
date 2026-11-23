@@ -42,22 +42,121 @@ export function knollHeight(x:number,z:number){
   }
   return knollBase;
 }
+// The night photograph shows a bright grazing highlight on the near limb and
+// separate warm pools in the grass. Fixture positions and throw are inferred.
+// https://intentionallylost.com/photo-collections/cupids-span-at-night/
+const [artX,artZ]=rinconPoint(458,190),artY=knollHeight(artX,artZ),azimuth=-.295;
+function fromSculpture(x:number,y:number,z:number){
+  return new THREE.Vector3(artX+x*Math.cos(azimuth)+z*Math.sin(azimuth),artY+y,
+    artZ-x*Math.sin(azimuth)+z*Math.cos(azimuth));
+}
+function uplighter(x:number,z:number,target:Vertex,strength:number,radius:number){
+  const origin=fromSculpture(x,0,z);origin.y=knollHeight(origin.x,origin.z)+.002;
+  return {origin,aim:fromSculpture(...target).sub(origin).normalize(),strength,radius};
+}
+const parkLights=[
+  uplighter(-.41,-.29,[-.49,.195,-.06],2.45,.19),
+  uplighter(-.94,-.17,[-.91,.27,-.05],2.30,.22),
+  uplighter(-.09,-.41,[-.11,1.03,.03],.62,.19),
+];
+function grassLight(x:number,z:number){
+  let light=0;
+  for(const {origin,radius} of parkLights){
+    const d=((x-origin.x)/radius)**2+((z-origin.z)/(radius*.78))**2;
+    if(d<1)light+=.85*(1-d)**2;
+  }
+  return light;
+}
+const incident=new THREE.Vector3();
+function sculptureLight(point:THREE.Vector3,normal:THREE.Vector3){
+  let light=0;
+  for(const {origin,aim,strength} of parkLights){
+    incident.subVectors(point,origin);
+    const d=incident.length();if(d<.001)continue;
+    incident.multiplyScalar(1/d);
+    const beam=THREE.MathUtils.smoothstep(incident.dot(aim),.68,.985);
+    const incidence=Math.max(0,-incident.dot(normal));
+    light+=strength*beam*(.08+.92*incidence)/(1+.78*d*d);
+  }
+  return light;
+}
 export function rinconKnoll(){
-  const positions:number[]=[],colors:number[]=[];
-  const turfTone=new THREE.Color('#829b61'),crestTone=new THREE.Color('#b9a877'),color=new THREE.Color();
+  const positions:number[]=[],colors:number[]=[],night:number[]=[],indices:number[]=[];
+  const turfTone=new THREE.Color('#829b61'),crestTone=new THREE.Color('#b9a877');
   for(const tri of turf){
-    for(const [x,y,z] of tri){
-      // Pale worn grass along the crest in the 2024 8 cm ortho, concentrated
-      // around the three sculpture penetrations. The bayside toe stays green.
+    const pigments=tri.map(([x,,z])=>{
       const u=(x+42)*48-456,v=(z+5)*48-187-u*.22;
       const wear=1-THREE.MathUtils.smoothstep(Math.hypot(u/115,v/25),.48,1.1);
-      positions.push(x,y,z);color.copy(turfTone).lerp(crestTone,wear);colors.push(color.r,color.g,color.b);
+      return turfTone.clone().lerp(crestTone,wear);
+    });
+    const points=tri.map(([x,y,z])=>new THREE.Vector3(x,y,z));
+    const local:number[]=[];
+    function addVertex(point:THREE.Vector3,color:THREE.Color){
+      const id=positions.length/3,light=grassLight(point.x,point.z);
+      positions.push(point.x,point.y,point.z);colors.push(color.r,color.g,color.b);
+      night.push(Math.round(255*color.r*light),Math.round(211*color.g*light),Math.round(133*color.b*light));
+      return id;
     }
+    for(let i=0;i<3;i++)local.push(addVertex(points[i],pigments[i]));
+    // Split only where the original surveyed triangle meets a light's footprint.
+    // The new vertices stay on that plane and interpolate its original day colors.
+    function split(a:number,b:number,c:number){
+      const pa=points[a],pb=points[b],pc=points[c];
+      const xmin=Math.min(pa.x,pb.x,pc.x),xmax=Math.max(pa.x,pb.x,pc.x);
+      const zmin=Math.min(pa.z,pb.z,pc.z),zmax=Math.max(pa.z,pb.z,pc.z);
+      const near=parkLights.some(({origin,radius})=>origin.x+radius>xmin&&origin.x-radius<xmax&&origin.z+radius>zmin&&origin.z-radius<zmax);
+      const ab=pa.distanceToSquared(pb),bc=pb.distanceToSquared(pc),ca=pc.distanceToSquared(pa);
+      if(!near||Math.max(ab,bc,ca)<.084**2){indices.push(local[a],local[b],local[c]);return;}
+      if(bc>=ab&&bc>=ca)[a,b,c]=[b,c,a];else if(ca>=ab)[a,b,c]=[c,a,b];
+      const mid=points.length;
+      points.push(points[a].clone().lerp(points[b],.5));pigments.push(pigments[a].clone().lerp(pigments[b],.5));
+      local.push(addVertex(points[mid],pigments[mid]));
+      split(a,mid,c);split(mid,b,c);
+    }
+    split(0,1,2);
   }
   const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);
   geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.userData.paintVertices=true;
+  geo.setAttribute('signLight',new THREE.Uint8BufferAttribute(night,3,true));
   geo.computeVertexNormals();return geo;
+}
+
+// Grass bunches visible at ground level in the night study. Place the roots
+// on the surveyed crest and leave clear soil around the recessed optics.
+export function rinconGrass(){
+  const pos:number[]=[],rgb:number[]=[],night:number[]=[],index:number[]=[];
+  let seed=3521;
+  const random=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
+  const olive=new THREE.Color('#687744'),straw=new THREE.Color('#aa985d'),blade=new THREE.Color();
+  for(let tuft=0;tuft<490;tuft++){
+    const x=artX+(random()-.5)*3.7,z=artZ+(random()-.47)*1.46;
+    const h=knollHeight(x,z);
+    if(h<knollBase+.06||parkLights.some(lamp=>Math.hypot(x-lamp.origin.x,z-lamp.origin.z)<.032))continue;
+    // Thin the planting across the worn crest around the sculpture penetrations.
+    const trail=Math.abs((z-artZ)-(x-artX)*.27);
+    if(trail<.17&&random()<.75)continue;
+    const size=.014+.022*random(),hue=random(),light=grassLight(x,z);
+    for(let leaf=0;leaf<5;leaf++){
+      const angle=2*Math.PI*(leaf+random()*.6)/5,dx=Math.cos(angle),dz=Math.sin(angle);
+      const rise=size*(.5+.60*random()),spread=rise*(.58+random()*.96),width=.0017+.0012*random();
+      const bx=x+dx*.002,bz=z+dz*.002,k=pos.length/3;
+      const mx=bx+dx*spread*.38,mz=bz+dz*spread*.38;
+      // A folded grass blade bends outward above its sheath.
+      pos.push(bx-dz*width,h-.001,bz+dx*width,bx+dz*width,h-.001,bz-dx*width,
+        mx-dz*width*.57,h+rise*.76,mz+dx*width*.57,mx+dx*.0014,h+rise*.80,mz+dz*.0014,
+        mx+dz*width*.57,h+rise*.76,mz-dx*width*.57,bx+dx*spread,h+rise,bz+dz*spread);
+      blade.copy(olive).lerp(straw,.60*hue+.22*random());
+      for(const value of [.62,.65,.91,1.04,.83,1.14]){
+        rgb.push(blade.r*value,blade.g*value,blade.b*value);
+        night.push(Math.round(255*blade.r*light*value),Math.round(214*blade.g*light*value),Math.round(136*blade.b*light*value));
+      }
+      index.push(k,k+2,k+3,k,k+3,k+1,k+1,k+3,k+4,k+2,k+5,k+3,k+3,k+5,k+4);
+    }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(rgb,3));g.userData.paintVertices=true;
+  g.setAttribute('signLight',new THREE.Uint8BufferAttribute(night,3,true));g.setIndex(index);g.computeVertexNormals();return g;
 }
 
 // Kreysler's installed views show the lower arc doubling back on itself, a
@@ -76,8 +175,8 @@ export function cupidsSpan(){
     if(!m){m=new THREE.MeshStandardMaterial({color,roughness:.60});palette.set(color,m);}
     const mesh=new THREE.Mesh(g,m);mesh.name=name;sculpture.add(mesh);return mesh;
   }
-  function rod(name:string,a:THREE.Vector3,b:THREE.Vector3,r:number,color:string){
-    const d=b.clone().sub(a),m=solid(name,new THREE.CylinderGeometry(r,r,d.length(),14),color);
+  function rod(name:string,a:THREE.Vector3,b:THREE.Vector3,r:number,color:string,segments=1){
+    const d=b.clone().sub(a),m=solid(name,new THREE.CylinderGeometry(r,r,d.length(),14,segments),color);
     m.position.copy(a).lerp(b,.5);m.quaternion.setFromUnitVectors(v(0,1),d.normalize());return m;
   }
   function limb(name:string,stations:THREE.Vector3[],height:number,depth:number){
@@ -95,7 +194,7 @@ export function cupidsSpan(){
     }
     for(let j=1;j<7;j++)indices.push(288,288+j,288+j+1);
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));g.setIndex(indices);g.computeVertexNormals();
-    solid(name,g,'#d6a04d');
+    const cast=solid(name,g,'#d6a04d');cast.userData.uplight=sculptureLight;cast.userData.uplightTint=[1.15,.82];
     return curve;
   }
   const low=limb('Low returning bow limb',[v(-.085,-.10,-.060),v(-.32,.12,-.063),v(-.72,.255,-.055),
@@ -108,7 +207,8 @@ export function cupidsSpan(){
   solid('Buried bow grip',new THREE.TubeGeometry(grip,12,.046,8,false),'#d6a04d');
   const base=v(.34,-.105,-.116),tip=v(-.14,1.132,.060);
   const axis=tip.clone().sub(base).normalize(),nock=base.clone().lerp(tip,.908);
-  rod('Continuous stainless steel shaft',base,tip,.027,'#a7b2b2');
+  const shaft=rod('Continuous stainless steel shaft',base,tip,.027,'#a7b2b2',10);
+  shaft.userData.uplight=sculptureLight;
   rod('Low tension cable',low.getPoint(.985),nock,.0066,'#494e4b');
   rod('High tension cable',high.getPoint(.985),nock,.0066,'#494e4b');
   // Fan the three molded vanes around the *same* inclined shaft as the nock.
@@ -138,9 +238,24 @@ export function cupidsSpan(){
     const offset=pts.length/3;
     for(let j=0;j<idx.length;j+=3)twoSides.push(offset+idx[j],offset+idx[j+2],offset+idx[j+1]);
     geometry.setIndex(twoSides);geometry.computeVertexNormals();geometry.userData.paintVertices=true;
-    const feather=solid('Ribbed red fletching',geometry,'#ffffff');feather.material.vertexColors=true;
+    const feather=solid('Ribbed red fletching',geometry,'#ffffff');feather.material.vertexColors=true;feather.userData.uplight=sculptureLight;
   }
-  const [x,z]=rinconPoint(458,190);
-  sculpture.position.set(x,knollHeight(x,z),z);sculpture.rotation.y=-.295;
+  sculpture.position.set(artX,artY,artZ);sculpture.rotation.y=azimuth;
   return sculpture;
+}
+
+export function rinconUplights(){
+  const fixtures=new THREE.Group();fixtures.name='Rincon lawn uplights';
+  const bezel=new THREE.CylinderGeometry(.010,.011,.002,10),metal=new THREE.MeshStandardMaterial({color:'#5b5b4e'});
+  const optic=new THREE.SphereGeometry(.0076,10,4,0,2*Math.PI,0,Math.PI/2).scale(1,.35,1);
+  const glass=new THREE.MeshStandardMaterial({color:'#b5b2a0'}),up=new THREE.Vector3(0,1,0);
+  for(const {origin,aim} of parkLights){
+    const axis=aim.clone().lerp(up,.55).normalize();
+    const housing=new THREE.Mesh(bezel,metal);housing.name='Lawn uplight bezel';housing.position.copy(origin);
+    housing.quaternion.setFromUnitVectors(up,axis);
+    const lens=new THREE.Mesh(optic,glass);lens.name='Lawn uplight lens';lens.position.copy(origin).addScaledVector(axis,.0011);
+    lens.quaternion.copy(housing.quaternion);lens.userData.signLight=[.96,.82,.54];
+    fixtures.add(housing,lens);
+  }
+  return fixtures;
 }

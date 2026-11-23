@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {cupidsSpan,knollHeight,rinconKnoll,rinconPoint} from '../app/rincon-park.ts';
+import {cupidsSpan,knollHeight,rinconKnoll,rinconPoint,rinconUplights} from '../app/rincon-park.ts';
 
 const art=cupidsSpan(),hill=new THREE.Mesh(rinconKnoll());
 art.updateMatrixWorld(true);
@@ -58,4 +58,34 @@ test('the bow grip is buried, the tension cables reach the tips, and all three m
   low.setRGB(1,1,1);high.setRGB(0,0,0);
   for(let i=0;i<pos.count;i++){low.r=Math.min(low.r,col.getX(i));high.r=Math.max(high.r,col.getX(i));}
   assert.ok(high.r-low.r>.15,'contrast between worn crest and outer grass');
+});
+
+test('three grounded uplights produce separate lawn pools and a grazing highlight on the near bow',()=>{
+  const turf=hill.geometry.getAttribute('signLight');
+  assert.equal(turf.normalized,true);
+  const ray=new THREE.Raycaster(),down=new THREE.Vector3(0,-1,0);
+  function lawnAt(x,z){
+    ray.set(new THREE.Vector3(x,2,z),down);
+    const hit=ray.intersectObject(hill)[0];assert.ok(hit,'fixture and spill stay inside surveyed lawn');
+    const {a,b,c}=hit.face,w=hit.barycoord;
+    return {y:hit.point.y,light:turf.getX(a)*w.x+turf.getX(b)*w.y+turf.getX(c)*w.z};
+  }
+  const lights=rinconUplights().getObjectsByProperty('name','Lawn uplight lens').map(m=>m.getWorldPosition(new THREE.Vector3()));
+  assert.equal(lights.length,3);
+  for(const p of lights){
+    const grass=lawnAt(p.x,p.z);
+    assert.ok(p.y>grass.y&&p.y-grass.y<.005&&grass.light>.13);
+  }
+  const gap=lights[0].clone().lerp(lights[1],.5);
+  assert.ok(lawnAt(gap.x,gap.z).light<.015);
+  function levels(m){
+    const n=new THREE.Matrix3().getNormalMatrix(m.matrixWorld),g=m.geometry;
+    return Array.from({length:g.attributes.position.count},(_,i)=>m.userData.uplight(
+      new THREE.Vector3().fromBufferAttribute(g.attributes.position,i).applyMatrix4(m.matrixWorld),
+      new THREE.Vector3().fromBufferAttribute(g.attributes.normal,i).applyNormalMatrix(n)));
+  }
+  const near=levels(byName('Low returning bow limb')),far=levels(byName('High swept bow limb'));
+  assert.ok(Math.max(...near)>1.2&&Math.min(...near)<.04);
+  assert.ok(Math.max(...near)>4*Math.max(...far));
+  assert.ok(Math.max(...levels(shaft))>.1&&Math.max(...levels(byName('Ribbed red fletching')))>.12);
 });

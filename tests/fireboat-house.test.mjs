@@ -32,7 +32,15 @@ test('the bay end has a recessed glazed upper storey, a supported observation de
   const terrace=hit(0,.41,length-.03,0,-1,0);
   assert.ok(Math.abs(terrace.point.y-deck-.2925)<.001);
   const glass=lights.map(p=>house.worldToLocal(new THREE.Vector3(p.x,p.y,p.z)));
-  assert.equal(glass.filter(p=>Math.abs(p.z-(length-.109))<.001&&p.y>.30).length,22);
+  assert.equal(glass.filter(p=>Math.abs(p.z-(length-.109))<.001&&p.y>.30).length,0,'documented crew room excluded from office occupancy');
+  const upperLight=upper.object.geometry.getAttribute('signLight');
+  assert.ok(upperLight.getX(upper.face.a)>.3);
+  const shoreUpper=hit(0,.537,-.30,0,0,1),shoreLower=hit(-.22,.064,-.30,0,0,1);
+  for(const opening of [shoreUpper,shoreLower]){
+    assert.equal(opening.object.material.color.getHexString(),'547073');
+    assert.ok(opening.object.geometry.attributes.signLight.getX(opening.face.a)>.2);
+  }
+  assert.equal(lights.length,51,'side and unmodified bay-lower panes retain generic registration');
 });
 
 test('the registered north and south work sides separate clerestories, office ribbons and the outboard canopy',()=>{

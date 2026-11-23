@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 
-type WindowPosition={x:number;y:number;z:number};
+type WindowPosition={x:number;y:number;z:number;nightMinimum?:number};
 const hash=(n:number)=>{const value=Math.sin(n*127.1+311.7)*43758.5453;return value-Math.floor(value);};
 
 /** Stable room-sized patches, independent of array order, camera or animation time. */
-export function windowGlow({x,y,z}:WindowPosition){
+export function windowGlow({x,y,z,nightMinimum}:WindowPosition){
   const room=Math.floor(x/.42)*73+Math.floor(z/.42)*193+Math.floor(y/.25)*389;
   const occupied=hash(room),brightness=hash(room+17);
-  if(occupied<.62)return 0;
-  return occupied<.88?.20+brightness*.24:.55+brightness*.30;
+  const ordinary=occupied<.62?0:occupied<.88?.20+brightness*.24:.55+brightness*.30;
+  // The fraction preserves the original room at all hours. The integer carries
+  // an optional photographed night minimum through both instance upload paths.
+  return nightMinimum===undefined?ordinary:2+Math.round(nightMinimum*100)+ordinary;
 }
 
 /** Occupancy affects emitted light only; the daytime glazing remains unchanged. */
@@ -20,6 +22,11 @@ export function applyWindowLighting(material:THREE.MeshStandardMaterial,clock={v
     shader.vertexShader='uniform float windowAirTime,roomShare,roomNight; varying vec2 aperturePoint;\n#ifndef USE_INSTANCING_INDIRECT\nattribute float windowGlow;\n#endif\nvarying float roomGlow; varying float roomTint;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       roomGlow=windowGlow; roomTint=0.;
+      float fixedNight=0.;
+      if(roomGlow>=2.){
+        fixedNight=(floor(roomGlow)-2.)*.01;
+        roomGlow=fract(roomGlow);
+      }
       #ifdef USE_INSTANCING
         if(roomGlow>.0){
           vec3 room=(modelMatrix*instanceMatrix[3]).xyz;
@@ -33,6 +40,10 @@ export function applyWindowLighting(material:THREE.MeshStandardMaterial,clock={v
           roomGlow*=1.+distanceFade*.048*sin(phase+.63*windowAirTime)*sin(.43*phase-.21*windowAirTime);
         }
       #endif
+      if(fixedNight>0.){
+        float minimumGlow=fixedNight*smoothstep(.12,.88,roomNight);
+        if(minimumGlow>roomGlow){roomGlow=minimumGlow;roomTint=0.;}
+      }
       // This quad is already depth-tested and oriented to its own opening.
       // Only an occupied night room exposes a thin strip of jamb and sill.
       if(roomGlow>0.&&roomNight>0.){
@@ -57,5 +68,5 @@ export function applyWindowLighting(material:THREE.MeshStandardMaterial,clock={v
       }
     `);
   };
-  material.customProgramCacheKey=()=> 'waterfront-window-occupancy-v4';
+  material.customProgramCacheKey=()=> 'waterfront-window-occupancy-v5';
 }

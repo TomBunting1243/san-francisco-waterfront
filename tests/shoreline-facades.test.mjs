@@ -134,3 +134,40 @@ test('Folsom Metro rails descend inside a physical cut while the outside Muni tr
   assert.ok(Math.abs(roof[0]-.095)<.00001);
   assert.ok(below[0]<-.30,'a rail vehicle has headroom inside the short covered throat');
 });
+
+test('the Hills coffee crown and paired waterfront offices keep distinct night exposures',async()=>{
+  const {windowGlow}=await import('../app/window-lighting.ts');
+  const tower=mappedBuildings.find(b=>b.id===944986473);
+  const neighbors=[...hillsBuildings,tower];
+  const crown=shorelineFacade(tower,neighbors,'#a7806a');
+  assert.equal(crown.windows.length,8);
+  for(const face of crown.root.children.filter(o=>o.isGroup)){
+    const glass=face.getObjectsByProperty('name','Recessed sash glazing');
+    assert.equal(glass.length,2);
+    assert.ok(glass.every(sash=>sash.userData.signLight));
+    const returns=face.children.filter(m=>m.userData.signLight&&!glass.includes(m));
+    assert.equal(returns.length,22);
+    for(const m of returns){
+      m.geometry.computeBoundingBox();
+      assert.ok(m.geometry.boundingBox.min.y>tower.h-.18,'illuminated return lies within the crown');
+    }
+    assert.ok(!face.getObjectByName('Punched masonry facade').userData.signLight);
+  }
+  const facade=shorelineFacade(plant,neighbors,'#a7806a');
+  const offices=facade.windows.filter(p=>p.nightMinimum);
+  assert.equal(offices.length,10);
+  const front=facade.root.children[1];
+  for(const p of offices){
+    const local=front.worldToLocal(new THREE.Vector3(p.x,p.y,p.z));
+    assert.ok(Math.abs(local.z+.083)<1e-5);
+    assert.ok([.9235,1.0895].some(h=>Math.abs(h-p.y)<1e-5));
+  }
+  for(const p of [...crown.windows,...offices]){
+    const packed=Math.fround(windowGlow(p)),ordinary=windowGlow({x:p.x,y:p.y,z:p.z});
+    assert.equal(Math.floor(packed)-2,Math.round(p.nightMinimum*100));
+    assert.ok(Math.abs(packed%1-ordinary)<.000005,'ordinary room survives Float32 instance upload');
+  }
+  const palomino=shorelineFacade(hillsBuildings.find(b=>b.id===-345),neighbors,'#aaa');
+  assert.ok(palomino.windows.every(p=>p.nightMinimum===undefined));
+  palomino.root.traverse(m=>assert.equal(m.userData.signLight,undefined));
+});

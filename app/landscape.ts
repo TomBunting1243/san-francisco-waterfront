@@ -65,7 +65,7 @@ import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColo
 import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
 import {waterfrontGardens,waterfrontLandscape} from './waterfront-gardens.ts';
 import {createEmbarcaderoCenter} from './embarcadero-center.ts';
-import {cupidsSpan,knollHeight,rinconKnoll,rinconPoint} from './rincon-park.ts';
+import {cupidsSpan,knollHeight,rinconGrass,rinconKnoll,rinconPoint,rinconUplights} from './rincon-park.ts';
 import {createBridgeTraffic} from './traffic-batches.ts';
 import {streetVehicleMaterial} from './street-vehicles.ts';
 import {architectureProfile,referenceColor,refineReferenceMassing,referenceArchitecture} from './reference-architecture.ts';
@@ -469,8 +469,9 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     const [x,z]=rinconPoint(u,v-4.5);
     const shrub=mesh(new THREE.IcosahedronGeometry(.06,1),'#828968',x,.13,z);shrub.scale.set(1.55,.59,1);
   }
-  root.add(cupidsSpan());
+  root.add(cupidsSpan(),rinconUplights());
   mesh(rinconKnoll(),'#ffffff',0,0,0).name='Rincon lawn knoll';
+  mesh(rinconGrass(),'#ffffff',0,0,0).name='Rincon crest grasses';
   mesh(walkSurface(routes.rincon,routeWidth.rincon,.05),'#d4cbb7',0,0,0).name='Rincon shared promenade';
   for(const approach of [rinconApproach,rinconExit])mesh(walkSurface(approach,.24,.06),'#d4cbb7',0,0,0);
   // The wave-shaped seat walls sit in the scallops along the water side of the actual lawn.

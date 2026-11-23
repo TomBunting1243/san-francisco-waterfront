@@ -400,3 +400,12 @@ The 301 Howard lobby study also used a [photograph by David Wakely](https://stat
 The [Historic American Engineering Record](https://tile.loc.gov/storage-services/master/pnp/habshaer/ca/ca1300/ca1352/data/ca1352data.pdf) gives tower spacing, suspender construction and rope diameter. [OPAC’s retrofit description](https://www.opacengineers.com/features/SFO-WBCseismic) gives the contemporary main cable diameter.
 
 The [ROMA Collaborative gallery](https://www.romacollaborative.com/downtown-ferry-terminal-extension) shows the landside seats, guard, columns and roof. The [SFCTA opening report](https://www.sfcta.org/blogs/weta-and-sf-port-partner-expand-downtown-ferry-terminal) documents the promenade and three overwater gate approaches in 2020. SFCTA credits WETA for two of the images. Dates of individual exposures and the ROMA gallery photographer are unconfirmed.
+
+## Rincon Park, Station 35 and Hills Plaza after dark
+
+- [Coffee plant after dark](https://commons.wikimedia.org/wiki/File:Hills_Bros._Building_-_San_Francisco.JPG). Peter Angritt. 17 February 2008 at 19:38, EXIF. CC BY-SA 3.0, original file
+- [Coffee plant at blue hour](https://jimnix.com/blog/2010/10/5/the-coffee-factory-in-san-fran.html). Jim Nix. Published 5 October 2010; capture day unreported. No open reuse license identified; private local reference.
+- [Promenade sightline](https://commons.wikimedia.org/wiki/File:Embarcadero_Street_with_Bay_Bridge_in_left_%5E_Hills_Brothers_Coffee,_San_Francisco_USA_-_panoramio.jpg). The Erica Chang. Taken on 3 March 2011. CC BY 3.0
+- [Reverse view past the fireboats](https://sfpublicworks.org/fireboat-station-35). Russell Abraham Photography (embedded © 2022). 2022 copyright; exposure date unavailable. Copyrighted research reference. No open reproduction grant identified.
+- [Station 35, approach photograph 44](https://skarc.com/projects/san-francisco-fireboat-station-35/). Published by Shah Kawasaki Architects. Photographer and date unconfirmed.
+- [Cupid’s Span at night](https://intentionallylost.com/photo-collections/cupids-span-at-night/). Kevin Wenning, published August 22, 2015. Copyright Intentionally Lost. The original remains on the photographer’s site.
