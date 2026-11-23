@@ -1,4 +1,4 @@
-"""Rebuild the four Transbay intersections from 2024 city orthophoto traces.
+"""Rebuild the Transbay intersections from 2024 city orthophoto traces.
 Run with the project's Shapely >=2.1 survey interpreter. Optional --plates DIR
 writes rectified reference JPEGs from the city's zoom-20 tile service
 (needs Pillow). All source pixels below are in these unshifted plates at 200 px
@@ -33,7 +33,22 @@ sites=[
  ('inland',(214,131,214,182),(413,132,413,187),[[215,220],[231,239],[249,256],[268,274],[284,292],[302,309],[320,328],[338,345],[356,363],[374,381],[392,399],[410,417]],False),
  ('bay',(219,410,219,457),(393,407,393,460),[[216,224],[235,241],[253,260],[275,282],[297,304],[316,322],[333,341],[352,360],[369,377],[389,395]],False),
  ('south',(155,190,208,190),(155,395,207,395),[[189,194],[205,212],[224,230],[242,249],[279,286],[340,344],[355,363],[374,378],[392,400]],True),
- ('north',(420,197,473,197),(420,326,474,326),[[193,200],[211,218],[229,237],[248,255],[266,274],[284,292],[303,310],[321,329]],True)])]
+ ('north',(420,197,473,197),(420,326,474,326),[[193,200],[211,218],[229,237],[248,255],[266,274],[284,292],[303,310],[321,329]],True)]),
+ # The thin northern stripes on the inland and north legs remain visible in
+ # shadow. On the south leg omit the foliage-obscured station below bar 7.
+ ('Howard / Spear',[-25.894,-12.650],[
+ ('inland',(235,149,235,209),(410,152,410,211),[[232,239],[250,257],[269,275],[287,293],[305,311],[323,325],[344,346],[356,358],[367,369],[376,378],[387,389],[397,399],[409,411]],False),
+ ('bay',(224,401,224,456),(400,401,400,459),[[221,227],[238,245],[257,263],[275,281],[291,297],[306,313],[326,333],[346,352],[363,369],[379,385],[397,403]],False),
+ ('south',(173,220,218,220),(175,379,218,379),[[217,224],[235,242],[254,261],[272,279],[291,297],[309,316],[327,332],[357,360],[378,380]],True),
+ ('north',(429,222,472,222),(432,394,476,394),[[220,223],[229,232],[241,244],[251,254],[261,264],[274,277],[287,291],[301,308],[319,326],[338,345],[356,363],[375,381],[392,396]],True)])]
+# Thick transverse limit lines, independently traced from the same ortho.
+# The thin eastbound parking-hatch boundary (u=221..240) is a different mark.
+# Southbound Spear's aligned stripe remains visible on both sides of a vehicle.
+stop_bars={'Howard / Spear':[
+    ('Howard eastbound',[(240,109),(278.5,109.8),(278.5,114),(240,113.5)]),
+    ('Howard westbound',[(279.5,492.4),(345.8,492),(345.8,496),(279.5,496.6)]),
+    ('Spear southbound',[(512.1,219.5),(515.9,219.5),(516.9,346.5),(512.8,346.5)]),
+]}
 def world(center,p):
  u,v=(p[0]-300)/200,(p[1]-300)/200
  return [round(center[0]+C*u-S*v,6),round(center[1]+S*u+C*v,6)]
@@ -105,7 +120,8 @@ def crossing_axes():
 def build(axes):
     blocks=read('survey-blocks.json')['streets']
     curbs=read('curb-survey.json')
-    bounds=box(-30,-30,-13,-17)
+    spear_bounds=box(-27.5,-14.3,-24.3,-11.0)
+    bounds=box(-30,-30,-13,-17).union(spear_bounds)
     def parcels(kind):
         for i,poly in enumerate(blocks[kind]):
             for outer,*holes in curbs['overrides'].get(kind,{}).get(str(i),[poly]):
@@ -116,12 +132,18 @@ def build(axes):
     def offset(station,dist):return station[0]+station[2]*dist,station[1]+station[3]*dist
     for _,_,stations in curbs['lines']:
         for a,b in zip(stations,stations[1:]):
-            if not bounds.covers(LineString([a[:2],b[:2]])):continue
+            segment=LineString([a[:2],b[:2]])
+            # The Spear limit line reaches a gutter run whose far end is
+            # outside the local plate. Its overlapping surface still supports paint.
+            partial=not bounds.covers(segment)
+            if partial and not spear_bounds.intersects(segment):continue
             back=.157 if min(a[4],b[4])<1 else .031
             qa,qb=offset(a,.0023),offset(b,.0023)
-            faces.append(Polygon([qa,qb,offset(b,-back),offset(a,-back)]).buffer(0))
+            face=Polygon([qa,qb,offset(b,-back),offset(a,-back)]).buffer(0)
+            faces.append(face.intersection(spear_bounds) if partial else face)
             for coords,heights in [([offset(a,.037),offset(b,.037),qb],[.032,.032,.0315]),([offset(a,.037),qb,qa],[.032,.0315,.0315])]:
                 p=Polygon(coords)
+                if partial:p=p.intersection(spear_bounds)
                 if p.area>1e-10:gutters.append((p,coords,heights))
     road=road.difference(union_all(faces))
     def triangles(region,terrain=None):
@@ -140,6 +162,15 @@ def build(axes):
                 verts.append([round(x,6),round(z,6),round(y+.00024,7)])
             result.append(verts)
         return result
+    def surface_mark(corners):
+        region=Polygon(corners).intersection(road)
+        fragments=[]
+        for gutter,coords,hs in gutters:
+            if region.intersects(gutter):
+                fragments.extend(triangles(region.intersection(gutter),(coords,hs)))
+                region=region.difference(gutter)
+        fragments.extend(triangles(region))
+        return fragments
     out=[]
     for name,center,legs in sites:
         records=[]
@@ -153,16 +184,14 @@ def build(axes):
             marks=[]
             for low,high in bars:
                 corners=[edge(low,0),edge(high,0),edge(high,2),edge(low,2)]
-                region=Polygon(corners).intersection(road)
-                fragments=[]
-                for gutter,coords,hs in gutters:
-                    if region.intersects(gutter):
-                        fragments.extend(triangles(region.intersection(gutter),(coords,hs)))
-                        region=region.difference(gutter)
-                fragments.extend(triangles(region))
+                fragments=surface_mark(corners)
                 if fragments:marks.append(fragments)
             records.append({**coord,'marks':marks})
-        out.append({'name':name,'center':center,'legs':records})
+        site={'name':name,'center':center,'legs':records}
+        if name in stop_bars:
+            site['stopBars']=[{'approach':approach,'triangles':surface_mark([world(center,p) for p in corners])}
+                              for approach,corners in stop_bars[name]]
+        out.append(site)
     data={'source':'https://sfplanninggis.org/1938/','imagery':'SF 2024 RGB 8 cm','sites':out}
     (BASE/'transbay-crossings.json').write_text(json.dumps(data,separators=(',',':'))+'\n')
     print([(site['name'],[len(leg['marks']) for leg in site['legs']]) for site in out])

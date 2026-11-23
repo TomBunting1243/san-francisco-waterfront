@@ -234,3 +234,28 @@ test('ride headlamp updates a fixed material cone without changing scene lights 
   assert.ok(!compile(road).fragmentShader.includes('cabLampIntensity'));
   vignette.dispose();
 });
+
+test('the bayward passenger sees three matching Spear signal lenses in front of their hoods',async()=>{
+  const {spearVehicleHeads}=await import('../app/spear-signals.ts');
+  const {driverPose}=await import('../app/driver-rides.ts');
+  const housing=createSignalHousings();
+  const light=createStreetIllumination(new T.Group(),[],new T.MeshBasicMaterial());
+  const shades=['#ff4938','#ffc444','#65d98e'].map(hex=>new T.Color(hex));
+  assert.equal(spearVehicleHeads.length,3);
+  for(const seconds of [293.8,294.5,315]){
+    const {eye}=driverPose('bridge',293.8),origin=new T.Vector3(eye.x,eye.y,eye.z);
+    light.update(seconds,1);
+    for(const head of spearVehicleHeads){
+      const active=signalAspects(seconds)[head.axis],center=signalLensCenter(head,active);
+      const ray=new T.Raycaster(origin,center.clone().sub(origin).normalize(),0,4);
+      const lens=ray.intersectObject(light.lenses)[0],shell=ray.intersectObject(housing)[0];
+      assert.ok(lens&&shell&&lens.distance<shell.distance,'front lens is visible from the passenger seat');
+      const shade=new T.Color().fromBufferAttribute(light.lenses.geometry.attributes.color,lens.face.a);
+      nearSignalColor(shade,shades[active]);
+    }
+  }
+  housing.geometry.dispose();light.dispose();
+  function nearSignalColor(found,wanted){
+    for(const channel of ['r','g','b'])assert.ok(Math.abs(found[channel]-wanted[channel])<.00001);
+  }
+});

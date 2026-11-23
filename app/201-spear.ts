@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
+import {FontLoader} from 'three/addons/loaders/FontLoader.js';
+import harborFont from './harbor-font.json' with {type:'json'};
 import {sfMap} from './sf-map.ts';
 
 type Point=[number,number];
@@ -55,6 +57,63 @@ function prism(batch:FacadePanels,points:Point[],bottom:number,top:number,wall:s
   cap(batch,poly,top,roof);
 }
 
+// JackPav, KartaView sequence 11605, frame 1542, 2 August 2016. The
+// numbered pier faces Spear. A dark shop sits below a continuous brick head.
+// https://kartaview.org/details/11605/1542/track-info
+// SF Planning locates the shopfronts, Spear lobby and separate garage access:
+// https://commissions.sfplanning.org/cpcpackets/75%20Howard%20Street%20Draft%20EIR.pdf
+function cornerShop(batch:FacadePanels,a:Point,b:Point,onSpear:boolean){
+  const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),ux=dx/len,uz=dz/len;
+  const width=onSpear?1.12:.77,top=.245,setback=-.043;
+  const at=(s:number,y:number,d:number):FacadePoint=>[a[0]+ux*s+uz*d,y,a[1]+uz*s-ux*d];
+  const face=(l:number,r:number,lo:number,hi:number,d:number,tint:string)=>
+    batch.quad(at(l,lo,d),at(l,hi,d),at(r,hi,d),at(r,lo,d),tint);
+  const start=onSpear?len-width:0,end=start+width;
+  const cornerPier=.173,outerPier=.076;
+  const l=start+(onSpear?outerPier:cornerPier),r=end-(onSpear?cornerPier:outerPier);
+  const faceDepth=0;
+  face(start,l,.027,lobby,faceDepth,brick);face(r,end,.027,lobby,faceDepth,brick);
+  face(l,r,top,lobby,faceDepth,brick);
+  // End return where the thicker street wall meets the older open colonnade.
+  const outer=onSpear?start:end;
+  const edge=[at(outer,.027,0),at(outer,lobby,0),at(outer,lobby,-.075),at(outer,.027,-.075)] as const;
+  if(onSpear)batch.quad(edge[3],edge[2],edge[1],edge[0],returnBrick);
+  else batch.quad(...edge,returnBrick);
+  // The brick jambs turn into the actual recessed shop opening, leaving all
+  // components inside the surveyed facade line and the sidewalk clear.
+  batch.quad(at(l,.027,faceDepth),at(l,top,faceDepth),at(l,top,setback),at(l,.027,setback),returnBrick);
+  batch.quad(at(r,.027,setback),at(r,top,setback),at(r,top,faceDepth),at(r,.027,faceDepth),returnBrick);
+  batch.quad(at(l,top,faceDepth),at(r,top,faceDepth),at(r,top,setback),at(l,top,setback),returnBrick);
+  const panes=onSpear?6:4,step=(r-l)/panes,frame='#404748';
+  for(let j=0;j<panes;j++){
+    const s=l+j*step,t=s+step,door=onSpear&&j===3;
+    face(s,t,.038,top,setback,door?'#3a4948':j%3===1?'#435352':'#3c4a4c');
+    face(s,t,.183,top,setback+.0006,j%2?'#46555a':'#465354');
+    face(s,s+.005,.038,top,setback+.0018,frame);
+    face(s,t,.028,.039,setback+.002,'#77736b');
+    if(door){
+      face(s,t,.168,.174,setback+.0022,frame);
+      face(s+.011,s+.014,.083,.112,setback+.0025,'#aaa897');
+    }
+  }
+  face(l,r,.177,.183,setback+.0025,frame);
+  // The shop head and large numbered pier share the coursed brick finish.
+  for(const y of [top+.016,top+.039,top+.062])
+    face(l,r,y,y+.0013,faceDepth+.0005,'#a5725d');
+  const pierStart=onSpear?r:start,pierEnd=onSpear?end:l;
+  for(let y=.045;y<lobby-.005;y+=.011)face(pierStart,pierEnd,y,y+.00065,.0004,'#ab7c65');
+  if(onSpear){
+    const text=new THREE.ShapeGeometry(new FontLoader().parse(harborFont).generateShapes('201',.035),3);
+    text.computeBoundingBox();
+    const positions=text.getAttribute('position'),index=text.index!,middle=(text.boundingBox!.max.x+text.boundingBox!.min.x)/2;
+    const vertex=(i:number)=>at(end-cornerPier/2-(positions.getX(i)-middle),top+.006+positions.getY(i),.0008);
+    for(let i=0;i<index.count;i+=3)
+      batch.triangle(vertex(index.getX(i)),vertex(index.getX(i+1)),vertex(index.getX(i+2)),'#b1afa0');
+    text.dispose();
+  }
+  return {start,end};
+}
+
 function arcade(batch:FacadePanels,b:Building){
   const corners=[41,61,102,122].map(i=>b.p[i]) as Point[];
   const recess:Point[]=corners.map(([x,z])=>[-27.82+(x+27.82)*.922,-10.61+(z+10.61)*.869]);
@@ -64,9 +123,11 @@ function arcade(batch:FacadePanels,b:Building){
   for(const [i,a] of corners.entries()){
     const b=corners[(i+1)%4],c=recess[i],d=recess[(i+1)%4];
     const len=Math.hypot(b[0]-a[0],b[1]-a[1]),ux=(b[0]-a[0])/len,uz=(b[1]-a[1])/len;
+    const shop=i===1||i===2?cornerShop(batch,a,b,i===1):undefined;
     const cols=i%2?8:4;
     for(let n=0;n<cols;n++){
       const f=(n+.28)/cols,px=a[0]+(b[0]-a[0])*f,pz=a[1]+(b[1]-a[1])*f;
+      if(shop&&f*len>shop.start&&f*len<shop.end)continue;
       const cx=c[0]+(d[0]-c[0])*f,cz=c[1]+(d[1]-c[1])*f;
       const centerX=px*.67+cx*.33,centerZ=pz*.67+cz*.33;
       const footprint:Point[]=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([u,v])=>

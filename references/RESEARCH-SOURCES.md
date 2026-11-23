@@ -409,3 +409,7 @@ The [ROMA Collaborative gallery](https://www.romacollaborative.com/downtown-ferr
 - [Reverse view past the fireboats](https://sfpublicworks.org/fireboat-station-35). Russell Abraham Photography (embedded © 2022). 2022 copyright; exposure date unavailable. Copyrighted research reference. No open reproduction grant identified.
 - [Station 35, approach photograph 44](https://skarc.com/projects/san-francisco-fireboat-station-35/). Published by Shah Kawasaki Architects. Photographer and date unconfirmed.
 - [Cupid’s Span at night](https://intentionallylost.com/photo-collections/cupids-span-at-night/). Kevin Wenning, published August 22, 2015. Copyright Intentionally Lost. The original remains on the photographer’s site.
+
+## Howard and Spear street-level photographs
+
+JackPav photographed the bayward approach on 2 August 2016. KartaView lists CC BY-SA 4.0. Frame 1541 shows the approach to the brick corner, frame 1542 shows the storefront, three traffic heads and pedestrians, and frame 1543 identifies the street blade beside the suspended head. The model uses the modern residential building on the former 75 Howard garage site. [Frame 1541](https://kartaview.org/details/11605/1541/track-info) · [Frame 1542](https://kartaview.org/details/11605/1542/track-info) · [Frame 1543](https://kartaview.org/details/11605/1543/track-info) · [Image license](https://creativecommons.org/licenses/by-sa/4.0/)

@@ -1,7 +1,7 @@
 import {CatmullRomCurve3,MathUtils,Vector3} from 'three';
 import {fremontExitDistance,westboundExitPose} from './approach-road.ts';
 import {northWaterfrontGrade,streetPose} from './streets.ts';
-import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
+import {crossStreetGreenStart,crossStreetGreenEnd,roadStopLines,signalPeriod,spearStopLine} from './waterfront-signals.ts';
 
 // SF Public Works active centerlines (3psu-pn9h), with lane offsets.
 // Howard is two-way east of Fremont. The eastbound left lane crosses the
@@ -21,10 +21,12 @@ for(let x=-23.58;x<waterfrontEndX+4;x+=.25)roads.push(northLane(x));
 const route=new CatmullRomCurve3(roads.map(([x,z])=>new Vector3(x,0,z)));
 route.arcLengthDivisions=Math.ceil(roads.length*8);
 const length=route.getLength();
-function atX(x:number){
-  // x increases monotonically on the northbound carriageway.
+function atLine(x:number,z=0,nx=1,nz=0){
   let lo=0,hi=1;
-  for(let i=0;i<26;i++){const mid=(lo+hi)/2;if(route.getPointAt(mid).x<x)lo=mid;else hi=mid;}
+  for(let i=0;i<26;i++){
+    const mid=(lo+hi)/2,p=route.getPointAt(mid);
+    if((p.x-x)*nx+(p.z-z)*nz<0)lo=mid;else hi=mid;
+  }
   return (lo+hi)/2*length;
 }
 export function cityDrivePoint(s:number){
@@ -47,10 +49,24 @@ export function bridgeJourney(bridgeStart:number,bridgeSpeed:number){
   travel(base-3,.56);travel(base,.27);
   travel(base+.8,.40);travel(base+4.5,.44);travel(base+5.45,.26);travel(base+6.55,.26);
   travel(base+8.1,.55);
-  const turn=base+atX(-23.95);
+  // The passenger sees the Howard approach change from red to green at Spear.
+  // Locate the bumper behind the photographed stop bar at rest. The ride and
+  // the signal lenses share rideSeconds, including while the ride is paused.
+  const spear=base+atLine(spearStopLine.x,spearStopLine.z,spearStopLine.nx,spearStopLine.nz)-.20;
+  travel(spear-1.08,.55);
+  const spearArrival=(t+1.08/.55)%signalPeriod;
+  const lastEntry=crossStreetGreenEnd-4;
+  if(spearArrival<crossStreetGreenStart||spearArrival>=lastEntry){
+    travel(spear,0);
+    const phase=t%signalPeriod;
+    const alreadyGreen=phase>=crossStreetGreenStart&&phase<lastEntry;
+    hold(.85+(alreadyGreen?0:(signalPeriod+crossStreetGreenStart-phase)%signalPeriod));
+    travel(spear+1.7,.55);
+  }else travel(spear,.55);
+  const turn=base+atLine(-23.95);
   travel(turn-1.4,.55);travel(turn-.35,.26);travel(turn+.5,.26);travel(turn+2,.60);
   for(const line of [roadStopLines.north.mission,roadStopLines.north.market,roadStopLines.north.washington]){
-    const stop=base+atX(line-.19);
+    const stop=base+atLine(line-.19);
     travel(stop-1.8,.60);
     const arrivalPhase=(t+1.8/.60)%signalPeriod;
     if(arrivalPhase>27||arrivalPhase<1){
@@ -59,7 +75,7 @@ export function bridgeJourney(bridgeStart:number,bridgeSpeed:number){
       travel(stop+1.8,.60);
     }else travel(stop,.60);
   }
-  const finish=base+atX(waterfrontEndX);
+  const finish=base+atLine(waterfrontEndX);
   travel(finish-2,.60);travel(finish,0);hold(3);
   return {duration:t,station(seconds:number){
     const leg=legs.find(l=>seconds<l.end);

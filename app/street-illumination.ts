@@ -5,6 +5,7 @@ import type {FerryWalkPool} from './ferry-walk-lights.ts';
 import {terraceFloodAim} from './plaza-street-lights.ts';
 import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
 import {addChestnutStandards,chestnutVehicleHeads} from './chestnut-signals.ts';
+import {addSpearStandards,spearVehicleHeads} from './spear-signals.ts';
 import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
@@ -37,7 +38,7 @@ export const waterfrontSignals:Signal[]=[
   {x:13.825,z:-2.21,y:.0449,heading:fromSouth,axis:0},
   {x:11.13,z:-3.95,y:.045,heading:fromNorth,axis:0},
   {x:13.78,z:-3.89,y:.045,heading:fromStreet,axis:1},
-  ...chestnutVehicleHeads,
+  ...chestnutVehicleHeads,...spearVehicleHeads,
   marketHead(0,-Math.PI/2,.88),marketHead(1,-Math.PI/2,-.44),
   marketHead(3,-Math.PI/2,-4.9,true),
   marketHead(4,Math.PI/2,-.44),marketHead(5,Math.PI/2,.44),
@@ -90,8 +91,9 @@ export function createSignalHousings(){
     }
   }
   addChestnutStandards(a);
+  addSpearStandards(a);
   addMarketPedestrianHousings(a);
-  return a.bake('SFMTA signal standards at Mission, Market, Washington and Chestnut');
+  return a.bake('SFMTA signal standards at Mission, Market, Washington, Chestnut and Howard at Spear');
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){

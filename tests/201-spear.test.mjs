@@ -70,3 +70,27 @@ test('all three parts use one indexed mesh each and leave Rincon Center untouche
   }
   assert.ok(triangles<16000,triangles+' triangles');
 });
+
+test('the numbered Spear pier turns the Howard corner above recessed retail glass',()=>{
+  const center=podium.p[102];
+  function setback(edge,fromCorner,y){
+    const [a,b]=edge.map(i=>podium.p[i]),length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    const tx=(b[0]-a[0])/length,tz=(b[1]-a[1])/length,sign=edge[0]===102?1:-1;
+    const normal=new THREE.Vector3(tz,0,-tx);
+    const p=new THREE.Vector3(center[0]+sign*fromCorner*tx,y,center[1]+sign*fromCorner*tz);
+    ray.set(p.clone().addScaledVector(normal,.15),normal.clone().negate());
+    const hit=ray.intersectObject(root.children[0])[0];
+    assert.ok(hit);return p.sub(hit.point).dot(normal);
+  }
+  for(const edge of [[61,102],[102,122]]){
+    near(setback(edge,.06,.14),0);
+    near(setback(edge,.34,.13),.043);
+    near(setback(edge,.34,.28),0);
+  }
+  const g=root.children[0].geometry,colors=g.getAttribute('color'),p=g.getAttribute('position');
+  const number=new THREE.Color('#b1afa0'),digits=new THREE.Box3();
+  for(let i=0;i<p.count;i++)if(Math.abs(colors.getX(i)-number.r)<1e-6&&Math.abs(colors.getY(i)-number.g)<1e-6&&Math.abs(colors.getZ(i)-number.b)<1e-6)
+    digits.expandByPoint(new THREE.Vector3().fromBufferAttribute(p,i));
+  assert.ok(digits.min.y>.245&&digits.max.y<.30);
+  assert.ok(digits.max.x-digits.min.x>.06&&digits.max.x<center[0]);
+});

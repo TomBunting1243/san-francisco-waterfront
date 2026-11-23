@@ -7,10 +7,10 @@ import {bridgeLayout,bridgePoint} from '../app/bridge-layout.ts';
 import {westboundExitPose,fremontFork,buildApproachRoad} from '../app/approach-road.ts';
 import {bayReliefGround} from '../app/bay-relief.ts';
 import {museumDoorStation} from '../app/streetcar-ride-path.ts';
-import {northWaterfrontGrade,streetPose} from '../app/streets.ts';
+import {northWaterfrontGrade,streetPose,trackAt,trackCenterlines} from '../app/streets.ts';
 import {waterfrontCar,waterfrontCarCount} from '../app/waterfront-routes.ts';
 import {ambientStreetcarCall} from '../app/washington-call.ts';
-import {roadStopLines,signalAspects} from '../app/waterfront-signals.ts';
+import {roadStopLines,signalAspects,spearStopLine} from '../app/waterfront-signals.ts';
 import {pccDimensions} from '../app/streetcar.ts';
 
 const near=(x,y,eps=1e-6)=>assert.ok(Math.abs(x-y)<=eps,x+' vs '+y);
@@ -200,9 +200,27 @@ test('constructed pavement supports the five-lane tunnel entrance and all three 
   }
 });
 
+test('the passenger sedan waits behind the Spear limit line, then clears the crosswalk on green',()=>{
+  let stoppedOnRed=false,passed=false,previousDistance;
+  for(let tick=2850;tick<=3020;tick++){
+    const t=tick/10,pose=driverPose('bridge',t),{eye,look}=pose;
+    const forward=new T.Vector2(look.x-eye.x,look.z-eye.z).normalize();
+    const noseX=eye.x-.0228*forward.y+.14*forward.x;
+    const noseZ=eye.z+.0228*forward.x+.14*forward.y;
+    const signed=(noseX-spearStopLine.x)*spearStopLine.nx+(noseZ-spearStopLine.z)*spearStopLine.nz;
+    if(signalAspects(t)[1]===0&&pose.station===driverPose('bridge',t+.09).station){
+      assert.ok(signed<-.04&&signed>-.08,'bumper stops about a metre behind the line');
+      stoppedOnRed=true;
+    }
+    if(previousDistance<0&&signed>=0){assert.equal(signalAspects(t)[1],2);passed=true;}
+    if(signed>=0&&signed<1.6)assert.equal(signalAspects(t)[1],2,'green across both marked legs');
+    previousDistance=signed;
+  }
+  assert.ok(stoppedOnRed&&passed);
+});
 test('the sedan follows Fremont and Howard, clears moving cars and crosses the three waterfront signals on green',()=>{
-  const milestones=[[243,-34,-31.1],[255,-29.3,-31.8],[290,-26.3,-14.6],[320,-22.9,-1],
-    [350,-5.15,-2.75],[410,11.49,-2.89],[450,35.44,-2.15],[500,65.43,-1.66],[532,82.53,-3.2]];
+  const milestones=[[243,-34,-31.1],[255,-29.3,-31.8],[290,-26.3,-14.6],[326.4,-22.9,-1],
+    [356.5,-5.15,-2.75],[410,11.49,-2.89],[450,35.44,-2.15],[500,65.43,-1.66],[532,82.53,-3.2]];
   for(const [t,x,z] of milestones){
     const {eye}=driverPose('bridge',t);
     assert.ok(Math.hypot(eye.x-x,eye.z-z)<.45,'city landmark at '+t);
@@ -212,7 +230,7 @@ test('the sedan follows Fremont and Howard, clears moving cars and crosses the t
   assert.ok(distance(driverPose('bridge',duration-3.5).eye,end.eye)<.02);
   assert.ok(end.look.x>end.eye.x+2.3);
   const stops=Object.values(roadStopLines.north),crossings=[];
-  let previousX=-Infinity;
+  let previousX=-Infinity,railSamples=0;
   for(let t=305;t<=duration;t+=.1){
     const {eye,look}=driverPose('bridge',t);
     const dx=look.x-eye.x,dz=look.z-eye.z,n=Math.hypot(dx,dz);
@@ -221,7 +239,13 @@ test('the sedan follows Fremont and Howard, clears moving cars and crosses the t
       assert.equal(signalAspects(t)[0],2,'nose crossed stop line on green at '+t);crossings.push(line);
     }
     previousX=x;
-    if(t>=310&&t<=319)assert.ok(Math.abs(x-ambientStreetcarCall(t).station)>2,'clear of PCC while crossing the rails');
+    if(x< -24&&x> -25){
+      const rails=trackCenterlines.map(line=>trackAt(x,line).z);
+      if(z>=Math.min(...rails)-.2&&z<=Math.max(...rails)+.2){
+        railSamples++;
+        assert.ok(Math.abs(x-ambientStreetcarCall(t).station)>2,'clear of PCC while crossing the rails');
+      }
+    }
     for(let i=0;i<waterfrontCarCount();i++){
       const car=waterfrontCar(t,i);
       if(!car.active)continue;
@@ -230,4 +254,5 @@ test('the sedan follows Fremont and Howard, clears moving cars and crosses the t
     }
   }
   assert.deepEqual(crossings,stops);
+  assert.ok(railSamples>=10);
 });
