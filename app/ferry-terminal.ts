@@ -380,20 +380,74 @@ export function buildFerryTerminal(mesh:TerminalMesh,root:THREE.Group){
   // sheet 11 locates their lateral run along the land side of the hinges.
   // The remembered Pier 2 dining room occupies the middle of E–F. Keep
   // the two short approach shelters outside its roof and street entrance.
+  // Frosted glass transmits daylight onto its underside. The opaque city
+  // batch uses an upward lighting normal there to approximate that diffuse
+  // transmission; the separate aluminum ribs retain their actual normals.
+  const queueLite=boxGeometry.clone(),liteNormals=queueLite.getAttribute('normal');
+  for(let i=0;i<liteNormals.count;i++){
+    if(liteNormals.getY(i)<-.9)liteNormals.setXYZ(i,0,1,0);
+  }
   for(const [x0,x1,bays] of [[-14.00,-11.40,6],[-10.99,-10.72,1],[-8.61,-8.40,1]]){
     const z=1.97,group=new THREE.Group();group.name='South Basin waiting canopy';terminal.add(group);
-    const w=(x1-x0)/bays;
+    // ROMA's passenger-height WETA2 photograph shows a row of round white
+    // columns on the water side, pale roof panels, and wood seats facing inland.
+    // https://www.romacollaborative.com/downtown-ferry-terminal-extension
+    // SFCTA's 2020 WETA overhead photograph separates this fixed walk from
+    // the three articulated approaches and their floating, barrel-roofed berths.
+    // https://www.sfcta.org/blogs/weta-and-sf-port-partner-expand-downtown-ferry-terminal
+    const w=(x1-x0)/bays,postZ=z+.127,postHeight=.284;
+    const supportedY=apronY+postHeight;
     for(let i=0;i<bays;i++){
       const x=x0+w*(i+.5);
-      box(w-.010,.010,.30,x,apronY+.289,z,'#a9bab7',group);
-      box(.012,.017,.314,x0+w*i,apronY+.278,z,'#788b8c',group);
+      // Three frosted lites per structural bay. Narrow joints keep the rhythm
+      // visible from below without introducing transparent sorting at distance.
+      for(let pane=0;pane<3;pane++){
+        const mid=x0+w*(i+(pane+.5)/3);
+        const lite=mesh(queueLite,'#c0d6d3',mid,supportedY+.016,z,group);
+        lite.scale.set(w/3-.002,.004,.319);
+        lite.rotation.x=.048;lite.name='South Basin shade panel';
+        const arm=box(.004,.009,.317,mid-w/6+.002,supportedY+.009,z,'#91a3a4',group);
+        arm.rotation.x=.048;
+      }
       if(i%2===0){
-        box(.015,.275,.016,x,apronY+.1375,z-.121,'#7e9190',group);
-        const lamp=box(.104,.006,.014,x,apronY+.281,z+.020,'#e6e1ce',group);
+        cylinder(.012,postHeight,x,apronY+postHeight/2,postZ,'#e1e4d9',group).name='South Basin round canopy column';
+        const lamp=box(.104,.006,.014,x,supportedY-.008,z+.020,'#e6e1ce',group);
         ferryWalkLens(lamp,'Queuing canopy downlight',1.00,.84);
       }
+      // The walk beside the queue stays open from hinge to hinge. Keep all
+      // furniture in the narrow strip on the column side, off the ramps.
+      if(bays>1){
+        const seatWidth=.142,seatZ=z+.083;
+        for(let slat=0;slat<3;slat++){
+          box(seatWidth,.004,.008,x,apronY+.029,seatZ+(slat-1)*.010,'#ae8052',group).name='South Basin seat slat';
+          const back=box(seatWidth,.009,.004,x,apronY+.041+slat*.011,seatZ+.017+slat*.003,'#a6754b',group);
+          back.rotation.x=.20;
+        }
+        for(const side of [-1,1]){
+          const legX=x+side*.051;
+          box(.005,.028,.026,legX,apronY+.014,seatZ,'#687b7a',group).name='South Basin bench foot';
+          box(.005,.006,.036,legX,apronY+.041,seatZ+.002,'#849390',group);
+          box(.005,.013,.005,legX,apronY+.035,seatZ-.013,'#849390',group);
+        }
+      }
     }
-    for(const side of [-1,1])box(x1-x0,.020,.012,(x0+x1)/2,apronY+.276,z+side*.15,'#849292',group);
+    box(x1-x0,.015,.016,(x0+x1)/2,supportedY-.001,postZ,'#e0e1d5',group);
+    box(x1-x0,.008,.008,(x0+x1)/2,supportedY+.019,z-.157,'#899c9d',group);
+  }
+  // The narrow gap behind the Agriculture Building has a green edge guard in
+  // ROMA's north-looking walkway view. Terminate it before the F and G turns.
+  const barrier=new THREE.Group();barrier.name='South Basin inland queue guard';terminal.add(barrier);
+  const guardFrom=-13.945,guardTo=-11.492;
+  const inlandZ=(x:number)=>1.709+(-x-11.492)*.0034;
+  const guardAt=(x:number,h:number)=>new THREE.Vector3(x,apronY+h,inlandZ(x));
+  for(const height of [.016,.065,.078]){
+    link(guardAt(guardFrom,height),guardAt(guardTo,height),.004,'#31594e',barrier,.005);
+  }
+  const divisions=78;
+  for(let j=0;j<=divisions;j++){
+    const x=THREE.MathUtils.lerp(guardFrom,guardTo,j/divisions),post=j%6===0;
+    const height=post?.078:.050,base=post?0:.015;
+    box(post?.006:.002,height,post?.006:.002,x,apronY+base+height/2,inlandZ(x),'#365e50',barrier);
   }
   const waiting=new THREE.Group();waiting.name='Golden Gate Ferry Terminal waiting shelter';
   waiting.position.set(-2.236,0,4.408);waiting.rotation.y=-.119;

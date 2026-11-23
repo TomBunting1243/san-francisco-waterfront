@@ -385,3 +385,18 @@ The links reopen the viewpoints inspected for a passenger-route and waterfront s
 | [Ferry Building, landward entrance](https://maps.apple.com/look-around?place-id=IBE1F65094A7A13B1) | Apple Look Around | Unknown | Native viewer looking east per compass. Upper arched glazing over the three central entries, striped plaza paving, pedestrian railings and pendant streetlights. |
 
 The 301 Howard lobby study also used a [photograph by David Wakely](https://static.wixstatic.com/media/28ce1d_af6f6a6982fe46a3ba17f000ad76a17c~mv2.jpg) published by [Huntsman Architectural Group](https://www.huntsmanag.com/portfolio/301-howard-street/4). The measured file appears in the survey register.
+
+## Bay Bridge upper deck and Downtown Ferry Terminal
+
+- [wm-108283814, Pi.1415926535](https://commons.wikimedia.org/wiki/File:Ferry_Building_and_The_Embarcadero_from_the_Bay_Bridge,_August_2021.jpg). Taken on 7 August 2021. CC BY-SA 4.0.
+- [wm-108283845, Pi.1415926535](https://commons.wikimedia.org/wiki/File:The_Embarcadero_from_the_Bay_Bridge,_August_2021.jpg). Taken on 7 August 2021. CC BY-SA 4.0.
+- [wm-108283445, Pi.1415926535](https://commons.wikimedia.org/wiki/File:Yerba_Buena_Island_from_the_Bay_Bridge,_August_2021.jpg). Taken on 7 August 2021. CC BY-SA 4.0.
+- [wm-57331126, Chris English](https://commons.wikimedia.org/wiki/File:2013,_Approaching_Exit_2C,_Bay_Bridge_Southbound_-_panoramio.jpg). Taken on 15 October 2013. CC BY-SA 3.0.
+- [haer-181, Frank Deras Jr.](https://www.loc.gov/resource/hhh.ca1352.photos.201687p). 1998. No known restrictions on images made by the U.S. government; check original-source rights.
+- [haer-182, Frank Deras Jr.](https://www.loc.gov/resource/hhh.ca1352.photos.383152p). 1998. No known restrictions on images made by the U.S. government; check original-source rights.
+- [haer-183, Dennis Hill](https://www.loc.gov/resource/hhh.ca1352.photos.383153p). 1998. No known restrictions on images made by the U.S. government; check original-source rights.
+- [haer-184, Dennis Hill](https://www.loc.gov/resource/hhh.ca1352.photos.383154p). 1998. No known restrictions on images made by the U.S. government; check original-source rights.
+
+The [Historic American Engineering Record](https://tile.loc.gov/storage-services/master/pnp/habshaer/ca/ca1300/ca1352/data/ca1352data.pdf) gives tower spacing, suspender construction and rope diameter. [OPAC’s retrofit description](https://www.opacengineers.com/features/SFO-WBCseismic) gives the contemporary main cable diameter.
+
+The [ROMA Collaborative gallery](https://www.romacollaborative.com/downtown-ferry-terminal-extension) shows the landside seats, guard, columns and roof. The [SFCTA opening report](https://www.sfcta.org/blogs/weta-and-sf-port-partner-expand-downtown-ferry-terminal) documents the promenade and three overwater gate approaches in 2020. SFCTA credits WETA for two of the images. Dates of individual exposures and the ROMA gallery photographer are unconfirmed.

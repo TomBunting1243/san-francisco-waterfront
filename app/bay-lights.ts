@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import {bridgeLayout} from './bridge-layout.ts';
 
+export const bayLensOffset=.005;
+
 // Each column follows one physical suspender. The primary installation faces
 // the northern waterfront. LED groups share a draw and a clock across spans.
 export function addBayLightStrand(positions:number[],side:number,z:number,top:number){
   if(side<0)return;
-  const base=bridgeLayout.upperDeck+.11;
-  for(let y=base;y<top-.035;y+=.061)positions.push(side+.022,y,z);
+  const base=bridgeLayout.upperDeck+.0755+.070;
+  for(let y=base;y<top-.012;y+=.061)positions.push(side+bayLensOffset,y,z);
 }
 
 export const bayLightPattern=`

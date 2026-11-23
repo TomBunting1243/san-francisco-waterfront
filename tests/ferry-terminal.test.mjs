@@ -291,3 +291,27 @@ test('at night the ferry dining frontages, approach, gangways and wet boarding t
   assert.equal(root.getObjectsByProperty('isLight',true).length,0);
   before.dispose();field.dispose();
 });
+
+test('South Basin queue seats and white posts bear on the fixed apron and leave both sides of the hinge clear',()=>{
+  const terminal=buildFerryTerminal(addMesh,new THREE.Group());
+  terminal.updateMatrixWorld(true);
+  const apron=terminal.getObjectByName('Surveyed fixed ferry apron');
+  const hinges=ferryConnections.filter(c=>['E','F','G'].includes(c.gate));
+  const ray=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
+  const feet=terminal.getObjectsByProperty('name','South Basin bench foot');
+  const columns=terminal.getObjectsByProperty('name','South Basin round canopy column');
+  assert.equal(feet.length,12);assert.equal(columns.length,5);
+  assert.equal(terminal.getObjectsByProperty('name','South Basin shade panel').length,24);
+  const barrier=terminal.getObjectByName('South Basin inland queue guard');
+  for(const part of [...feet,...columns,...barrier.children.filter(m=>m.scale.y>.07)]){
+    const bounds=new THREE.Box3().setFromObject(part),p=bounds.getCenter(new THREE.Vector3());
+    ray.ray.origin.set(p.x,2,p.z);
+    const floor=ray.intersectObject(apron,false)[0];
+    assert.ok(floor&&Math.abs(floor.point.y-bounds.min.y)<1e-5,part.name+' must touch fixed deck');
+    for(const h of hinges)assert.ok(Math.abs(p.x-h.from[0])>h.width/2+.024,'unobstructed hinge aisle '+h.gate);
+  }
+  const seats=terminal.getObjectsByProperty('name','South Basin seat slat');
+  assert.equal(seats.length,18);
+  for(const seat of seats)assert.ok(seat.position.z>2.03&&seat.position.z<2.08);
+  assert.ok(new THREE.Box3().setFromObject(barrier).max.z<1.73);
+});

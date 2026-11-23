@@ -160,7 +160,10 @@ test('constructed pavement supports the five-lane tunnel entrance and all three 
   const join=bridgeLayout.length;
   for(const z of [join-.003,join+.003,join+7.65,join+8.6,join+10.05]){
     matches(surface(0,z),'#728383',.0755);
-    for(const side of [-1,1])near(surface(side*.597,z).y,y+.0755+.06,.00003);
+    for(const side of [-1,1]){
+      near(surface(side*.597,z).y,y+.0755+.016,.00003);
+      near(surface(side*.639,z).y,y+.0755+.062,.00003);
+    }
     matches(surface(-.548,z),'#c4ab72',.0755+roadPaintLift);
     matches(surface(.548,z),'#d8d8c3',.0755+roadPaintLift);
   }

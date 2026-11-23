@@ -1,3 +1,4 @@
+import {westTowerCableX,westMainCableRadius} from '../app/west-span-towers.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
@@ -169,15 +170,15 @@ test('the Bay Bridge anchorages and Pier W1 leave both road decks clear',()=>{
   for(const [i,cable] of backs.entries()){
     const half=cable.geometry.parameters.height/2;
     const crown=cable.localToWorld(new THREE.Vector3(0,-half,0)),toe=cable.localToWorld(new THREE.Vector3(0,half,0));
-    assert.ok(crown.distanceTo(new THREE.Vector3(i?.75:-.75,4.85,bridgeLayout.length))<1e-6);
+    assert.ok(crown.distanceTo(new THREE.Vector3(i?westTowerCableX:-westTowerCableX,4.85,bridgeLayout.length))<1e-6);
     const angle=Math.atan2(crown.y-toe.y,toe.z-crown.z);
     assert.ok(Math.abs(angle-37*Math.PI/180)<1e-6);
     const bed=new THREE.Box3().setFromObject(beds[i]);
-    assert.ok(bed.containsPoint(crown.clone().add(new THREE.Vector3(0,-.027,0))));
+    assert.ok(bed.containsPoint(crown.clone().add(new THREE.Vector3(0,-westMainCableRadius-.00001,0))));
     assert.ok(new THREE.Box3().setFromObject(chambers[i]).containsPoint(toe));
     for(let z=0;z<2.5;z+=.10){
       ray.set(new THREE.Vector3(0,upper+.5,w7.position.z+z),new THREE.Vector3(i?1:-1,0,0));
-      ray.far=.62;assert.equal(ray.intersectObject(w7,true).length,0,'W7 leaves both traffic shoulders open');
+      ray.far=.553;assert.equal(ray.intersectObject(w7,true).length,0,'W7 leaves the full width out to both outer shoulder stripes clear');
     }
   }
   const inset=along(0,1.63,w1.position.z-2,1,4)[0],shoulder=along(.62,1.63,w1.position.z-2,1,4)[0];

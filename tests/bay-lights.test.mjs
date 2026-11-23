@@ -77,7 +77,7 @@ test('the assembled western crossing carries moving light through every 100 m of
 
   const outward=new Vector3(1,0,0).transformDirection(lights.matrixWorld);
   for(const span of spans){
-    const z=span[Math.floor(span.length/2)],height=strands.get(z)[2]+bridgeLayout.upperDeck;
+    const z=span[Math.floor(span.length/2)],levels=strands.get(z),height=levels[Math.min(2,levels.length-1)]+bridgeLayout.upperDeck;
     const emitter=lights.localToWorld(new Vector3(position.getX(0),height,z));
     const outside=emitter.clone().addScaledVector(outward,.05);
     const hit=new Raycaster(outside,outward.clone().negate(),0,.1).intersectObjects(city.architectureChunks)[0];
@@ -121,5 +121,33 @@ test('Ferry Building night reflections follow lit architectural features and ski
   assert.match(shader.fragmentShader,/ty-2\.035/);
   assert.match(shader.fragmentShader,/23\.\/12\.101/);
   assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance+=strokes'));
+  material.dispose();
+});
+
+test('both cable valleys carry four 2¼-inch suspender legs per band down to the shoulder tread',async()=>{
+  const {Group,Mesh}=await import('three');
+  const {addWestSpanSuspenders}=await import('../app/west-span-suspenders.ts');
+  const {westMainCableRadius,westTowerCableX}=await import('../app/west-span-towers.ts');
+  const g=new Group(),material=new MeshStandardMaterial();
+  const lights=addWestSpanSuspenders(g,(geom,_color,x,y,z,parent)=>{
+    const part=new Mesh(geom,material);part.position.set(x,y,z);parent.add(part);return part;
+  });
+  g.updateMatrixWorld(true);
+  const steel=g.children.filter(o=>o.name==='Cable bands and four-legged suspenders');
+  for(const [a,b] of [[bridgeLayout.towers[0],bridgeLayout.towers[1]],[bridgeLayout.towers[2],bridgeLayout.towers[3]]]){
+    const mid=(a+b)/2,tread=bridgeLayout.upperDeck+.0755+.015;
+    for(const side of [-1,1])for(const dz of [-.015,.015]){
+      const y=tread+.043,ray=new Raycaster(new Vector3(side*westTowerCableX+.045,y,mid+dz),new Vector3(-1,0,0),0,.1);
+      const hits=ray.intersectObjects(steel).map(h=>h.point.x).filter((v,i,arr)=>i===0||Math.abs(v-arr[i-1])>.0001);
+      assert.equal(hits.length,2,'two legs in each longitudinal rope plane');
+      for(const [i,x] of hits.entries())
+        assert.ok(Math.abs(x-(side*westTowerCableX+(i?-1:1)*westMainCableRadius+2.25*.0254*.06/2))<.0001);
+    }
+    const line=g.children.filter(o=>o.name==='Wrapped main cable');
+    const hit=new Raycaster(new Vector3(westTowerCableX,9,mid),new Vector3(0,-1,0)).intersectObjects(line)[0];
+    assert.ok(hit&&Math.abs((hit.point.y-westMainCableRadius-tread)/.06-1.42)<.05);
+    assert.ok(lights.some((n,i)=>i%3===2&&Math.abs(n-(mid+.015))<.001));
+  }
+  for(const shape of new Set(g.children.map(c=>c.geometry)))shape.dispose();
   material.dispose();
 });

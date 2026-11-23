@@ -170,9 +170,17 @@ test('the plaza opening frames the clock, bay and eastern suspension towers on d
       const p=screen[name]=point.clone().project(camera);
       assert.ok(Math.abs(p.x)<.9&&Math.abs(p.y)<.92&&p.z>-1&&p.z<1,`${name} cropped at ${width}×${height}`);
       const toward=point.clone().sub(camera.position),distance=toward.length();
-      const ray=new THREE.Raycaster(camera.position,toward.normalize(),0,distance-.04);
+      const tower=name.startsWith('eastern tower');
+      const ray=new THREE.Raycaster(camera.position,toward.normalize(),0,distance+(tower?.01:-.04));
       const nearby=city.architectureChunks.filter(m=>ray.ray.intersectsBox(m.geometry.boundingBox));
-      assert.equal(ray.intersectObjects(nearby,false).length,0,`${name} hidden by architecture at ${width}×${height}`);
+      const first=ray.intersectObjects(nearby,false)[0];
+      if(tower){
+        // The sightline now terminates inside the gallery's central upright.
+        assert.ok(first,`${name} gallery missing at ${width}×${height}`);
+        const local=first.point.clone().sub(point).applyAxisAngle(new THREE.Vector3(0,1,0),-bridgeLayout.angle);
+        assert.ok(Math.abs(local.x)<.042&&Math.abs(local.z)<.086&&Math.abs(local.y)<.051,
+          `${name} hidden before its gallery at ${width}×${height}`);
+      }else assert.equal(first,undefined,`${name} hidden by architecture at ${width}×${height}`);
     }
     assert.ok(Math.abs(screen.clock.x)<.12&&screen.clock.y>0,'Clock centered above the plaza');
     assert.ok(screen.plaza.y<-.2&&screen.bay.y>screen.plaza.y,'Plaza foreground leads into the bay');

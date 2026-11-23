@@ -25,18 +25,70 @@ export function addBridgeMarkings(parent:THREE.Group,mesh:BridgeMesh,from:number
   }
 }
 
-/** Steel-faced westbound parapet, continuous through the island approach. */
+// HAER CA-32 photos 182 (Frank Deras Jr.) and 183 (Dennis Hill): the
+// suspenders penetrate the raised service tread, inboard of the riveted wall.
+// https://www.loc.gov/resource/hhh.ca1352.photos.383153p
+// Chris English's October 2013 drive shows the pale painted plates at road level.
+// https://commons.wikimedia.org/wiki/File:2013,_Approaching_Exit_2C,_Bay_Bridge_Southbound_-_panoramio.jpg
 export function addUpperParapet(parent:THREE.Group,mesh:BridgeMesh,from:number,to:number,asphalt:number){
-  const plate=new THREE.BoxGeometry(1,1,1);
-  function panel(x:number,y:number,z:number,w:number,h:number,d:number,c:string,name:string){
-    const m=mesh(plate,c,x,y,z,parent);m.scale.set(w,h,d);m.name=name;
-  }
+  const paint=['#88928f','#b0b7aa','#949d95','#717d77','#8f9b95','#aab5ab','#85958d','#71847b','#b4beb2'].map(c=>new THREE.Color(c));
+  // Cross section from the rolled roadward curb to the outer plate return.
+  // The top is level across both lanes of hanger sockets (x=.581604, .625404).
+  const profile=[
+    [.560,-.025,0],[.560,.010,0],[.564,.015,1],[.571,.016,2],
+    [.6265,.016,2],[.632,.016,3],[.632,.020,3],[.633,.022,4],
+    [.633,.059,4],[.631,.059,6],[.631,.062,5],[.650,.062,5],
+    [.650,.059,6],[.647,.059,6],[.647,-.025,6],
+  ];
+  const pitch=.43,panelsPerChunk=54;
   for(const side of [-1,1]){
-    panel(side*.595,asphalt+.012,(from+to)/2,.046,.030,to-from,'#96968b','Parapet toe');
-    panel(side*.597,asphalt+.035,(from+to)/2,.034,.046,to-from,'#98a39e','Solid parapet face');
-    panel(side*.597,asphalt+.058,(from+to)/2,.038,.004,to-from,'#aab1a8','Parapet cap');
-    for(let i=Math.ceil(from/.43);i*.43<to;i++){
-      panel(side*.580,asphalt+.040,i*.43,.002,.036,.004,'#868f8b','Parapet panel joint');
+    for(let start=from;start<to;){
+      const end=Math.min(to,(Math.floor((start+.000001)/(pitch*panelsPerChunk))+1)*pitch*panelsPerChunk);
+      const positions:number[]=[],colors:number[]=[],indices:number[]=[];
+      const origin=(start+end)/2;
+      function vertex(x:number,y:number,z:number,pigment:number){
+        positions.push(x*side,y,z-origin);
+        const tint=paint[pigment];colors.push(tint.r,tint.g,tint.b);
+      }
+      function face(i:number){
+        if(side>0)indices.push(i,i+1,i+2,i,i+2,i+3);
+        else indices.push(i,i+2,i+1,i,i+3,i+2);
+      }
+      for(let j=0;j<profile.length-1;j++){
+        const [x,y,tint]=profile[j],[xx,yy]=profile[j+1],i=positions.length/3;
+        vertex(x,y,start,tint);vertex(x,y,end,tint);vertex(xx,yy,end,tint);vertex(xx,yy,start,tint);face(i);
+      }
+      // Flush pigment for seam returns and alternating bright/dark rivet heads.
+      // Group several visible fasteners per panel at driving distance. All heads,
+      // tread joints and plates are packed into this same ordinary opaque chunk.
+      for(let n=Math.floor(start/pitch);n*pitch<end;n++){
+        const seam=n*pitch;
+        if(seam>=start&&seam+.0018<=end){
+          let i=positions.length/3;
+          vertex(.6327,.022,seam,7);vertex(.6327,.022,seam+.0018,7);
+          vertex(.6327,.059,seam+.0018,7);vertex(.6327,.059,seam,7);face(i);
+          if(n%2===0){
+            i=positions.length/3;
+            vertex(.565,.01618,seam,7);vertex(.565,.01618,seam+.0018,7);
+            vertex(.632,.01618,seam+.0018,7);vertex(.632,.01618,seam,7);face(i);
+          }
+        }
+        for(let f=0;f<4;f++){
+          const z=seam+.008+f*pitch/4;
+          if(z-.0017<start||z+.0017>end)continue;
+          for(const y of f===0?[.025,.040,.056]:f===2?[.025,.056]:[.056]){
+            const i=positions.length/3;
+            vertex(.6325,y-.0014,z-.0017,7);vertex(.6325,y-.0014,z+.0017,7);vertex(.6325,y+.0018,z,8);
+            if(side>0)indices.push(i,i+1,i+2);else indices.push(i,i+2,i+1);
+          }
+        }
+      }
+      const g=new THREE.BufferGeometry();
+      g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+      g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+      g.setIndex(indices);g.computeVertexNormals();g.userData.paintVertices=true;
+      mesh(g,'#ffffff',0,asphalt,origin,parent).name='Raised service tread and riveted outer guard';
+      start=end;
     }
   }
 }

@@ -1,3 +1,4 @@
+import {addWestSpanTowers} from './west-span-towers.ts';
 import {howardGlassName} from './301-howard-front.ts';
 import {padelScreenName} from './park-padel.ts';
 import {fireboatStation,firehouseFloat} from './fireboat-station.ts';
@@ -73,7 +74,8 @@ import {paintedLight} from './gouache-light.ts';
 import {windowGlow,applyWindowLighting} from './window-lighting.ts';
 import {waterfrontLandmark,detailedWaterfrontNames} from './waterfront-landmarks.ts';
 import {bridgeLayout,bridgePoint} from './bridge-layout.ts';
-import {addBayLightStrand,createBayLights} from './bay-lights.ts';
+import {addWestSpanSuspenders} from './west-span-suspenders.ts';
+import {createBayLights} from './bay-lights.ts';
 import {buildApproachRoad} from './approach-road.ts';
 import {buildApproachBlocks} from './approach-blocks.ts';
 import {hillsCoffeeTubes} from './coffee-neon.ts';
@@ -390,41 +392,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const bridge=new THREE.Group();bridge.position.set(bridgeLayout.origin[0],0,bridgeLayout.origin[1]);bridge.rotation.y=bridgeLayout.angle;root.add(bridge);
   const deckLow=bridgeLayout.lowerDeck,deckHigh=bridgeLayout.upperDeck,bridgeEnd=bridgeLayout.length;
   addBridgeDeck(bridge,mesh,bridgeEnd,deckLow,deckHigh);
-  for(const z of bridgeLayout.towers){
-    // Shared rectangular caisson, not a pair of disconnected round feet.
-    box(2.3,1.25,1.45,0,-.05,z,'#b2b8b1',bridge);
-    box(2.42,.16,1.57,0,.65,z,'#c2c5b9',bridge);
-    for(const side of [-1,1]){
-      const x=side*.82;
-      box(.22,8.6,.4,x,4.98,z,'#8aa1a5',bridge);
-      for(const dx of [-.115,.115])box(.04,8.7,.43,x+dx,5,z,'#b8c4c1',bridge);
-      for(const zz of [-.215,.215])for(let y=1;y<9.2;y+=.3)box(.21,.028,.027,x,y,z+zz,'#607d87',bridge);
-      box(.4,.25,.62,x,9.43,z,'#a3b7b7',bridge);
-      box(.29,.28,.44,x,9.69,z,'#b9c4bd',bridge);
-    }
-    for(const y of [4.6,6.2,7.8,9.3]){
-      box(1.8,.16,.382,0,y,z,'#99b0b2',bridge);
-      if(y<9)for(const zz of [-.15,.15])for(const sign of [-1,1])pole(new THREE.Vector3(sign*.72,y,z+zz),new THREE.Vector3(-sign*.72,y+1.5,z+zz),.05,'#809ca3',bridge);
-    }
-  }
+  addWestSpanTowers(bridge,mesh);
   addBridgeAnchorages(bridge,mesh,deckLow,deckHigh);
-  // Cable profile: 1,160 ft side spans and 2,310 ft main spans, twice.
-  const cableLightPositions:number[]=[];
   yield 3;
-  // Permit M2012.009.04 describes 308 strands on the north cable plane.
-  // Distribute those stations by modeled span length, keeping towers and anchorage clear.
-  const cableSpans=[[15.64,36.85,4.85,9.55,38],[36.85,79.097,9.55,9.55,75],[79.097,100.31,9.55,4.85,38],[100.31,121.524,4.85,9.55,38],[121.524,163.771,9.55,9.55,75],[163.771,bridgeEnd,9.55,4.85,44]];
-  for(const x of [-.75,.75])for(const [from,to,ya,yb,hangers] of cableSpans){
-    const sag=Math.abs(ya-yb)<.1?4.7:1.65;
-    const onCable=(t:number)=>new THREE.Vector3(x,ya+(yb-ya)*t-sag*4*t*(1-t),from+(to-from)*t);
-    const points=Array.from({length:97},(_,i)=>onCable(i/96));
-    for(let i=1;i<=hangers;i++){
-      const top=onCable(i/(hangers+1));
-      pole(new THREE.Vector3(x,deckHigh+.05,top.z),top,.017,'#94aaa9',bridge);
-      addBayLightStrand(cableLightPositions,x,top.z,top.y);
-    }
-    mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.027,5,false),'#516d79',0,0,0,bridge);
-  }
+  const cableLightPositions=addWestSpanSuspenders(bridge,mesh);
   const bayLights=createBayLights(cableLightPositions,artClock);bridge.add(bayLights.lights);
   const roadLightPositions:number[]=[];
   // Westbound driver photograph: AARoads, I-80 West, Bay Bridge. Both railings

@@ -2,7 +2,9 @@ import {doradoDimensions,doradoWake} from './dorado-ferry.ts';
 import {vessels} from './ferry-service.ts';
 import {ferryEntryX,ferryTowerZ} from './ferry-portico-access.ts';
 import {bridgeLayout} from './bridge-layout.ts';
-import {bayLightPattern} from './bay-lights.ts';
+import {westMainCableRadius,westTowerCableX} from './west-span-towers.ts';
+import {westMainSag} from './west-span-suspenders.ts';
+import {bayLensOffset,bayLightPattern} from './bay-lights.ts';
 import {shelterAtVertex,waterSurface,waveAmplitudes} from './water-surface.ts';
 import {daySailerContact} from './sailing.ts';
 import * as THREE from 'three';
@@ -253,7 +255,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
         vec2 offset=p-vec2(${bridgeLayout.origin.join(',')});
         float face=dot(mirrorRay.xz,acrossBridge);
         if(face<-.04){
-          float travel=(.772-dot(offset,acrossBridge))/face;
+          float travel=(${(westTowerCableX+westMainCableRadius+bayLensOffset).toFixed(6)}-dot(offset,acrossBridge))/face;
           float z=dot(offset+mirrorRay.xz*travel,alongBridge);
           float h=bayElevation+mirrorRay.y*travel+wobble*1.8;
           if(travel>0.&&z>15.64&&z<${bridgeLayout.length}&&h>3.8&&h<10.){
@@ -261,7 +263,7 @@ export function configureBayWater(material:THREE.MeshStandardMaterial, time:{val
             float endDistance=min(station,(z<100.31?84.67:88.518)-station);
             float u=clamp((station-21.21)/42.25,0.,1.);
             float side=clamp(endDistance/21.21,0.,1.);
-            float top=endDistance<21.21?mix(4.85,9.55,side)-6.6*side*(1.-side):9.55-18.8*u*(1.-u);
+            float top=endDistance<21.21?mix(4.85,9.55,side)-6.6*side*(1.-side):9.55-${(4*westMainSag).toFixed(5)}*u*(1.-u);
             float band=smoothstep(3.85,4.6,h)*(1.-smoothstep(top-.3,top+.28,h));
             float stroke=smoothstep(.24,.88,lanes*.50+ripple*.36+.27);
             diffuseColor.rgb+=vec3(.24,.255,.25)*bayNight*band*stroke*bayLightLevelAt(z,h-4.24,bayLightTime);

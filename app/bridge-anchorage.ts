@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {westMainCableRadius,westTowerCableX} from './west-span-towers.ts';
 import {bridgeLayout} from './bridge-layout.ts';
 
 type BridgeMesh=(shape:THREE.BufferGeometry,color:string,x:number,y:number,z:number,parent:THREE.Group)=>THREE.Mesh;
@@ -76,8 +77,8 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
   box(1.52,.098,2.421,0,lower-.092,0,'#aeb0a2',land,'Lower roadway bearing shelf');
   for(const side of [-1,1]){
     for(const [y,z] of [[.71,1.624],[.73,-1.622]]){
-      box(.123,.135,.026,side*.75,y,z,'#777f71',land);
-      box(.081,.093,.034,side*.75,y,z+Math.sign(z)*.016,'#495957',land,'Cable chamber opening');
+      box(.123,.135,.026,side*westTowerCableX,y,z,'#777f71',land);
+      box(.081,.093,.034,side*westTowerCableX,y,z+Math.sign(z)*.016,'#495957',land,'Cable chamber opening');
     }
     for(const z of [-.80,.43,.80]){
       box(.090,.112,.395,side*.71,upper+.101,z,'#9da296',land,'Roadside maintenance recess casing');
@@ -96,12 +97,12 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
   box(1.48,.081,.932,0,lower-.092,0,'#adb0a2',w1,'Pier W1 deck bearing');
   for(const side of [-1,1]){
     box(.101,.052,.021,side*.229,.152,-.614,'#7c8275',w1);
-    box(.198,.170,.43,side*.753,lower-.096,0,bearing,w1,'Lower truss shoe');
-    box(.168,.634,.31,side*.765,lower+.233,0,'#9aada9',w1,'Pier W1 cable bent post');
-    box(.151,.654,.036,side*.765,lower+.243,-.161,steel,w1);
-    box(.180,.084,.311,side*.762,upper+.040,0,darkSteel,w1);
-    box(.148,.277,.224,side*.753,upper+.210,0,steel,w1,'Pier W1 saddle housing');
-    box(.160,.103,.340,side*.75,4.805,0,bearing,w1,'Pier W1 cable saddle');
+    box(.198,.170,.43,side*(westTowerCableX+.042),lower-.096,0,bearing,w1,'Lower truss shoe');
+    box(.168,.634,.31,side*(westTowerCableX+.046),lower+.233,0,'#9aada9',w1,'Pier W1 cable bent post');
+    box(.151,.654,.036,side*(westTowerCableX+.046),lower+.243,-.161,steel,w1);
+    box(.180,.084,.311,side*(westTowerCableX+.047),upper+.040,0,darkSteel,w1);
+    box(.148,.277,.224,side*(westTowerCableX+.028),upper+.210,0,steel,w1,'Pier W1 saddle housing');
+    box(.160,.103,.340,side*westTowerCableX,4.805,0,bearing,w1,'Pier W1 cable saddle');
   }
   box(.752,.310,.074,0,.233,-.574,'#aeb0a2',w1,'Pump-station entrance base');
   box(.111,.156,.013,0,.172,-.616,'#686e65',w1,'Pump-station double door');
@@ -133,14 +134,14 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
   for(const side of [-1,1]){
     const shell=new THREE.Shape();
     sideProfile.forEach(([z,y],i)=>i===0?shell.moveTo(-side*z,y):shell.lineTo(-side*z,y));shell.closePath();
-    const hood=mesh(new THREE.ExtrudeGeometry(shell,{depth:.218,bevelEnabled:false}),steel,side*.648,0,0,w4);
+    const hood=mesh(new THREE.ExtrudeGeometry(shell,{depth:.164,bevelEnabled:false}),steel,side*.557,0,0,w4);
     hood.rotation.y=side*Math.PI/2;hood.name='W4 folded steel A-frame shroud';
     for(const z of [-1.17,-.84,-.51,-.18,.18,.51,.84,1.17]){
       const h=Math.abs(z)>1.04?1.07:1.23;
-      box(.012,h,.015,side*.872,lower+.035+h/2,z,darkSteel,w4,'W4 casing seam');
+      box(.012,h,.015,side*.727,lower+.035+h/2,z,darkSteel,w4,'W4 casing seam');
     }
     for(const y of [lower+.052,upper-.068,upper+.172]){
-      box(.019,.026,2.69,side*.869,y,0,'#91a09a',w4);
+      box(.019,.026,2.69,side*.724,y,0,'#91a09a',w4);
     }
   }
 
@@ -154,10 +155,10 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
   box(1.73,.105,.86,0,lower-.104,0,'#acafa3',w7,'W7 lower deck seat');
   const saddleY=4.85,fall=Math.tan(37*Math.PI/180);
   for(const side of [-1,1]){
-    const x=side*.75;
+    const x=side*westTowerCableX,room=x+side*.090;
     const foot:XYZ=[x,lower-.113,-.23],head:XYZ=[x,saddleY-.066,0];
     const dy=head[1]-foot[1],dz=head[2]-foot[2],height=Math.hypot(dy,dz);
-    const bent=box(.113,height,.149,x,(foot[1]+head[1])/2,(foot[2]+head[2])/2,
+    const bent=box(.096,height,.149,x,(foot[1]+head[1])/2,(foot[2]+head[2])/2,
       steel,w7,'W7 inclined steel cable bent');
     bent.rotation.x=Math.atan2(dz,dy);
     box(.182,.084,.27,x,lower-.088,-.228,bearing,w7,'W7 bent base plate');
@@ -168,29 +169,29 @@ export function addBridgeAnchorages(bridge:THREE.Group,mesh:BridgeMesh,lower:num
     cheek.moveTo(-.17,-.076);cheek.lineTo(-.17,.01);cheek.lineTo(-.05,.031);
     cheek.lineTo(.05,.022);cheek.lineTo(.19,-.095);cheek.lineTo(.19,-.15);
     cheek.lineTo(.075,-.13);cheek.closePath();
-    box(.117,.040,.21,x,saddleY-.044,-.026,bearing,w7,'W7 saddle bed');
-    const casting=new THREE.ExtrudeGeometry(cheek,{depth:.013,bevelEnabled:false});
+    box(.117,.040,.21,x,saddleY-westMainCableRadius-.020,-.026,bearing,w7,'W7 saddle bed');
+    const casting=new THREE.ExtrudeGeometry(cheek,{depth:.010,bevelEnabled:false});
     for(const edge of [-1,1]){
-      const face=mesh(casting,bearing,x+edge*.052,saddleY,0,w7);
+      const face=mesh(casting,bearing,x+edge*.036,saddleY,0,w7);
       face.rotation.y=-Math.PI/2;face.name='W7 cast saddle cheek';
       for(const z of [-.12,-.061,-.002,.057,.116]){
         const top=saddleY+.022-Math.max(0,z-.027)*fall,depth=.085;
-        box(.019,depth,.010,x+edge*.059,top-depth/2,z,'#96a39e',w7,'W7 saddle stiffener');
+        box(.011,depth,.010,x+edge*.045,top-depth/2,z,'#96a39e',w7,'W7 saddle stiffener');
       }
     }
     const length=2.18;
-    link([x,saddleY,0],[x,saddleY-length*fall,length],.027,'#516d79',w7,'W7 cable into rock anchorage');
+    link([x,saddleY,0],[x,saddleY-length*fall,length],westMainCableRadius,'#8e9d9d',w7,'W7 cable into rock anchorage');
     // The exposed backstay disappears into the concrete shoulder chamber.
-    box(.235,.99,1.65,x,upper-.395,1.625,concrete,w7,'W7 concrete cable chamber');
-    box(.251,.044,1.69,x,upper+.102,1.625,'#b1b3a6',w7,'W7 chamber coping');
-    box(.27,.80,1.78,x,lower-.40,1.59,concrete,w7,'W7 rock tunnel entrance');
+    box(.235,.99,1.65,room,upper-.395,1.625,concrete,w7,'W7 concrete cable chamber');
+    box(.251,.044,1.69,room,upper+.102,1.625,'#b1b3a6',w7,'W7 chamber coping');
+    box(.27,.80,1.78,room,lower-.40,1.59,concrete,w7,'W7 rock tunnel entrance');
   }
 
   // The main cables crest over W1, then descend under the land spans into the
   // gravity chamber. The 890 ft separation leaves the two pieces legible.
-  for(const x of [-.75,.75]){
+  for(const x of [-westTowerCableX,westTowerCableX]){
     const entry=land.position.z+1.64;
-    link([x,.71,entry],[x,4.85,w1.position.z],.027,'#536e7b',bridge,'Continuous land cable tail');
+    link([x,.71,entry],[x,4.85,w1.position.z],westMainCableRadius,'#8e9d9d',bridge,'Continuous land cable tail');
   }
   return {land,w1,w4,w7};
 }
