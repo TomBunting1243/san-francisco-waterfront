@@ -62,6 +62,31 @@ for source,lo,a,b,hi,rear in [(3801021,-5.76,-5.49,-.86,-.70,-.665),
         land=[xz(backU,vs0),xz(backU,vs1)]
         walks.append(Polygon([*land,offset(end,-back),offset(start,-back)]).buffer(0))
         cut.append(Polygon([*land,offset(end,.037),offset(start,.037)]).buffer(0))
+# The 2024 orthophoto shows the north-side cycleway running straight past
+# the older survey's inset between the two intact corner returns. Register
+# the gutter to the outer green edge; preserve both endpoint cross sections.
+source=3811435
+old=next(path for sid,_,path in curbs['lines'] if sid==source)
+def plate_point(x,y):
+    return xz((x-300)/200,(y-1400)/200)
+# Plate coordinates refer to the rectified municipal 8 cm aerial. Ends under
+# crowns interpolate to the intact ramp wings; no new vertical grade inferred.
+north=[old[-1][:],*[plate_point(x,y)+[0,0,1.] for x,y in [
+    (420.4,1593),(422.2,1630),(422.4,1742),(422.2,1940),
+    (422.5,2075),(422.0,2207),(422.3,2418),(422.3,2515)]],old[0][:]]
+for k in range(1,len(north)-1):
+    dx=north[k+1][0]-north[k-1][0];dz=north[k+1][1]-north[k-1][1]
+    length=math.hypot(dx,dz)
+    north[k][2:4]=[round(-dz/length,6),round(dx/length,6)]
+runs[source]=north[::-1]
+north_roads=[]
+def move(p,d):
+    return [p[0]+p[2]*d,p[1]+p[3]*d]
+for a,b in zip(north,north[1:]):
+    inner=[xz(.33,uv(*p[:2])[1]) for p in (a,b)]
+    north_roads.append(Polygon([*inner,move(b,.037),move(a,.037)]))
+    cut.append(Polygon([*inner,move(b,-.031),move(a,-.031)]))
+road=unary_union(north_roads)
 walk=unary_union(walks);replacement=unary_union(cut)
 paving={};survey=read('survey-blocks')['streets'];oldWalk=[]
 for kind in ['sidewalk','street','curb']:
@@ -125,5 +150,5 @@ for row in sorted(rows,key=lambda r:int(r['treeid'])):
     if tid==190328:h=3.6 # isolated tall return at lamp; adjoining measured pot row median
     if species not in taxa:taxa.append(species)
     trees.append([tid,round(p.x,5),round(p.y,5),taxa.index(species),dbh,h,ft,kind=='pot'])
-out={'taxa':taxa,'trees':trees,'curbs':runs,'walk':[rings(p) for p in parts(walk) if p.area>1e-8],'paving':paving}
+out={'taxa':taxa,'trees':trees,'curbs':runs,'road':[rings(p) for p in parts(road) if p.area>1e-8],'walk':[rings(p) for p in parts(walk) if p.area>1e-8],'paving':paving}
 (data/'howard-trees.json').write_text(json.dumps(out,separators=(',',':'))+'\n')

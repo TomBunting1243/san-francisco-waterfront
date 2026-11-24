@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 from shapely import Polygon, STRtree, constrained_delaunay_triangles, union_all
-from shapely.geometry import box
+from shapely.geometry import LineString, box
 
 # overview strip, centerline start/end pixels, strip width in pixels
 strips=[
@@ -149,20 +149,67 @@ def exposed_gutter(band,k,candidates):
    if ha*hb<0:above.append(a+(b-a)*ha/(ha-hb))
   if len(above)>=3:band=band.difference(overlap.intersection(Polygon(above)))
  return band
-paint=[]
-for bars in records:
- leg=[]
- for corners in bars:
-  footprint=Polygon(corners).intersection(road)
-  faces=[]
-  candidates=tree.query(footprint,predicate='intersects')
-  for k in candidates:
-   band=exposed_gutter(footprint.intersection(gutters[k]),k,candidates)
-   faces+=triangles(band,levels[k])
-  footprint=footprint.difference(union_all([gutters[k] for k in candidates]))
-  faces+=triangles(footprint,(0,0,.031))
-  if faces:leg.extend(faces)
- paint.append(leg)
+def on_pavement(region):
+ footprint=region.intersection(road)
+ faces=[]
+ candidates=tree.query(footprint,predicate='intersects')
+ for k in candidates:
+  band=exposed_gutter(footprint.intersection(gutters[k]),k,candidates)
+  faces+=triangles(band,levels[k])
+ footprint=footprint.difference(union_all([gutters[k] for k in candidates]))
+ return faces+triangles(footprint,(0,0,.031))
+
+paint=[[tri for corners in bars for tri in on_pavement(Polygon(corners))] for bars in records]
+
+# Howard and The Embarcadero. Coordinates in the 650 x 600 crop starting at
+# pixel (3870,300) in the same city orthophoto. The two white outlines cross
+# the rail reservation. Their diagonal hatching is interrupted at each rail.
+def howard_point(u,v):
+ return ((3870+u)/132-56,2-(300+v)/132)
+
+strokes=[]
+def stripe(width,*points):
+ line=LineString([howard_point(*p) for p in points])
+ strokes.append(line.buffer(width/(2*132),cap_style='flat',join_style='mitre'))
+
+stripe(1.9,(267,182),(278,185),(286,187),(294,193),(301,200),(305,207),
+       (305,214),(295,275),(291,283),(281,292),(265,303),(251,309),(267,182))
+stripe(1.9,(400,144),(392,143),(386,145),(380,150),(375,158),(372,167),
+       (357,268),(357,279),(361,286),(367,290),(376,289),(400,144))
+for a,b in [((264,215),(294,192)),((260,247),(305,211)),
+            ((256,277),(300,243)),((252,306),(294,274)),
+            ((372,167),(398,147)),((368,192),(396,170)),
+            ((364,219),(392,196)),((360,245),(389,221)),
+            ((357,271),(384,248)),((361,286),(381,268))]:
+ stripe(1.8,a,b)
+
+# The eastbound left and right pockets have staggered limit lines on Howard.
+stripe(2.8,(218,520),(241,524))
+stripe(2.8,(246,513),(272,517))
+stripe(1.8,(235,598),(246,513))
+stripe(2.6,(197.8,94),(200.8,167))
+stripe(2.6,(478,273),(480.5,295))
+stripe(2.6,(473,298),(475.3,320))
+stripe(2.6,(468.2,323),(474.5,384))
+for outline in [
+ [(237,558),(233.5,558),(232.3,552),(229.5,548.5),(225,546),(224,549),(219.5,542.5),(225.5,539),(225,542.5),(231,545.3),(235,550)],
+ [(242.5,553.8),(246.2,554),(249.4,549),(255,545.4),(259,545),(259.3,548.2),(264.7,543),(260,537.6),(259.2,541.1),(254.3,541.8),(247.2,546.4)],
+]:
+ strokes.append(Polygon([howard_point(*p) for p in outline]))
+
+# Use the same individual segment offsets and end extension as buildStreetcarTrack.
+rails=[]
+for line in json.loads((data/'embarcadero-tracks.json').read_text())['tracks']:
+ for a,b in zip(line,line[1:]):
+  if max(a[0],b[0]) < -27 or min(a[0],b[0]) > -21:continue
+  a,b=np.array(a),np.array(b)
+  tangent=(b-a)/np.linalg.norm(b-a)
+  normal=np.array([-tangent[1],tangent[0]])
+  for sign in (-1,1):
+   offset=normal*sign*(1.435+.068)*.06/2
+   rails.append(LineString([a+offset-tangent*.0005,b+offset+tangent*.0005]).buffer(.068*.06/2+.0003,cap_style='flat'))
+crossing_bars=[Polygon(b) for leg in records for b in leg if -27<b[0][0]<-21]
+junction=on_pavement(union_all(strokes).difference(union_all(rails+crossing_bars)))
 out=data/'promenade-crossings.json'
-out.write_text(json.dumps({'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','marketStart':market_start,'crossings':paint},separators=(',',':'))+'\n')
+out.write_text(json.dumps({'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','marketStart':market_start,'crossings':paint,'howardJunction':junction},separators=(',',':'))+'\n')
 print(len(records),'crossing legs;',sum(map(len,records)),'source paint bars;',sum(map(len,paint)),'road and gutter paint triangles')

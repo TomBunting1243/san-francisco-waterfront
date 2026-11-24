@@ -7,7 +7,7 @@ type Surface=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>T
 export function addPromenadeCrossings(mesh:Surface){
   const tiles=new Map<number,number[]>();
   const tones=new Map<number,number[]>();
-  for(const [leg,crossing] of promenadeCrossings.entries())for(const triangle of crossing){
+  for(const [leg,crossing] of [...promenadeCrossings,paint.howardJunction].entries())for(const triangle of crossing){
     const [a,b,c]=triangle,tile=Math.floor(a[0]/12);
     let vertices=tiles.get(tile);if(!vertices)tiles.set(tile,vertices=[]);
     const up=(b[1]-a[1])*(c[0]-a[0])-(b[0]-a[0])*(c[1]-a[1]);

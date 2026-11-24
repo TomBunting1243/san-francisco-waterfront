@@ -10,7 +10,7 @@ import {museumDoorStation} from '../app/streetcar-ride-path.ts';
 import {northWaterfrontGrade,streetPose,trackAt,trackCenterlines} from '../app/streets.ts';
 import {waterfrontCar,waterfrontCarCount} from '../app/waterfront-routes.ts';
 import {ambientStreetcarCall} from '../app/washington-call.ts';
-import {roadStopLines,signalAspects,spearStopLine} from '../app/waterfront-signals.ts';
+import {howardTurnStopLine,roadStopLines,signalAspects,spearStopLine} from '../app/waterfront-signals.ts';
 import {pccDimensions} from '../app/streetcar.ts';
 
 const near=(x,y,eps=1e-6)=>assert.ok(Math.abs(x-y)<=eps,x+' vs '+y);
@@ -184,7 +184,7 @@ test('constructed pavement supports the five-lane tunnel entrance and all three 
     const hit=ray.intersectObjects(chunks,false)[0];
     assert.ok(hit&&Math.abs(hit.point.y-pavement)<.009,'sedan tire at '+[x.toFixed(2),z.toFixed(2),hit?.point.y,pavement]);
   }
-  for(let t=230;t<rideDuration('bridge');t+=3.83){
+  for(let t=230;t<rideDuration('bridge');t+=(t>310&&t<373?.29:3.83)){
     const {eye,look}=driverPose('bridge',t),vx=look.x-eye.x,vz=look.z-eye.z,n=Math.hypot(vx,vz);
     for(const offset of [-.054,0,.054])
       tireOnRoad(eye.x-(.38*.06+offset)*vz/n,eye.z+(.38*.06+offset)*vx/n,eye.y-1.18*.06);
@@ -219,8 +219,8 @@ test('the passenger sedan waits behind the Spear limit line, then clears the cro
   assert.ok(stoppedOnRed&&passed);
 });
 test('the sedan follows Fremont and Howard, clears moving cars and crosses the three waterfront signals on green',()=>{
-  const milestones=[[243,-34,-31.1],[255,-29.3,-31.8],[290,-26.3,-14.6],[326.4,-22.9,-1],
-    [356.5,-5.15,-2.75],[410,11.49,-2.89],[450,35.44,-2.15],[500,65.43,-1.66],[532,82.53,-3.2]];
+  const milestones=[[243,-34,-31.1],[255,-29.3,-31.8],[290,-26.3,-14.6],[326.4,-24.93,-4.44],[370,-23.58,-1],
+    [400,-6.41,-2.68],[433,10.82,-2.92],[490,33.26,-2.22],[540,63.26,-1.69],[591,82.53,-3.2]];
   for(const [t,x,z] of milestones){
     const {eye}=driverPose('bridge',t);
     assert.ok(Math.hypot(eye.x-x,eye.z-z)<.45,'city landmark at '+t);
@@ -229,7 +229,8 @@ test('the sedan follows Fremont and Howard, clears moving cars and crosses the t
   assert.deepEqual(driverPose('bridge',duration-2.999),end);
   assert.ok(distance(driverPose('bridge',duration-3.5).eye,end.eye)<.02);
   assert.ok(end.look.x>end.eye.x+2.3);
-  const stops=Object.values(roadStopLines.north),crossings=[];
+  const {mission,market,washington}=roadStopLines.north;
+  const stops=[mission,market,washington],crossings=[];
   let previousX=-Infinity,railSamples=0;
   for(let t=305;t<=duration;t+=.1){
     const {eye,look}=driverPose('bridge',t);
@@ -255,4 +256,33 @@ test('the sedan follows Fremont and Howard, clears moving cars and crosses the t
   }
   assert.deepEqual(crossings,stops);
   assert.ok(railSamples>=10);
+});
+
+test('the Howard left-turning sedan stops at its staggered stripe and clears the median before through traffic returns',()=>{
+  const h=howardTurnStopLine;
+  const progress=(x,z)=>(x-h.x)*h.nx+(z-h.z)*h.nz;
+  let previous=-Infinity,rest=0,departed=false,passed=false,merged=false;
+  for(let tick=3100;tick<=3840;tick++){
+    const t=tick/10,p=driverPose('bridge',t);
+    const d=new T.Vector2(p.look.x-p.eye.x,p.look.z-p.eye.z).normalize();
+    const x=p.eye.x-.0228*d.y,z=p.eye.z+.0228*d.x;
+    const nose=progress(x+.14*d.x,z+.14*d.y);
+    if(p.station===driverPose('bridge',t+.05).station){
+      assert.ok(nose<-.045&&nose>-.075,'left-turn bumper stays behind its stripe');
+      assert.ok(Math.abs(x-h.x)<.055,'centered on the left-turn approach at rest');
+      rest++;
+    }else if(rest&&!departed){
+      assert.equal(signalAspects(t)[1],2);departed=true;
+    }
+    if(nose>=0&&previous<0){
+      assert.equal(signalAspects(t)[1],2);passed=true;
+    }
+    if(passed&&!merged){
+      assert.equal(signalAspects(t)[1],2,'cross street retains green throughout turn');
+      if(x-.15>roadStopLines.south.howard)merged=true;
+    }
+    if(signalAspects(t)[0]===2&&passed)assert.ok(merged);
+    previous=nose;
+  }
+  assert.ok(rest>300&&departed&&passed&&merged);
 });

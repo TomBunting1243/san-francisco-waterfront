@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {howardPedestrianHeads} from './howard-junction-signals.ts';
 import {chestnutPedestrianHeads} from './chestnut-signals.ts';
 import type {StreetAssembly} from './street-amenities.ts';
 import {marketPedestrianPhase,signalPeriod} from './waterfront-signals.ts';
@@ -20,8 +21,8 @@ export const marketPedestrianHeads=[
   {x:-.6439,z:-6.1515,y:.04064,angle:.147},
   {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+.147},
 ] as const;
-type Head={x:number;y:number;z:number;angle:number;side?:number};
-const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads];
+type Head={x:number;y:number;z:number;angle:number;side?:number;clockOffset?:number};
+const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads];
 const lensY=.156,lensZ=.0071;
 function point(h:Head,u:number,y:number,v:number){
   const s=Math.sin(h.angle),c=Math.cos(h.angle);
@@ -53,7 +54,7 @@ export function addMarketPedestrianHousings(a:StreetAssembly){
 }
 
 const segments=[0b1111110,0b0110000,0b1101101,0b1111001,0b0110011,0b1011011,0b1011111,0b1110000,0b1111111,0b1111011];
-type DisplayPart={kind:'walk'|'hand'|'digit';digit:number;segment:number;start:number;end:number};
+type DisplayPart={kind:'walk'|'hand'|'digit';digit:number;segment:number;start:number;end:number;clockOffset:number};
 // Append to the existing traffic-lens draw. Inactive symbols have degenerate
 // indices, so a dark hand can never overwrite an illuminated walking person.
 export function appendMarketPedestrianFaces(pos:number[],indices:number[],tints:number[]){
@@ -70,7 +71,7 @@ export function appendMarketPedestrianFaces(pos:number[],indices:number[],tints:
         }
         for(const tri of THREE.ShapeUtils.triangulateShape(shape,[]))indices.push(...tri.map(n=>base+n));
       }
-      ranges.push({kind,digit,segment,start,end:indices.length});
+      ranges.push({kind,digit,segment,start,end:indices.length,clockOffset:h.clockOffset??0});
     };
     const disk=(x:number,y:number,r:number)=>Array.from({length:10},(_,i)=>[x+r*Math.cos(i*.2*Math.PI),y+r*Math.sin(i*.2*Math.PI)]).flat();
     const rect=(x:number,y:number,w:number,height:number)=>[x,y,x+w,y,x+w,y+height,x,y+height];
@@ -86,11 +87,16 @@ export function appendMarketPedestrianFaces(pos:number[],indices:number[],tints:
   // The displayed countdown and flash advance only when simulated time moves.
   const first=ranges[0].start,saved=Uint16Array.from(indices.slice(first));let prior=-1;
   return function update(index:THREE.BufferAttribute,elapsed:number,enabled:boolean){
-    const phase=marketPedestrianPhase(elapsed),t=((elapsed%signalPeriod)+signalPeriod)%signalPeriod;
-    const seconds=phase==='clearance'?Math.ceil(60-t):0,hand=phase==='stop'||phase==='clearance'&&t%1<.5;
-    const key=enabled?2+seconds*4+Number(hand)*2+Number(phase==='walk'):0;
+    function state(offset:number){
+      const phase=marketPedestrianPhase(elapsed+offset),t=((elapsed+offset)%signalPeriod+signalPeriod)%signalPeriod;
+      const seconds=phase==='clearance'?Math.ceil(60-t):0,hand=phase==='stop'||phase==='clearance'&&t%1<.5;
+      return {phase,seconds,hand,key:2+seconds*4+Number(hand)*2+Number(phase==='walk')};
+    }
+    const cross=state(0),through=state(38);
+    const key=enabled?cross.key*128+through.key:0;
     if(key===prior)return;prior=key;
     for(const part of ranges){
+      const {phase,seconds,hand}=part.clockOffset?through:cross;
       const digit=part.digit===0?Math.floor(seconds/10):seconds%10;
       const lit=enabled&&(part.kind==='walk'?phase==='walk':part.kind==='hand'?hand:
         seconds>0&&(part.digit===1||seconds>=10)&&Boolean(segments[digit]&(64>>part.segment)));

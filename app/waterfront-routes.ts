@@ -216,7 +216,7 @@ const carriageways=Array.from({length:1601},(_,i)=>{
   lanes[1].z+=(south+folsom+.063*howard+north)/Math.cos(lanes[1].heading);
   return lanes;
 });
-export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-26,37]:[streetStart,streetEnd];
+export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-30,37]:[streetStart,streetEnd];
 const reactionDelay=[0,1.12,2.6,4.05,5.42,6.85,8.28]; // response delay accumulated down a queue
 const queueSpace=[0,.65,1.33,1.98,2.71,3.36,4.06]; // allowance to the front bumper in scene units
 
@@ -232,26 +232,29 @@ function drive(time:number,length:number,speed:number){
   return length;
 }
 
+// Each internal leg departs on a new green. The return can span multiple
+// periods, including the hidden trip between the two ends of the scene.
+const northGates=Object.values(roadStopLines.north);
+const southGates=Object.values(roadStopLines.south).reverse().map(x=>-x);
+const streetNorth=northGates.slice(0,2),streetSouth=southGates.slice(2);
 export function waterfrontCar(time:number,index:number,region?:Region){
   const [start,end]=waterfrontRoadRange(region),north=Boolean(index%2),dir=north?1:-1;
-  const lines=north?roadStopLines.north:roadStopLines.south;
   const single=region==='street';
-  const gateA=dir*(single||north?lines.mission:lines.washington);
-  const gateB=dir*(north?lines.washington:lines.mission);
-  const packs=region?2:4,cycles=single?packs:packs+1,perGroup=waterfrontCarCount(region)/(2*packs);
+  const gates=single?(north?streetNorth:streetSouth):(north?northGates:southGates);
+  const packs=region?2:4,cycles=single?3:region==='plaza'?4:6;
+  const perGroup=waterfrontCarCount(region)/(2*packs);
   const number=Math.floor(index/2),rank=number%perGroup,pack=Math.floor(number/perGroup);
   const release=1.0+(north?.18:.85)+reactionDelay[rank];
-  const lap=cycles*signalPeriod,phase=((time-release+pack*signalPeriod)%lap+lap)%lap;
+  const lap=cycles*signalPeriod,phase=((time-release+pack*(region==='plaza'?2:1)*signalPeriod)%lap+lap)%lap;
   // Each cutaway extends beyond its framed city blocks. An instance leaves the
   // modeled road, stays hidden during the return to the inlet, then starts its
   // next through trip. Never move a visible instance across the waterfront.
   const inlet=north?start:-end,outlet=north?end:-start,transfer=6.5;
   const circuit=outlet-inlet+transfer;
-  const leg=single?0:Math.min(2,Math.floor(phase/signalPeriod));
-  const market=dir*lines.market;
-  const from=leg===0?gateA:leg===1?market:gateB;
-  const to=single||leg===2?gateA+circuit:leg===0?market:gateB;
-  const speed=!single&&leg<2?(north?.725:.76):region==='plaza'?.91:region==='street'?.81:.85;
+  const leg=Math.min(gates.length-1,Math.floor(phase/signalPeriod));
+  const returning=leg===gates.length-1;
+  const from=gates[leg],to=returning?gates[0]+circuit:gates[leg+1];
+  const speed=returning?(region==='plaza'?.91:single?.81:.85):(north?.725:.76);
   const elapsed=phase-leg*signalPeriod;
   const station=from+drive(elapsed,to-from,speed)-streetVehicleNose(index)-.05-queueSpace[rank];
   const at=station-inlet;

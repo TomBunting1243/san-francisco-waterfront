@@ -13,9 +13,13 @@ export function signalAspects(elapsed:number):[number,number]{
 // x stations where each mapped through lane reaches its approach stop stripe.
 // Mission northbound uses the conservative upstream edge of its partly obscured crossing.
 export const roadStopLines={
-  north:{mission:-13.50,market:-1.21,washington:11.01},
-  south:{mission:-11.50,market:-.49,washington:13.96},
+  north:{howard:-25.193,mission:-13.50,market:-1.21,washington:11.01},
+  south:{howard:-23.121,mission:-11.50,market:-.49,washington:13.96},
 } as const;
+
+// Howard left-turn stop stripe at the Embarcadero. On the registered city ortho
+// its ends are (4091,820) and (4113,824); the adjacent right turn is staggered.
+export const howardTurnStopLine={x:4102/132-56,z:2-822/132,nx:.178885,nz:.983870};
 
 // Howard eastbound stop bar at Spear, u=260, v=111 on the rectified
 // 2024 city ortho. The unit normal points into the intersection.

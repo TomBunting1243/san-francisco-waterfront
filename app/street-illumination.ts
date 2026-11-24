@@ -5,6 +5,7 @@ import type {FerryWalkPool} from './ferry-walk-lights.ts';
 import {terraceFloodAim} from './plaza-street-lights.ts';
 import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrianHeads} from './market-crossing-signals.ts';
 import {addChestnutStandards,chestnutVehicleHeads} from './chestnut-signals.ts';
+import {addHowardJunctionStandards,howardVehicleHeads} from './howard-junction-signals.ts';
 import {addSpearStandards,spearVehicleHeads} from './spear-signals.ts';
 import {signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
@@ -16,7 +17,7 @@ const width=784,coreRows=672,minX=-56,minZ=-64,pitch=.12;
 const northX=78,northZ=-6.5,northRows=42,height=coreRows+2+northRows;
 type Axis=0|1;
 type MarketMount={offset:number;rise:number;shared:boolean;arm?:boolean};
-type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount;surveyed?:boolean};
+type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount;surveyed?:boolean;section?:'ball'|'left'|'rightYield'};
 const fromSouth=-Math.PI/2+.13,fromNorth=Math.PI/2+.13,fromStreet=Math.PI;
 // SFMTA 9323000 (NB) and 9323500 (SB) are separate midblock controls.
 // Their inventory points identify cabinets, not mounting positions. The shared
@@ -46,7 +47,11 @@ export const waterfrontSignals:Signal[]=[
   // pixel ~145,649 in the registered crossing crop. Base seated on the final mapped paved surface.
   {x:-1.902,z:-6.098,y:.031,heading:Math.PI/2+.04,axis:0,
     mount:{offset:-5.1,rise:1.38,shared:false,arm:true}},
+  ...howardVehicleHeads.filter(h=>h.section!=='rightYield'),
 ];
+// The two permissive arrows have no steady-color spill in the shared RGB
+// field. Their flashing amber faces join the same draw as the steady lamps.
+const displayedSignals:Signal[]=[...waterfrontSignals,...howardVehicleHeads.filter(h=>h.section==='rightYield')];
 function location(head:Signal,x:number,y:number,z:number){
   const s=Math.sin(head.heading),c=Math.cos(head.heading);
   return new THREE.Vector3(head.x+.06*(c*x+s*z),head.y+.06*y,head.z+.06*(-s*x+c*z));
@@ -58,7 +63,7 @@ function facePoint(h:Signal,x:number,y:number,z:number){
 export function signalLensCenter(h:Signal,aspect=1){return facePoint(h,.46,lensY[aspect],.185);}
 export function createSignalHousings(){
   const a=new StreetAssembly();
-  for(const h of waterfrontSignals){
+  for(const h of displayedSignals){
     const component=(u:number,y:number,v:number,w:number,d:number,t:number,color:string)=>{
       const p=facePoint(h,u,y,v);const m=a.box(p.x,p.y,p.z,w*.06,d*.06,t*.06,color);
       m.rotation.y=h.heading;
@@ -90,10 +95,11 @@ export function createSignalHousings(){
       for(const u of [.317,.603])component(u,y+.102,.23,.027,.10,.17,'#495247');
     }
   }
+  addHowardJunctionStandards(a);
   addChestnutStandards(a);
   addSpearStandards(a);
   addMarketPedestrianHousings(a);
-  return a.bake('SFMTA signal standards at Mission, Market, Washington, Chestnut and Howard at Spear');
+  return a.bake('SFMTA signal standards at Howard, Mission, Market, Washington, Chestnut and Spear');
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
@@ -163,13 +169,24 @@ const colors=[new THREE.Color('#ff4938'),new THREE.Color('#ffc444'),new THREE.Co
 const dark=['#4c332f','#484234','#304840'].map(c=>new THREE.Color(c));
 function signalLenses(){
   const pos:number[]=[],indices:number[]=[],tints:number[]=[];
-  for(const h of waterfrontSignals)for(const y of lensY){
+  const sections:{head:Signal;aspect:number;start:number;end:number}[]=[];
+  for(const h of displayedSignals)for(const [i,y] of lensY.entries()){
     const base=pos.length/3;
-    for(let j=0;j<=10;j++){
-      const a=j*2*Math.PI/10,r=j===10?0:.144;
-      pos.push(...facePoint(h,.46+r*Math.cos(a),y+r*Math.sin(a),.185).toArray());tints.push(0,0,0);
+    const arrow=h.section==='left'||(h.section==='rightYield'&&i===2);
+    if(arrow){
+      const sign=h.section==='left'?-1:1;
+      const shape=[[.145,0],[.019,.115],[.019,.044],[-.139,.044],[-.139,-.044],[.019,-.044],[.019,-.115]]
+        .map(([x,v])=>new THREE.Vector2(sign*x,v));
+      for(const p of shape){pos.push(...facePoint(h,.46+p.x,y+p.y,.185).toArray());tints.push(0,0,0);}
+      for(const tri of THREE.ShapeUtils.triangulateShape(shape,[]))indices.push(...tri.map(k=>base+k));
+    }else{
+      for(let j=0;j<=10;j++){
+        const a=j*2*Math.PI/10,r=j===10?0:.144;
+        pos.push(...facePoint(h,.46+r*Math.cos(a),y+r*Math.sin(a),.185).toArray());tints.push(0,0,0);
+      }
+      for(let j=0;j<10;j++)indices.push(base+10,base+j,base+(j+1)%10);
     }
-    for(let j=0;j<10;j++)indices.push(base+10,base+j,base+(j+1)%10);
+    sections.push({head:h,aspect:i,start:base,end:pos.length/3});
   }
   const updatePedestrians=appendMarketPedestrianFaces(pos,indices,tints);
   const geo=new THREE.BufferGeometry();geo.setIndex(indices);geo.index!.setUsage(THREE.DynamicDrawUsage);
@@ -180,11 +197,21 @@ function signalLenses(){
   let previous=-1;
   function update(aspects:[number,number],enabled:boolean,elapsed:number){
     updatePedestrians(geo.index!,elapsed,enabled);
-    const key=enabled?aspects[0]*3+aspects[1]:9;if(key===previous)return;previous=key;
-    let offset=0;
-    for(const h of waterfrontSignals)for(let i=0;i<3;i++){
-      const c=enabled&&aspects[h.axis]===i?colors[i]:dark[i];
-      for(let j=0;j<11;j++)color.setXYZ(offset++,c.r,c.g,c.b);
+    const rightFlash=aspects[1]===2&&THREE.MathUtils.euclideanModulo(elapsed,1)<.5;
+    const key=enabled?2*(aspects[0]*3+aspects[1])+Number(rightFlash):18;
+    if(key===previous)return;
+    const flashOnly=(key>>1)===(previous>>1);previous=key;
+    if(!flashOnly){
+      color.clearUpdateRanges();color.addUpdateRange(0,sections[sections.length-1].end*3);
+    }
+    for(const {head,aspect,start,end} of sections){
+      const permissive=head.section==='rightYield'&&aspect===2;
+      if(flashOnly&&!permissive)continue;
+      const lit=enabled&&aspects[head.axis]===aspect&&(!permissive||rightFlash);
+      const c=(lit?colors:dark)[permissive?1:aspect];
+      for(let j=start;j<end;j++)color.setXYZ(j,c.r,c.g,c.b);
+      if(flashOnly&&!color.updateRanges.some(r=>r.start<=start*3&&r.start+r.count>=end*3))
+        color.addUpdateRange(start*3,(end-start)*3);
     }
     color.needsUpdate=true;
   }

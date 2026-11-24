@@ -1,7 +1,7 @@
 import {CatmullRomCurve3,MathUtils,Vector3} from 'three';
 import {fremontExitDistance,westboundExitPose} from './approach-road.ts';
 import {northWaterfrontGrade,streetPose} from './streets.ts';
-import {crossStreetGreenStart,crossStreetGreenEnd,roadStopLines,signalPeriod,spearStopLine} from './waterfront-signals.ts';
+import {crossStreetGreenStart,crossStreetGreenEnd,howardTurnStopLine,roadStopLines,signalPeriod,spearStopLine} from './waterfront-signals.ts';
 
 // SF Public Works active centerlines (3psu-pn9h), with lane offsets.
 // Howard is two-way east of Fremont. The eastbound left lane crosses the
@@ -10,8 +10,8 @@ const landing=westboundExitPose(fremontExitDistance);
 const roads=[[landing.x,landing.z],
   [landing.x+.25*Math.cos(landing.heading),landing.z-.25*Math.sin(landing.heading)],
   [-33.95,-31.11],[-29.40,-31.79],[-29.10,-31.79],[-28.97,-31.70],[-28.90,-31.52],
-  [-27.91,-25.54],[-26.93,-19.12],[-25.78,-10.90],[-24.96,-6.19],
-  [-24.38,-2.95],[-24.21,-1.84],[-24.13,-1.43],[-24.02,-1.14],[-23.82,-1.02]];
+  [-27.91,-25.54],[-26.93,-19.12],[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
+  [-24.70,-2.95],[-24.21,-1.84],[-24.13,-1.43],[-24.02,-1.14],[-23.82,-1.02]];
 const waterfrontEndX=82.53; // Stop on the approach to Chestnut, with continuous road ahead.
 function northLane(x:number){
   const road=streetPose(x,1);
@@ -63,6 +63,19 @@ export function bridgeJourney(bridgeStart:number,bridgeSpeed:number){
     hold(.85+(alreadyGreen?0:(signalPeriod+crossStreetGreenStart-phase)%signalPeriod));
     travel(spear+1.7,.55);
   }else travel(spear,.55);
+  const h=howardTurnStopLine;
+  const howard=base+atLine(h.x,h.z,h.nx,h.nz)-.20;
+  travel(howard-1.10,.55);
+  // Reserve the entire median crossing and merging arc before through traffic
+  // restarts. The short approach speed alone cannot predict rear clearance.
+  const entry=(t+1.10/.55)%signalPeriod;
+  if(entry<crossStreetGreenStart||entry>crossStreetGreenEnd-12){
+    travel(howard,0);
+    const phase=t%signalPeriod;
+    const open=phase>=crossStreetGreenStart&&phase<=crossStreetGreenEnd-12;
+    hold(.85+(open?0:(signalPeriod+crossStreetGreenStart-phase)%signalPeriod));
+    travel(howard+1.0,.55);
+  }else travel(howard,.55);
   const turn=base+atLine(-23.95);
   travel(turn-1.4,.55);travel(turn-.35,.26);travel(turn+.5,.26);travel(turn+2,.60);
   for(const line of [roadStopLines.north.mission,roadStopLines.north.market,roadStopLines.north.washington]){
@@ -76,7 +89,12 @@ export function bridgeJourney(bridgeStart:number,bridgeSpeed:number){
     }else travel(stop,.60);
   }
   const finish=base+atLine(waterfrontEndX);
-  travel(finish-2,.60);travel(finish,0);hold(3);
+  // The changed Howard wait can put the final Chestnut crossing in its
+  // pedestrian phase. Ease down on the last block before the parked endpoint.
+  travel(finish-11,.60);
+  const coastPhase=(t+9/.60)%signalPeriod;
+  const finalSpeed=coastPhase>26?.32:.60;
+  travel(finish-2,finalSpeed);travel(finish,0);hold(3);
   return {duration:t,station(seconds:number){
     const leg=legs.find(l=>seconds<l.end);
     if(!leg)return bridgeStart-finish;

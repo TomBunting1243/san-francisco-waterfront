@@ -21,6 +21,7 @@ type Run=[number,number,number[][]];
 const howardCurbs:Record<string,number[][]>=howard.curbs;
 const howardPaving:Record<string,Record<string,number[][][][]>>=howard.paving;
 export const howardSidewalk=howard.walk;
+export const howardStreet=howard.road;
 const portalCurbs:Record<string,number[][][]>=portal.curbs;
 export const curbRuns=frostCurbRuns(data.lines as Run[]).flatMap((run):Run[]=>{
   const [source,median,path]=run,cut=portalCurbs[source+':'+path[0][0]+','+path[0][1]];
