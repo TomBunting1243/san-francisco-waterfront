@@ -64,6 +64,10 @@ function wellForm(kind:WellKind){
 export function treeWell(mesh:MakeMesh,id:number|undefined,x:number,y:number,z:number,angle=0,median=false){
   const record=median?['cutout',5,5] as Entry:plot[id??''];
   if(!record||record[0]==='yard')return;
+  return placedTreeWell(mesh,id,x,y,z,angle,record);
+}
+
+export function placedTreeWell(mesh:MakeMesh,id:number|undefined,x:number,y:number,z:number,angle:number,record:Entry){
   const [kind,width,depth]=record;
   const part=mesh(wellForm(kind),'#ffffff',x,y+.0009,z);
   part.name=kind==='pot'?'Inventory tree planter':kind==='grate'?'Bronze tree grate':'Tree cutout';

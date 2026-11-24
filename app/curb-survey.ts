@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import howard from '../public/data/howard-trees.json' with {type:'json'};
 import portal from '../public/data/folsom-portal.json' with {type:'json'};
 import {frostCurbRuns,frostPavement} from './california-sidewalk.ts';
 import data from '../public/data/curb-survey.json' with {type:'json'};
@@ -17,9 +18,13 @@ function inside(x:number,z:number,ring:number[][]){
 }
 type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Run=[number,number,number[][]];
+const howardCurbs:Record<string,number[][]>=howard.curbs;
+const howardPaving:Record<string,Record<string,number[][][][]>>=howard.paving;
+export const howardSidewalk=howard.walk;
 const portalCurbs:Record<string,number[][][]>=portal.curbs;
 export const curbRuns=frostCurbRuns(data.lines as Run[]).flatMap((run):Run[]=>{
   const [source,median,path]=run,cut=portalCurbs[source+':'+path[0][0]+','+path[0][1]];
+  if(howardCurbs[source])return [[source,median,howardCurbs[source]]];
   return cut?cut.map(points=>[source,median,points]):[run];
 });
 export const medianPaving=data.medianPaving;
@@ -71,6 +76,8 @@ const backDx=backB[0]-backA[0],backDz=backB[1]-backA[1],wallSlope=.340/-2.297;
 const backT=(-7.844+(backA[0]+8.554)*wallSlope-backA[1])/(backDz-wallSlope*backDx);
 export const museumWalkSeam=[backA[0]+backDx*backT,backA[1]+backDz*backT];
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
+  const registered=howardPaving[kind]?.[index];
+  if(registered)return registered;
   const overrides=data.overrides as Record<string,Record<string,number[][][][]>>;
   if(kind==='sidewalk'&&index===337){
     const ring=overrides.sidewalk[index][0][0];

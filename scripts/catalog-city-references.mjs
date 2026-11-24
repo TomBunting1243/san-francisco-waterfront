@@ -76,6 +76,7 @@ function sourceType(record){
   const u=new URL(record.url),d=[...record.descriptions.keys()].join(' ').toLowerCase();
   if(/creativecommons.org|opendatacommons.org/.test(u.hostname)||/\/copyright\/?$|\/attribution\.md/i.test(u.pathname)||/^(license|rights)$/.test(d))return types[4];
   if(u.hostname==='kartaview.org'&&u.pathname.startsWith('/details/'))return types[0];
+  if(u.hostname==='www.google.com'&&u.pathname.startsWith('/maps/')&&u.searchParams.get('map_action')==='pano')return types[0];
   if(/tile\.sf\.gov|image(server)?\b.*naip|naip.*imageserver/.test(record.url.toLowerCase()))return types[0];
   if(/\.(?:jpe?g|png|webp|tiff?)$/i.test(u.pathname)||/page.*photo|photograph|photo|aerial|orthoimagery|street view|gallery|panorama/i.test(d))return types[0];
   if(/openstreetmap\.org\/(?:way|node|relation)\//.test(record.url)||/floor plan|site plan|blueprint|elevation drawing|measured drawing|terminal map|survey map|map sheet|architectural drawing/i.test(d))return types[1];
@@ -103,6 +104,7 @@ const units={
  'curb-survey':'lines:curb lines ramps:curb ramps', 'downtown-roofs':'roofs:roof measurements profiles:height profiles setbacks:setback records',
  'east-bay-shore':'coastalCells:coastal cells tidalVertices:tidal vertices','embarcadero-tracks':'ways:mapped ways',
  'folsom-portal':'sections:portal sections','frost-trees':'$:tree IDs','harbor-tide-hours':'cm:hourly water levels',
+ 'howard-trees':'trees:tree records taxa:species curbs:curb runs',
  'harbor-timetable':'days:service days stops:stop records', 'market-lights':'poles:lighting standards',
  'market-street':'platforms:platforms trees:tree records crossings:crossings','plaza-canopies':'$:crown geometries',
  'plaza-survey':'trees:tree records benches:bench records','promenade-crossings':'crossings:crossings',

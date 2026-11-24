@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {biermanGround,biermanParcel,sueBiermanPark} from './sue-bierman.ts';
 import {staticBoxes} from './static-boxes.ts';
+import {addHowardTrees} from './howard-trees.ts';
 import {treeWell} from './tree-wells.ts';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
 import {createGatewayClub,gatewayClubGround} from './gateway-club.ts';
@@ -146,6 +147,7 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
       tree(x,z,localGrade??y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
     }
   }
+  treeAnchors.push(...addHowardTrees(mesh));
   for(const [id,x,z,heightM,crownM,dbh] of northQuayPalms){
     const y=northWaterfrontGrade(x)+.014;
     addSurveyedTree(mesh,root,{id,p:[x,z],heightM,crownM,palm:true,supplemental:false},

@@ -18,7 +18,8 @@ test('orthophoto terrace, penthouse step, reentrant notch and two higher cores m
   near(top(120,300),4.35);near(top(220,165),4.352);
   near(top(410,270),4.681);near(top(433,535),4.821);
   near(top(546,360),4.352);near(top(379,434),4.91);near(top(562,419),4.927);
-  near(top(244,230),4.621);near(top(628,340),4.571);
+  // Sample inside the fan blades; the hub and radial seam are shared triangle edges.
+  near(top(247,230.6),4.621);near(top(628.6,338),4.571);
   assert.equal(top(740,400),undefined);
 });
 test('17 inset spandrels and 17 glass zones run up the Main elevation above the set-back entry',()=>{

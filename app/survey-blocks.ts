@@ -6,7 +6,7 @@ import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
-import {addSurveyCurbs,bealeBeds,bealeSidewalk,replacementPavement} from './curb-survey.ts';
+import {addSurveyCurbs,bealeBeds,bealeSidewalk,howardSidewalk,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
 import extensions from '../public/data/sightline-streets.json' with {type:'json'};
@@ -222,7 +222,7 @@ export function addSurveyBlocks(mesh:Surface){
   const at=(plan:Plan)=>tileAt(plan[0][0][0],plan[0][0][1]);
   addRinconCurbEdge(tileAt(-28,-2));
   addFolsomPortal(mesh);
-  for(const plan of bealeSidewalk)at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
+  for(const plan of [...bealeSidewalk,...howardSidewalk])at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   // Broad planted beds visible in the registered Beale transit-block aerial.
   // A shallow raised crown darkens their edges without adding leaf cutouts.
   for(const [index,bed] of bealeBeds.entries()){

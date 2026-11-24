@@ -122,10 +122,11 @@ class Paint {
   }
   // One irregular, closed leaf mass per bough. Shared vertices and joined caps
   // allow smooth lighting without transparent cards, exposed backs or loose leaves.
-  spray(at:Point,rx:number,ry:number,rz:number,angle:number,tones:THREE.Color[],phase:number){
-    const n=9,start=this.xyz.length/3;
+  spray(at:Point,rx:number,ry:number,rz:number,angle:number,tones:THREE.Color[],phase:number,compact=false){
+    const n=compact?7:9,start=this.xyz.length/3;
+    const levels=compact?[-.51,.55]:[-.66,.06,.68];
     const lo=this.vertex(at.clone().add(vec(0,-ry,0)),tones[0]);
-    for(const [j,level] of [-.66,.06,.68].entries()){
+    for(const [j,level] of levels.entries()){
       for(let k=0;k<n;k++){
         const az=tau*k/n+.10*j, scallop=.83+.24*seed(phase,k)+.12*Math.sin(3*az+phase);
         const radius=Math.sqrt(1-level*level)*scallop;
@@ -137,8 +138,9 @@ class Paint {
     const hi=this.vertex(at.clone().add(vec(.07*rx,ry,0)),tones[2]);
     for(let k=0;k<n;k++){
       const a=start+1+k,b=start+1+(k+1)%n;
-      this.indices.push(lo,a,b,hi,b+2*n,a+2*n);
-      for(let j=0;j<2;j++)this.quad(a+j*n,a+(j+1)*n,b+(j+1)*n,b+j*n);
+      const last=(levels.length-1)*n;
+      this.indices.push(lo,a,b,hi,b+last,a+last);
+      for(let j=0;j<levels.length-1;j++)this.quad(a+j*n,a+(j+1)*n,b+(j+1)*n,b+j*n);
     }
   }
 }
@@ -282,7 +284,7 @@ function planeSprays(points:Point[],groups:number[][],phase:number,id:number,h:n
   }
 }
 
-export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:number,height:number,species='',seasonMonth=month,trunkRadius?:number){
+export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:number,height:number,species='',seasonMonth=month,trunkRadius?:number,streetCrown=false){
   const habit=treeHabit(species),f=forms[habit],h=height,phase=seed(id,7)*tau;
   const evergreen=['privet','magnolia','live oak','broadleaf'].includes(habit);
   const winter=!evergreen&&(seasonMonth===12||seasonMonth<=2);
@@ -295,7 +297,7 @@ export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:numb
   const tagged:PlantMesh=(g,c,px,py,pz)=>{
     const m=mesh(g,c,px,py,pz);m.userData.waterfrontPlant='tree';m.userData.plantAnchor=anchor;return m;
   };
-  const shell=observedCanopy(id,habit==='plane');
+  const shell=streetCrown?undefined:observedCanopy(id,habit==='plane');
   if(shell&&!winter){
     // Ground the scaffold in the trunk and aim each division toward its own
     // sector of observed canopy. Large openings remain clear to the sky.
@@ -394,12 +396,28 @@ export function waterfrontTree(mesh:PlantMesh,x:number,y:number,z:number,id:numb
       if(winter){
         const twig=tip.clone().addScaledVector(direction,h*.046);twig.y+=h*.056;
         wood.stem(tip,twig,r*.036,r*.009,timber,id+i);
+      }else if(streetCrown){
+        // The Howard rows show exposed forked scaffolds under contiguous,
+        // uneven crowns. Build small overlapping leaf clusters on the actual
+        // branch tips; the openings between successive forks remain visible.
+        const color=autumn&&seed(id,i+47)>.72?green:tones;
+        const base=end.clone().lerp(tip,.65),azimuth=az+side*.42;
+        for(const [j,along,across,up,scale] of [
+          [0,-.28,.02,.11,.64],[1,.20,.26,.27,.57],[2,.30,-.20,.03,.50],
+          [3,-.05,-.24,.43,.46],
+        ]){
+          const leafCenter=base.clone().addScaledVector(direction,along*size)
+            .addScaledVector(cross,side*across*size);
+          leafCenter.y+=up*size;
+          crown.spray(leafCenter,size*scale,size*scale*.79,size*scale*.81,
+            azimuth+.41*j,color,id+i*23+side*7+j,true);
+        }
       }else if(!spreading){
         const color=autumn&&habit!=='ginkgo'&&seed(id,i+47)>.72?green:tones;
         crown.spray(tip,size*(side===1?1:.76),size*f.depth, size*.70,az+.32*side,color,i*63+side+phase);
       }
     }
-    if(!winter&&spreading){
+    if(!winter&&spreading&&!streetCrown){
       const start=origin.clone().lerp(elbow,.62);
       const tip=end.clone().addScaledVector(direction,size*(.83+.30*seed(id,i+60)));
       tip.addScaledVector(cross,size*(seed(id,i+77)-.5)*.54);
