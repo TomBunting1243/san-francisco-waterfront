@@ -51,7 +51,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   function beam(a:XYZ,b:XYZ,w:number,color:string,parent:THREE.Group){
     const start=new THREE.Vector3(...a),end=new THREE.Vector3(...b),delta=end.clone().sub(start),mid=start.add(end).multiplyScalar(.5);
     const m=box(w,w,delta.length(),mid.x,mid.y,mid.z,color,parent);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),delta.normalize());
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),delta.normalize());return m;
   }
   function sign(label:string,px:number,y:number,z:number,width:number,color:string,parent:THREE.Group,angle=0){
     const g=new TextGeometry(label,{font,size:px,depth:.005,curveSegments:3});
@@ -343,9 +343,100 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   }
   box(.222,.423,.033,.63,.228,.022,dark,townSide);
   box(.173,.239,.016,.63,.305,.042,'#70949b',townSide);
-  sinbadWordmark(.174,0,.393,.022,1.25,townSide);
-  const open=sign('OPEN',.050,.248,.052,.213,'#e67555',townSide);
-  open.position.x=-.67;open.userData.signLight=[.74,.22,.12];
+  // The parking-side photograph by Ed U. reproduced by tablehopper, 3 March 2015,
+  // distinguishes this blue outline and gold script from the older bay-facing neon.
+  // https://www.tablehopper.com/chatterbox/sinbads-closes/
+  const fascia=group('Parking-side Sinbad’s sign',[0,.460,.070],townSide);
+  const halfW=.931,halfH=.119;
+  box(halfW*2,halfH*2,.057,0,0,-.029,'#383643',fascia);
+  const surface:number[]=[],irradiance:number[]=[],facets:number[]=[];
+  const rows=[-1,-.87,-.67,0,.67,.87,1],ribs=47;
+  // Folded sheet and its local receiving surface share geometry. The warm lobe
+  // under the two lamps falls off within the rightmost few corrugations.
+  for(let i=0;i<=ribs*3;i++){
+    const x=halfW*(2*i/(ribs*3)-1);
+    const corrugation=i%3===1?.0028:0;
+    for(let j=0;j<rows.length;j++){
+      const y=halfH*rows[j],edge=Math.min(halfW-Math.abs(x),halfH-Math.abs(y));
+      const blueWash=(i%3===1?.022:.006)+.19*Math.exp(-edge/.012);
+      const amber=.33*Math.exp(-((x-.842)**2/.011+(y-halfH)**2/.0026));
+      surface.push(x,y,corrugation);
+      irradiance.push(Math.round(255*(.022+amber)),Math.round(255*(.011+.33*blueWash+.49*amber)),Math.round(255*(.045+blueWash+.11*amber)));
+      if(i&&j){const d=i*rows.length+j,c=d-1,b=d-rows.length,a=b-1;facets.push(a,c,b,b,c,d);}
+    }
+  }
+  const sheet=new THREE.BufferGeometry();
+  sheet.setAttribute('position',new THREE.Float32BufferAttribute(surface,3));
+  sheet.setAttribute('signLight',new THREE.Uint8BufferAttribute(irradiance,3,true));
+  sheet.setIndex(facets);sheet.computeVertexNormals();
+  mesh(sheet,'#454059',0,0,.001,fascia).name='Corrugated fascia';
+  function lampPart(part:THREE.Mesh,name:string,light:XYZ){
+    part.name=name;part.userData.signLight=light;
+  }
+  const cyan:XYZ=[.013,.65,.99];
+  for(const side of [-1,1]){
+    lampPart(box(halfW*2-.014,.006,.005,0,side*(halfH-.003),.009,'#9fd6dc',fascia),'Blue perimeter tube',cyan);
+    lampPart(box(.007,halfH*2,.005,side*(halfW-.0035),0,.009,'#9fd6dc',fascia),'Blue perimeter tube',cyan);
+  }
+  // The lettering has long rising strokes and open counters. These normalized
+  // outlines follow the photographed sign's seven letters, dot and apostrophe.
+  const outlines=[
+    [[4,45],[8,41],[12,45],[11,56],[14,65],[18,67],[23,64],[25,57],[23,48],[11,36],[8,29],[8,17],[11,8],[17,3],[23,3],[29,7],[30,15],[26,21],[22,19],[23,12],[20,8],[16,9],[14,15],[15,23],[19,29],[29,37],[33,45],[33,58],[30,65],[23,72],[15,74],[8,70],[4,62],[3,53]],
+    [[39,34],[44,30],[42,70],[37,71]],[[41,14],[45,17],[45,23],[42,25],[39,20]],
+    [[49,34],[54,31],[54,38],[60,32],[64,33],[67,39],[68,67],[64,70],[62,43],[59,39],[55,43],[53,70],[48,71]],
+    [[69,34],[73,19],[80,7],[83,4],[78,25],[74,41],[75,55],[78,64],[81,62],[84,52],[83,40],[79,35],[76,36],[77,31],[82,28],[87,32],[91,42],[90,56],[85,66],[78,71],[73,67],[69,57]],
+    [[102,29],[109,28],[114,34],[116,56],[111,65],[104,70],[98,68],[94,58],[94,49],[99,41],[103,40],[102,45],[99,49],[101,59],[104,64],[108,61],[110,54],[109,39],[106,34],[101,33]],
+    [[134,28],[136,13],[142,4],[141,20],[144,47],[143,60],[137,68],[131,72],[124,69],[119,60],[118,48],[122,39],[128,34],[131,35],[131,41],[127,43],[124,49],[125,58],[130,64],[135,62],[138,54],[137,40]],
+    [[146,13],[152,17],[152,23],[149,30],[146,28]],
+    [[169,30],[168,37],[164,37],[164,32],[160,31],[157,35],[158,40],[167,46],[171,54],[170,62],[164,70],[158,72],[152,68],[150,58],[152,53],[155,54],[156,64],[159,67],[164,64],[165,58],[162,52],[154,48],[151,43],[151,36],[156,28],[162,25],[167,26]]
+  ];
+  const shapes=outlines.map(points=>{
+    const path=new THREE.Shape(),vertices=points.map(([x,y])=>new THREE.Vector2((x-86)*.00415,(39-y)*.00277));
+    vertices.forEach((v,i)=>{
+      const previous=vertices[(i+vertices.length-1)%vertices.length],next=vertices[(i+1)%vertices.length];
+      const a=v.clone().lerp(previous,.20),b=v.clone().lerp(next,.20);
+      if(i===0)path.moveTo(a.x,a.y);else path.lineTo(a.x,a.y);
+      path.quadraticCurveTo(v.x,v.y,b.x,b.y);
+    });
+    path.closePath();return path;
+  });
+  const lettersX=.409;
+  mesh(new THREE.ExtrudeGeometry(shapes,{depth:.018,bevelEnabled:false,curveSegments:2}),'#313139',lettersX+.005,0,.007,fascia).name='Dark sign returns';
+  lampPart(mesh(new THREE.ShapeGeometry(shapes,2),'#dfb03f',lettersX,0,.026,fascia),"SINBAD'S",[.85,.61,.066]);
+  // Two nested red outlines represent the small seal. Its pictured interior is unresolved.
+  for(const radius of [.063,.045]){
+    const ring=mesh(new THREE.RingGeometry(radius-.006,radius,24),'#c46155',-.73,0,.012,fascia);
+    ring.scale.x=.75;lampPart(ring,'Red entrance emblem',[.94,.053,.032]);
+  }
+  for(const x of [.785,.867]){
+    beam([x,halfH-.012,-.012],[x,halfH+.032,.032],.011,'#6c625b',fascia);
+    const bulb=mesh(new THREE.SphereGeometry(.018,9,5),'#ffc773',x,halfH+.037,.037,fascia);
+    lampPart(bulb,'Amber sign lamp',[1,.62,.20]);
+  }
+  lampPart(box(.038,.004,.027,.919,-halfH-.008,-.023,'#e3c48a',fascia),'Entry downlight',[.81,.53,.23]);
+  // The downlight picks out the lattice on the return, immediately around
+  // the right-hand corner. Clip each diagonal to that panel's frame.
+  const lattice=group('Entrance lattice',[.928,.030,.040],townSide);
+  const depth=.240,height=.303;
+  for(const slope of [-1,1]){
+    for(let intercept=-depth;intercept<height+depth;intercept+=.038){
+      const ends=[0,depth,(0-intercept)/slope,(height-intercept)/slope]
+        .filter(d=>d>=0&&d<=depth&&intercept+slope*d>=-.00001&&intercept+slope*d<=height+.00001)
+        .sort((a,b)=>a-b);
+      if(ends.length<2||ends.at(-1)!-ends[0]<.001)continue;
+      const a=ends[0],b=ends.at(-1)!,offset=slope>0?.002:0;
+      const slat=beam([offset,intercept+slope*a,-a],[offset,intercept+slope*b,-b],.006,'#97795c',lattice);
+      const p=slat.geometry.attributes.position,light:number[]=[];
+      for(let i=0;i<p.count;i++){
+        const v=new THREE.Vector3().fromBufferAttribute(p,i).applyQuaternion(slat.quaternion).add(slat.position);
+        const spill=.45*Math.exp(-(height-v.y)/.1-(-v.z)/.093);
+        light.push(Math.round(spill*255),Math.round(spill*136),Math.round(spill*55));
+      }
+      slat.geometry.setAttribute('signLight',new THREE.Uint8BufferAttribute(light,3,true));
+    }
+  }
+  const open=sign('OPEN',.042,.275,.055,.175,'#cb5d45',townSide);
+  open.position.x=.758;open.userData.signLight=[.97,.095,.040];
   box(.156,.185,.025,-.34,.121,.045,'#cbb890',townSide).rotation.x=-.12;
   box(.46,.06,.17,.58,.022,.109,'#bdb39d',townSide);
   // The 2013 entrance portrait places a life-size figure in a glazed case
@@ -397,7 +488,8 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
     beam([x,.036,1.097],[x+.22,.168,1.097],.011,'#85775e',sinbads);
     beam([x,.168,1.103],[x+.22,.036,1.103],.011,'#85775e',sinbads);
   }
-  const pierSign=group('Pier 2 hanging sign',[.79,0,-.79],sinbads);
+  // The separate blade hangs past the fascia end; its post rests on the timber deck.
+  const pierSign=group('Pier 2 hanging sign',[1.091,0,-.741],sinbads);
   pierSign.rotation.y=Math.PI;
   box(.031,.55,.034,.155,.28,0,timber,pierSign);
   box(.33,.025,.025,.006,.545,0,timber,pierSign);

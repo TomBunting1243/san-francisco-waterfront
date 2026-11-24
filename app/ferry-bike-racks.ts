@@ -9,6 +9,53 @@ export const ferryRackSites=[
   {osm:10780426460,x:-2.5954,z:2.392,y:.096,count:6,angle:.15,pitch:.91},
 ] as const;
 
+type RackMesh={positions:number[]; colors:number[]; indices:number[]};
+const silver=new THREE.Color('#9da6a5'),shade=new THREE.Color('#738383');
+function addHoop({positions,colors,indices}:RackMesh,x:number,y:number,z:number,angle:number,path:number[][]){
+  const facets=6,radius=.0265,c=Math.cos(angle),s=Math.sin(angle),base=positions.length/3;
+  for(let k=0;k<path.length;k++){
+    const prev=path[Math.max(0,k-1)],next=path[Math.min(path.length-1,k+1)];
+    const tangent=Math.atan2(next[1]-prev[1],next[0]-prev[0]);
+    for(let j=0;j<facets;j++){
+      const a=j*2*Math.PI/facets,along=scale*radius*Math.sin(a);
+      const across=scale*(path[k][0]-radius*Math.cos(a)*Math.sin(tangent));
+      const height=scale*(path[k][1]+radius*Math.cos(a)*Math.cos(tangent));
+      positions.push(x+c*along-s*across,y+height,z+s*along+c*across);
+      const paint=j<3?silver:shade;colors.push(paint.r,paint.g,paint.b);
+      if(k===path.length-1)continue;
+      const v=base+k*facets+j,w=base+k*facets+(j+1)%facets;
+      indices.push(v,v+facets,w,w,v+facets,w+facets);
+    }
+  }
+}
+function finishRacks({positions,colors,indices}:RackMesh,name:string){
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  geometry.setIndex(indices);geometry.computeVertexNormals();
+  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.64}));
+  mesh.name=name;return mesh;
+}
+
+// Both galvanized racks belong to SFMTA group 8515 at 98 Howard. The 2021
+// agency photograph locates the individual feet to approximately two metres.
+// The open rings narrow near the base. Dimensions above ground are estimated.
+export function createHowardBikeRacks(){
+  const buffers:RackMesh={positions:[],colors:[],indices:[]};
+  for(const [u,v,du,dv] of [[431.4,1633.65,1.4,5.1],[438,1673.3,1.8,6]]){
+    const c=.988686,s=.150004;
+    const x=-25.894+(c*(u-300)+s*(v-1400))/200;
+    const z=-12.650+(-s*(u-300)+c*(v-1400))/200;
+    const dx=c*du+s*dv,dz=-s*du+c*dv;
+    const foot=Math.hypot(du,dv)/24;
+    const left=[[-foot,-.02],[-foot,.08],[-.31,.22],[-.36,.39],[-.35,.52],
+      [-.30,.64],[-.22,.73],[-.12,.79]];
+    const profile=[...left,[0,.815],...left.slice().reverse().map(([across,h])=>[-across,h])];
+    addHoop(buffers,x,.045,z,Math.atan2(-dx,dz),profile);
+  }
+  return finishRacks(buffers,'98 Howard sidewalk bicycle racks');
+}
+
 /** All eleven stands and the two parked commuters share one indexed mesh. */
 export function createFerryBikeRacks(){
   const positions:number[]=[],colors:number[]=[],indices:number[]=[];
@@ -21,26 +68,11 @@ export function createFerryBikeRacks(){
     }
   }
   path.push([.39,0]);
-  const facets=6,radius=.0265;
-  const silver=new THREE.Color('#9da6a5'),shade=new THREE.Color('#738383');
+  const buffers={positions,colors,indices};
   for(const site of ferryRackSites){
-    const c=Math.cos(site.angle),s=Math.sin(site.angle);
     for(let stand=0;stand<site.count;stand++){
-      const offset=(stand-(site.count-1)/2)*scale*site.pitch,base=positions.length/3;
-      for(let k=0;k<path.length;k++){
-        const prev=path[Math.max(0,k-1)],next=path[Math.min(path.length-1,k+1)];
-        const tangent=Math.atan2(next[1]-prev[1],next[0]-prev[0]);
-        for(let j=0;j<facets;j++){
-          const a=j*2*Math.PI/facets,along=scale*radius*Math.sin(a);
-          const across=scale*(path[k][0]-radius*Math.cos(a)*Math.sin(tangent));
-          const height=scale*(path[k][1]+radius*Math.cos(a)*Math.cos(tangent));
-          positions.push(site.x+c*(offset+along)-s*across,site.y+height,site.z+s*(offset+along)+c*across);
-          const paint=j<3?silver:shade;colors.push(paint.r,paint.g,paint.b);
-          if(k===path.length-1)continue;
-          const v=base+k*facets+j,w=base+k*facets+(j+1)%facets;
-          indices.push(v,v+facets,w,w,v+facets,w+facets);
-        }
-      }
+      const offset=(stand-(site.count-1)/2)*scale*site.pitch;
+      addHoop(buffers,site.x+Math.cos(site.angle)*offset,site.y,site.z+Math.sin(site.angle)*offset,site.angle,path);
     }
   }
   // Two illustrative parked commuters occupy the outward side of an end stand.
@@ -132,10 +164,5 @@ export function createFerryBikeRacks(){
       tube([-.083+z*.109,.302-z*.056,z*.046],[-.083+z*.109,.302-z*.056,z*.11],.014,'#4c514a');
     }
   }
-  const geometry=new THREE.BufferGeometry();
-  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-  geometry.setIndex(indices);geometry.computeVertexNormals();
-  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.64}));
-  mesh.name='Market sidewalks and ferry apron bicycle stands';return mesh;
+  return finishRacks(buffers,'Market sidewalks and ferry apron bicycle stands');
 }

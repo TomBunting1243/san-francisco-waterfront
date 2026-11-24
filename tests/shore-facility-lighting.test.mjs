@@ -166,15 +166,16 @@ test("only Sinbad's waterside lettering glows red at night",async()=>{
   const root=createRememberedWaterfront(font),faces=root.getObjectsByProperty('name',"SINBAD'S");
   assert.equal(faces.length,3);
   const lit=faces.filter(o=>o.userData.signLight);
-  assert.equal(lit.length,1);assert.equal(lit[0].parent.name,"Sinbad's");
-  assert.equal(lit[0].material.color.getHexString(),'f2db9c');
-  assert.ok(lit[0].userData.signLight[0]>12*lit[0].userData.signLight[1]);
+  assert.equal(lit.length,2);
+  const bay=lit.find(o=>o.parent.name==="Sinbad's");
+  assert.equal(bay.material.color.getHexString(),'f2db9c');
+  assert.ok(bay.userData.signLight[0]>12*bay.userData.signLight[1]);
   assert.ok(root.getObjectsByProperty('name','Dark sign returns').every(o=>!o.userData.signLight));
   const {configureBayWater}=await import('../app/bay-water.ts');
   const water=new THREE.MeshStandardMaterial(),clock={value:0},shader={...THREE.ShaderLib.standard,uniforms:{}};
   configureBayWater(water,clock,Array.from({length:5},()=>new THREE.Vector4()),clock,clock);
   water.onBeforeCompile(shader);
-  const face=lit[0].getWorldPosition(new THREE.Vector3());
+  const face=bay.getWorldPosition(new THREE.Vector3());
   assert.ok(Math.abs(face.z-3.10)<.001);
   assert.ok(Math.abs(face.x+9.593)<.001&&Math.abs(face.y-.534)<.001);
   assert.ok(shader.fragmentShader.includes('float signTravel=(3.10-p.y)/mirrorRay.z'));
@@ -184,6 +185,40 @@ test("only Sinbad's waterside lettering glows red at night",async()=>{
   assert.equal(sample(face.x,5),255,'water in front of the sign');
   assert.equal(sample(-4.13,9.58),0,'adjacent terminal float');
   water.dispose();
+});
+
+test('the parking entrance sign faces the street and carries a closed blue outline, distinct gold script and local amber spill',async()=>{
+  const {createRememberedWaterfront}=await import('../app/remembered-waterfront.ts');
+  const root=createRememberedWaterfront(font),panel=root.getObjectByName('Parking-side Sinbad’s sign');
+  root.updateMatrixWorld(true);
+  const front=new THREE.Vector3(0,0,1).transformDirection(panel.matrixWorld);
+  assert.ok(front.z<-.999);
+  const tubes=panel.getObjectsByProperty('name','Blue perimeter tube');
+  assert.equal(tubes.length,4);
+  const bounds=tubes.map(t=>new THREE.Box3().setFromObject(t));
+  assert.equal(bounds.filter(b=>b.max.x-b.min.x>1.8).length,2);
+  assert.equal(bounds.filter(b=>b.max.y-b.min.y>.23).length,2);
+  for(const r of tubes)assert.ok(r.userData.signLight[2]>r.userData.signLight[1]&&r.userData.signLight[1]>20*r.userData.signLight[0]);
+  const text=panel.getObjectByName("SINBAD'S"),open=panel.parent.getObjectByName('OPEN');
+  assert.ok(text.userData.signLight[0]>text.userData.signLight[1]&&text.userData.signLight[1]>8*text.userData.signLight[2]);
+  assert.ok(open.position.x>text.position.x&&open.position.y<panel.position.y-.12);
+  assert.ok(panel.getObjectByName('Red entrance emblem').position.x<-.6);
+  assert.equal(panel.getObjectsByProperty('name','Amber sign lamp').length,2);
+  assert.ok(panel.getObjectByName('Entry downlight').position.y<-.119);
+  const g=panel.getObjectByName('Corrugated fascia').geometry,p=g.attributes.position,c=g.attributes.signLight;
+  const nearest=(x,y)=>{let best=0;for(let i=1;i<p.count;i++)if(Math.hypot(p.getX(i)-x,p.getY(i)-y)<Math.hypot(p.getX(best)-x,p.getY(best)-y))best=i;return best;};
+  assert.ok(c.getX(nearest(.84,.119))>9*c.getX(nearest(0,0)));
+  assert.ok(c.getZ(nearest(0,.119))>3.5*c.getZ(nearest(0,0)));
+  assert.ok(new Set(Array.from({length:p.count},(_,i)=>p.getZ(i))).size>1);
+  const blade=root.getObjectByName('Pier 2 hanging sign');
+  const emblemWorld=new THREE.Box3().setFromObject(panel.getObjectByName('Red entrance emblem'));
+  assert.ok(new THREE.Box3().setFromObject(blade).min.x>emblemWorld.max.x);
+  const post=new THREE.Box3().setFromObject(blade.children[0]),deckCenter=root.getObjectByName("Sinbad's").position;
+  assert.ok(post.max.x<deckCenter.x+1.02&&post.min.z>=deckCenter.z-.76);
+  const lattice=panel.parent.getObjectByName('Entrance lattice');
+  const amber=lattice.children.flatMap(o=>Array.from(o.geometry.attributes.signLight.array).filter((_,i)=>i%3===0));
+  assert.ok(Math.max(...amber)>90&&Math.min(...amber)<5);
+  assert.equal(panel.getObjectsByProperty('isLight',true).length,0);
 });
 
 test('the fireboat work deck receives its existing aft lamps through the berth and underway states',async()=>{

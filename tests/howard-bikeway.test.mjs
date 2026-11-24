@@ -62,7 +62,8 @@ test('on the Steuart block the protected lane, hatched buffer, pedestrian crossi
 
 test('the static road paint joins the standard architectural material in one indexed mesh',()=>{
   const baked=bakeRigidChunk('Howard paint',[mark],material).geometry;
-  assert.equal(root.children.length,1);
+  assert.equal(root.children.filter(m=>m.geometry.userData.roadPaint).length,1);
+  assert.ok(root.getObjectByName('Howard at Spear boarding island'));
   assert.ok(!mark.castShadow&&mark.receiveShadow);
   assert.ok(baked.attributes.roadExposure.array.every(v=>v===1));
   assert.ok(g.index.count/3<210);
@@ -102,4 +103,29 @@ test('floating parking and the adjacent travel lane fit full production vehicle 
     assert.ok(park-parked>drive+travel,'parked sedan overlaps through van '+y);
     assert.ok(drive-travel>centerline+2.15,'through van crosses centre marking '+y);
   }
+});
+
+test('two open galvanized racks seat all four anchor points in the photographed north sidewalk',()=>{
+  const racks=root.getObjectByName('98 Howard sidewalk bicycle racks');
+  const feet=[[[430.7,1631.1],[432.1,1636.2]],[[437.1,1670.3],[438.9,1676.3]]];
+  const centers=[];
+  for(const pair of feet){
+    const [a,b]=pair.map(([u,v])=>toWorld(u,v));
+    const center=a.clone().lerp(b,.5);centers.push(center);
+    for(const foot of [a,b]){
+      ray.ray.origin.set(foot.x,.047,foot.z);
+      const groundHit=ray.intersectObjects(pavement,false)[0];
+      assert.ok(groundHit&&Math.abs(groundHit.point.y-.045)<.0001,'sidewalk supports the photographed anchor');
+      const postRay=new THREE.Raycaster(new THREE.Vector3(foot.x-.012,.046,foot.z),new THREE.Vector3(1,0,0),0,.024);
+      assert.ok(postRay.intersectObject(racks).length,'steel reaches the sidewalk');
+    }
+    ray.ray.origin.set(center.x,.14,center.z);
+    const top=ray.intersectObject(racks)[0];
+    assert.ok(top&&Math.abs((top.point.y-.045)/.06-.84)<.03,'0.84 m hoop crown');
+    const cross=new THREE.Vector3(b.z-a.z,0,a.x-b.x).normalize();
+    const waist=center.clone();waist.y=.045+.06*.35;
+    assert.equal(new THREE.Raycaster(waist.addScaledVector(cross,-.04),cross,0,.08).intersectObject(racks).length,0);
+  }
+  assert.ok(Math.abs(centers[0].distanceTo(centers[1])/.06-3.4)<.1);
+  assert.equal(racks.geometry.index.count/3,384);
 });

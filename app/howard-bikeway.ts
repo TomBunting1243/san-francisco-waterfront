@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {addHowardBoardingIsland} from './howard-boarding-island.ts';
+import {createHowardBikeRacks} from './ferry-bike-racks.ts';
 import {setPackedNormals} from './packed-normals.ts';
 
 type Point=[number,number];
@@ -110,5 +112,5 @@ export function addHowardBikeway(root:THREE.Group){
   geometry.userData.paintVertices=true;geometry.userData.roadPaint='Waterfront crossings';setPackedNormals(geometry);
   const m=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.98}));
   m.name='Howard north-side bikeway and centerlines';m.receiveShadow=true;m.userData.roadExposure=1;
-  root.add(m);return m;
+  root.add(m,createHowardBikeRacks());addHowardBoardingIsland(root);return m;
 }

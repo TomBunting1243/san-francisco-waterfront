@@ -246,7 +246,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       window.addEventListener('waterfront-print-loaded',refreshPrint);
       let figureViewX=NaN,figureViewZ=NaN;
       let lastPatioSheltered=false;
-      let snowfall=false,customEpoch:number|undefined;
+      let snowfall=false,customEpoch:number|undefined,expressEpochSeconds=0,expressWallOffset=0;
       let lastLightingCheck=0, duskAmount=lighting.night, yaw=startYaw, hoveredPerson=-1;
       const skyColor=new THREE.Color(lighting.sky),waterColor=new THREE.Color(lighting.water),sunColor=new THREE.Color(lighting.sun);
       const horizonColor=new THREE.Color(lighting.horizon),fillColor=new THREE.Color(lighting.fill),groundColor=new THREE.Color(lighting.bounce);
@@ -692,12 +692,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const lightChanged=lastLightingCheck===0;
         if(lightChanged||now-lastLightingCheck>30000||lastLightingCheck===0){
           const selection=conditionsRef.current;
-          const localNow=cityDate(new Date(),selection.minutes);
+          const wallNow=new Date(),localNow=cityDate(wallNow,selection.minutes);
           customEpoch=selection.minutes===undefined?undefined:localNow.getTime();
           snowfall=selection.weather?selection.weather==='snow':harborChristmasSnow(localNow);
-          const harbor=harborConditionsAt(new Date(),selection.minutes);
+          const harbor=harborConditionsAt(wallNow,selection.minutes);
+          const civilSeconds=harbor.clock.minutes*60+localNow.getUTCSeconds()+localNow.getUTCMilliseconds()/1000;
+          expressWallOffset=civilSeconds-localNow.getTime()/1000;
           if(!serviceInitialized||serviceSelection!==selection.minutes||ferryClock.date!==harbor.clock.date){
             Object.assign(ferryClock,harbor.clock);
+            expressEpochSeconds=civilSeconds-elapsed;
             // Timetable playback advances one service minute per six seconds of scene time.
             ferryClock.minutes-=elapsed/6;serviceSelection=selection.minutes;serviceInitialized=true;
             lastMotion=-1;
@@ -840,7 +843,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const callChanged=platformTime!==previousPlatformTime;
         const patioSheltered=snowfall||rain>.35;
         if(motionChanged||callChanged||lastTransitMinute!==localMinutes||patioSheltered!==lastPatioSheltered){
-          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose,passengerTime);
+          const expressSeconds=customEpoch===undefined?Date.now()/1000+expressWallOffset:expressEpochSeconds+elapsed;
+          world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose,passengerTime,expressSeconds,roadSeconds,mode==='bridge');
           lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
         }
         if(motionChanged){

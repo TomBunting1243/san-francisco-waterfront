@@ -33,6 +33,7 @@ import {addHyattRegency} from './hyatt-regency.ts';
 import {addFinancialDistrictBuilding} from './financial-district.ts';
 import {backgroundFrontage} from './background-frontages.ts';
 import {addSurveyBlocks,addSurveyFront,outsideSurveyRoads,surveyedHeight} from './survey-blocks.ts';
+import {howardShopLanding} from './howard-express.ts';
 import {addHowardParking} from './howard-parking.ts';
 import {addHowardBikeway} from './howard-bikeway.ts';
 import {hasShorelineFacade,shorelineFacade} from './shoreline-facades.ts';
@@ -198,6 +199,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   }
   addSurveyBlocks(mesh);
   addHowardParking(root);
+  root.add(howardShopLanding());
   addHowardBikeway(root);
   outsideSurveyRoads.forEach(road=>{
     const width=road.name.includes('Embarcadero')?1.02:road.name==='Market Street'?1.45:road.kind==='primary'?.8:.48;

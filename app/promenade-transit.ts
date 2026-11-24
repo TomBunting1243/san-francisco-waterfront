@@ -12,6 +12,7 @@ import {frostPlazaSurface} from './california-sidewalk.ts';
 import {createCaliforniaCar} from './california-terminal.ts';
 import {batchTraffic} from './traffic-batches.ts';
 import {StreetAssembly,createStreetAmenities,streetPassenger} from './street-amenities.ts';
+import {expressAlighter,expressServiceDate,howardCallAt,howardExpressPose} from './howard-express.ts';
 import routes from '../public/data/promenade-transit.json' with {type:'json'};
 
 const scale=.06,steel='#848e8a',glass='#719099',red='#a84f48';
@@ -214,7 +215,7 @@ function plazaPhotograph(){
   return {pair,update};
 }
 
-function coach(){
+function coach(express=false){
   const a=new StreetAssembly(),ink='#45565a',redBand='#bc4843',silver='#babcba';
   a.box(0,thresholdHeight-.09,0,11.98,.18,2.52,'#687373');a.box(0,2.85,0,12.12,.29,2.55,silver);
   a.box(-.92,3.18,0,6.24,.44,1.89,'#a3aba4');
@@ -235,14 +236,14 @@ function coach(){
       const hub=a.add(new THREE.CylinderGeometry(.275,.275,.035,12),'#a0a59c',x,.495,side*1.345);hub.rotation.x=Math.PI/2;
     }
   }
-  for(const x of [-6.01,6.01]){
+  for(const x of (express?[6.01]:[-6.01,6.01])){
     a.box(x,.95,0,.099,.97,2.50,silver);a.box(x,1.99,0,.095,1.23,2.49,ink);
     for(const s of [-1,1])a.box(x+Math.sign(x)*.057,2.00,s*.59,.019,1.08,1.08,glass);
     a.box(x,.54,0,.145,.16,2.54,'#717772');
     for(const s of [-1,1])a.box(x+Math.sign(x)*.068,.96,s*.95,.021,.15,.27,x>0?'#e8d7ab':'#af5a4a');
   }
   a.box(6.07,2.70,0,.055,.40,2.19,ink);
-  a.label('2  SUTTER',6.104,2.59,0,.228,'#e3b367',Math.PI/2);
+  if(!express)a.label('2  SUTTER',6.104,2.59,0,.228,'#e3b367',Math.PI/2);
   // Folded front bicycle rack, paired mirror arms and upper clearance lamps.
   for(const y of [.70,.97])a.box(6.14,y,0,.075,.05,1.65,ink);
   for(const z of [-.74,-.24,.24,.74])a.box(6.14,.835,z,.075,.27,.036,ink);
@@ -257,7 +258,7 @@ function coach(){
     a.label('Muni',.0,.81,side*1.296,.22,redBand,side>0?0:Math.PI);
   }
   a.box(2.93,2.42,1.319,1.70,.36,.032,ink);
-  a.label('2 SUTTER',2.93,2.32,1.34,.15,'#dfae61');
+  if(!express)a.label('2 SUTTER',2.93,2.32,1.34,.15,'#dfae61');
   // Flush, stowed front ramp at the low-floor entry. Its nosing remains
   // inside the door sweep while the coach is underway.
   a.box(4.59,thresholdHeight+.006,.78,1.09,.012,.89,'#858c87');
@@ -272,6 +273,71 @@ function coach(){
   for(const h of [1.12,2.10])door.box(0,h,.04,.42,.82,.018,glass);
   const leaf=door.bake('Coach folding door leaf');
   return {body:a.bake('Forty-foot silver and red Muni coach'),leaf};
+}
+
+// Construct the articulated variant only when the local service clock reaches
+// an inbound run. The front body, door leaves and passenger use the Sutter kit.
+function expressCoach(){
+  const poses=new THREE.Group(),front=new THREE.Group(),rear=new THREE.Group();
+  const model=coach(true),tail=new StreetAssembly(),service=new StreetAssembly(),deadhead=new StreetAssembly();
+  const paint=model.body.material;
+  front.name='30X front section';rear.name='30X trailing section';
+  front.add(model.body);
+  service.label('30X SPEAR + HOWARD',6.104,2.61,0,.124,'#e3b367',Math.PI/2);
+  service.label('30X',2.93,2.31,1.34,.18,'#dfae61');
+  deadhead.label('NOT IN SERVICE',6.104,2.60,0,.147,'#e3b367',Math.PI/2);
+  const inboundSign=service.bake('30X Spear + Howard destination'),offSign=deadhead.bake('Not in service destination');
+  front.add(inboundSign,offSign);
+  // The rear module pivots at the bellows, carrying a third axle and an
+  // independent curbside door. Roof poles are stowed on unwired Howard.
+  tail.box(-3.02,.36,0,6.02,.18,2.52,'#687373');
+  tail.box(-3.02,2.85,0,6.02,.29,2.55,'#babcba');
+  for(const side of [-1,1]){
+    for(const [from,to] of (side<0?[[-6.0,-.30]]:[[-6,-4.86],[-3.67,-.30]])){
+      const mid=(from+to)/2,w=to-from;
+      tail.box(mid,.84,side*1.245,w,.94,.07,'#babcba');
+      tail.box(mid,.5,side*1.27,w,.23,.06,'#bc4843');
+      tail.box(mid,1.98,side*1.25,w,1.41,.08,'#45565a');
+      const count=Math.max(1,Math.round(w/1.2));
+      for(let i=0;i<count;i++)tail.box(from+(i+.5)*w/count,2.01,side*1.298,w/count-.08,1.24,.024,glass);
+    }
+    const wheel=tail.add(new THREE.CylinderGeometry(.495,.495,.19,16),'#444c4a',-2.24,.495,1.24*side);
+    wheel.rotation.x=Math.PI/2;
+    const hub=tail.add(new THREE.CylinderGeometry(.25,.25,.04,10),'#a0a59c',-2.24,.495,1.345*side);
+    hub.rotation.x=Math.PI/2;
+    tail.box(-3.23,3.06,side*.43,5.1,.058,.058,'#737a76');
+  }
+  tail.box(-5.99,1.58,0,.12,2.2,2.50,'#a2aaa6');
+  for(const side of [-1,1])tail.box(-6.06,.94,side*.96,.025,.18,.16,'#a14c43');
+  for(let i=0;i<6;i++)tail.box(.12-i*.105,1.63,0,.092,2.63,2.47-i%2*.06,'#676f6c');
+  rear.add(tail.bake('Articulated coach trailing body'));
+  const leaves:{pivot:THREE.Group;side:number}[]=[];
+  for(const [section,x] of [[front,4.59],[front,-1.93],[rear,-4.265]] as const){
+    for(const side of [-1,1]){
+      const pivot=new THREE.Group();pivot.position.set(x+side*.567,0,1.242);
+      const leaf=model.leaf.clone();leaf.position.x=-side*.285;pivot.add(leaf);section.add(pivot);leaves.push({pivot,side});
+    }
+  }
+  const passenger=streetPassenger('#598079','#b3856c');
+  passenger.root.name='Howard terminal alighting passenger';
+  for(const group of [front,rear,passenger.root]){group.scale.setScalar(scale);poses.add(group);}
+  const {batch,sync}=batchTraffic(poses,paint,'Scheduled 30X articulated coach and passenger');
+  function update(t:number,trafficSeconds:number,bridgeRide:boolean,arrivalClock:number){
+    const p=howardExpressPose(t,trafficSeconds,bridgeRide,arrivalClock);
+    front.position.set(p.head.x,p.head.y,p.head.z);front.rotation.y=p.head.yaw;
+    const hitch=front.localToWorld(new THREE.Vector3(-5.97,0,0));
+    rear.position.copy(hitch);rear.rotation.y=p.trailerYaw;
+    inboundSign.visible=p.inService;offSign.visible=!p.inService;
+    for(const {pivot,side} of leaves)pivot.rotation.y=-side*p.doors*1.46;
+    const feet=expressAlighter(t);
+    passenger.root.visible=!!feet;
+    if(feet){
+      passenger.root.position.set(feet.x,feet.y,feet.z);
+      passenger.root.rotation.y=feet.heading;passenger.stride(t,true);
+    }
+    sync();
+  }
+  return {batch,poses,update};
 }
 
 export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
@@ -364,7 +430,21 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
   paint.customProgramCacheKey=()=>program.endsWith('|cal49')?program:program+'|cal49';
   function setNight(amount:number){dusk.value=THREE.MathUtils.clamp(amount,0,1);}
   const root=new THREE.Group();root.name='Waterfront public transport and conveniences';root.add(batch);
-  function update(elapsed:number,localMinutes=720,sheltered=false,date?:string,washingtonSeconds?:number,tram?:WashingtonTramPose,ferrySeconds?:number){
+  let express:ReturnType<typeof expressCoach>|undefined,checkedDate:string|undefined,hasService=false;
+  let callMinute=-1,callTraffic=0,previousTraffic=0,previousService=0,ridePriority=false;
+  function update(elapsed:number,localMinutes=720,sheltered=false,date?:string,washingtonSeconds?:number,tram?:WashingtonTramPose,ferrySeconds?:number,expressSeconds?:number,trafficSeconds=elapsed,bridgeRide=false){
+    if(date!==checkedDate){checkedDate=date;hasService=!!date&&expressServiceDate(date);callMinute=-1;}
+    const expressTime=hasService&&expressSeconds!==undefined?howardCallAt(expressSeconds):undefined;
+    if(expressTime!==undefined){
+      if(!express){express=expressCoach();root.add(express.batch);}
+      const minute=Math.round((expressSeconds!-expressTime)/60);
+      const seek=Math.abs((trafficSeconds-previousTraffic)-(expressTime-previousService))>1.5;
+      if(minute!==callMinute||bridgeRide!==ridePriority||seek){
+        callTraffic=trafficSeconds-expressTime;callMinute=minute;ridePriority=bridgeRide;
+      }
+      express.batch.visible=true;express.update(bridgeRide?trafficSeconds-callTraffic:expressTime,trafficSeconds,bridgeRide,callTraffic);
+      previousTraffic=trafficSeconds;previousService=expressTime;
+    }else if(express){express.batch.visible=false;callMinute=-1;}
     const fallback=tram&&washingtonSeconds!==undefined?undefined:ambientStreetcarCall(elapsed);
     const car=tram??streetcarPose(fallback!.station);
     washington.update(washingtonSeconds??fallback!.t,car);
@@ -411,5 +491,5 @@ export function createPromenadeTransit(material?:THREE.MeshStandardMaterial){
     }
     sync();
   }
-  update(0);return {root,poses,batch,update,setNight};
+  update(0);return {root,poses,batch,update,setNight,get express(){return express;}};
 }

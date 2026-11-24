@@ -105,6 +105,7 @@ const units={
  'east-bay-shore':'coastalCells:coastal cells tidalVertices:tidal vertices','embarcadero-tracks':'ways:mapped ways',
  'folsom-portal':'sections:portal sections','frost-trees':'$:tree IDs','harbor-tide-hours':'cm:hourly water levels',
  'howard-trees':'trees:tree records taxa:species curbs:curb runs',
+ 'howard-express':'$:inbound route vertices',
  'harbor-timetable':'days:service days stops:stop records', 'market-lights':'poles:lighting standards',
  'market-street':'platforms:platforms trees:tree records crossings:crossings','plaza-canopies':'$:crown geometries',
  'plaza-survey':'trees:tree records benches:bench records','promenade-crossings':'crossings:crossings',
