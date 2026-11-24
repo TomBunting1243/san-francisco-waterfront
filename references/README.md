@@ -15,9 +15,9 @@ Follow the research behind the city, from the Ferry Building’s clock and arcad
 
 | Measure | Recorded amount |
 |---|---:|
-| Cited publication, image, data and source URLs | 772 |
+| Cited publication, image, data and source URLs | 773 |
 | Survey asset URLs | 2,257 (21 also directly cited) |
-| Distinct URLs across both registers | 3,008 |
+| Distinct URLs across both registers | 3,009 |
 | Shipped geographic JSON files | 38 files · 9,219,588 bytes |
 | Other shipped data JSON (portrait, wordmark, radar palette, tides and timetables) | 5 files · 54,918 bytes |
 | Measured input files in the [asset register](SURVEY-ASSETS.csv) | 2,257 files · 656,338,743 bytes |
@@ -83,7 +83,7 @@ Shipped sizes use the exact JSON bytes in this repository before build compressi
 
 Each URL has one entry. Page and sheet fragments share an entry and retain their individual deep links. Source types reflect the cited material; a gallery or project report may contain several kinds. File links identify where the source was recorded. For photo reuse, consult the original item’s rights statement.
 
-- [Photographs and imagery](#photographs-and-imagery) · 293
+- [Photographs and imagery](#photographs-and-imagery) · 294
 - [Maps and plans](#maps-and-plans) · 62
 - [Data and services](#data-and-services) · 58
 - [Reports and technical documents](#reports-and-technical-documents) · 108
@@ -186,6 +186,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Berkeley construction photographs](https://digicoll.lib.berkeley.edu/record/25021) · digicoll.lib.berkeley.edu — [Rincon Center, Spear Street and Maritime Plaza](../references/WATERFRONT-REFERENCE-AUDIT.md#rincon-center-spear-street-and-maritime-plaza)
 - [embarcadero center · embarcaderocenter.com](https://embarcaderocenter.com/wp-content/uploads/NEW-4EC-Tulip-2-1.jpg) · embarcaderocenter.com — [embarcadero center](../app/embarcadero-center.ts#L274)
 - [Dated plaza detail](https://embarcaderoplaza.com/_next/static/media/thumbnail_20250809-P0027029.99be9c36.jpg) · embarcaderoplaza.com — [Park Padel beside Vaillancourt Fountain](../references/WATERFRONT-REFERENCE-AUDIT.md#park-padel-beside-vaillancourt-fountain)
+- [daylight close-up](https://fastly.4sqi.net/img/general/original/13970793_L1CMy561QUGVt1JuSPnf6VQ_-IP-8rS7XxlGQFkd0vQ.jpg) · fastly.4sqi.net — [Remembered waterfront](../references/WATERFRONT-REFERENCE-AUDIT.md#remembered-waterfront)
 - [Federal Reserve opening photographs](https://fraser.stlouisfed.org/files/docs/historical/frbsf/federalreservenotes/frnotes_frbsf_198303.pdf) · fraser.stlouisfed.org — [market architecture](../app/market-architecture.ts#L198) · [Lower Market and the inland skyline](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-and-the-inland-skyline)
 - [Chaplin’s 2007 interior and meal photographs](https://gastronomyblog.com/2007/07/21/taylors-automatic-refresher/) · gastronomyblog.com — [Ferry Building after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#ferry-building-after-dark)
 - [California NAIP imagery service](https://gis.wildlife.ca.gov/images/rest/services/Base_Remote_Sensing/NAIP_2022/ImageServer) · gis.wildlife.ca.gov — [Waterfront surveys](../THIRD-PARTY-NOTICES.md#waterfront-surveys) · [roof finishes](../public/data/roof-finishes.json#L1) · [blocks](../public/data/survey-blocks.json#L1) · [Measured research inputs](../references/RESEARCH-SOURCES.md#measured-research-inputs) · [160 Spear](../references/RESEARCH-SOURCES.md#160-spear) · [455 Market](../references/RESEARCH-SOURCES.md#455-market) · [Central rooflines and materials](../references/WATERFRONT-REFERENCE-AUDIT.md#central-rooflines-and-materials) · [Rincon Center, Spear Street and Maritime Plaza](../references/WATERFRONT-REFERENCE-AUDIT.md#rincon-center-spear-street-and-maritime-plaza) · [roof finishes](../scripts/import-roof-finishes.py#L23) · [survey blocks](../scripts/import-survey-blocks.py#L186)
@@ -314,7 +315,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Program site and installation photographs by Masaki Omori](https://www.bigartloop.org/corpus) · bigartloop.org — [Portside art identification](../references/RESEARCH-SOURCES.md#portside-art-identification) · [Portside Park, Pier 14 and public art](../references/RESEARCH-SOURCES.md#portside-park-pier-14-and-public-art) · [Pier 14 and the western span after dark](../references/WATERFRONT-REFERENCE-AUDIT.md#pier-14-and-the-western-span-after-dark) · [People at Pier 14](../references/WATERFRONT-REFERENCE-AUDIT.md#people-at-pier-14)
 - [Architect's photographs](https://www.brereton.com/201-spear) · brereton.com — [201 spear](../app/201-spear.ts#L145) · [Rincon Center, Spear Street and Maritime Plaza](../references/WATERFRONT-REFERENCE-AUDIT.md#rincon-center-spear-street-and-maritime-plaza)
 - [Period exterior, counter, door and menu photographs](https://www.bridgeandtunnelclub.com/bigmap/outoftown/california/sanfrancisco/embarcadero/taqueriapanchovilla/) · bridgeandtunnelclub.com — [Remembered waterfront](../references/WATERFRONT-REFERENCE-AUDIT.md#remembered-waterfront)
-- [March 2015 approach photograph by Joe Thompson](https://www.cable-car-guy.com/ferry/images/sinbad_20150313_001.jpg) · cable-car-guy.com — [Remembered waterfront](../references/WATERFRONT-REFERENCE-AUDIT.md#remembered-waterfront)
+- [March 2015 approach photograph by Joe Thompson](https://www.cable-car-guy.com/ferry/images/sinbad_20150313_001.jpg) · cable-car-guy.com — [remembered waterfront](../app/remembered-waterfront.ts#L408) · [Remembered waterfront](../references/WATERFRONT-REFERENCE-AUDIT.md#remembered-waterfront)
 - [Hog Island, Cass Calder Smith, photographs by Paul Dyer](https://www.casscaldersmith.com/restaurants/hog-island-oyster-company) · casscaldersmith.com — [Restaurant frontage and ferry lighting](../references/RESEARCH-SOURCES.md#restaurant-frontage-and-ferry-lighting)
 - [Clark Pacific photographs](https://www.clarkpacific.com/project/bridgeview-towers/) · clarkpacific.com — [bridgeview](../app/bridgeview.ts#L20) · [Mission, Main and Beale frontages](../references/WATERFRONT-REFERENCE-AUDIT.md#mission-main-and-beale-frontages)
 - [Builder’s photographs of both towers](https://www.clarkpacific.com/project/the-metropolitan/) · clarkpacific.com — [Height reference cross-check](../references/RESEARCH-SOURCES.md#height-reference-cross-check) · [The Metropolitan and neighboring towers](../references/RESEARCH-SOURCES.md#the-metropolitan-and-neighboring-towers)

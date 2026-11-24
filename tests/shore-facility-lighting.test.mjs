@@ -202,7 +202,26 @@ test('the parking entrance sign faces the street and carries a closed blue outli
   const text=panel.getObjectByName("SINBAD'S"),open=panel.parent.getObjectByName('OPEN');
   assert.ok(text.userData.signLight[0]>text.userData.signLight[1]&&text.userData.signLight[1]>8*text.userData.signLight[2]);
   assert.ok(open.position.x>text.position.x&&open.position.y<panel.position.y-.12);
-  assert.ok(panel.getObjectByName('Red entrance emblem').position.x<-.6);
+  assert.equal(text.material.color.getHexString(),'eee0a5');
+  const crab=panel.getObjectByName('Red entrance emblem');
+  assert.ok(crab.position.x<-.6);
+  assert.equal(crab.getObjectsByProperty('name','Crab pincer').length,2);
+  assert.equal(crab.getObjectsByProperty('name','Crab leg').length,8);
+  const back=new THREE.Box3().setFromObject(crab.getObjectByName('Crab backing plate'));
+  for(const part of crab.children.filter(o=>o.userData.signLight)){
+    const outline=new THREE.Box3().setFromObject(part);
+    assert.ok(back.min.x<outline.min.x&&back.max.x>outline.max.x&&back.min.y<outline.min.y&&back.max.y>outline.max.y);
+    assert.ok(outline.max.z<back.min.z,'street-facing tubes stand proud of the plate');
+  }
+  const floods=panel.getObjectsByProperty('name','Hooded sign flood');
+  assert.equal(floods.length,4);
+  for(const flood of floods){
+    assert.ok(flood.position.y>.119);
+    const face=flood.children.at(-1);
+    const aiming=new THREE.Vector3(0,0,1).transformDirection(face.matrixWorld);
+    assert.ok(aiming.y<-.5&&aiming.z<-.5);
+    assert.equal(!!face.userData.signLight,flood.position.x>0);
+  }
   assert.equal(panel.getObjectsByProperty('name','Amber sign lamp').length,2);
   assert.ok(panel.getObjectByName('Entry downlight').position.y<-.119);
   const g=panel.getObjectByName('Corrugated fascia').geometry,p=g.attributes.position,c=g.attributes.signLight;

@@ -369,7 +369,7 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   sheet.setAttribute('position',new THREE.Float32BufferAttribute(surface,3));
   sheet.setAttribute('signLight',new THREE.Uint8BufferAttribute(irradiance,3,true));
   sheet.setIndex(facets);sheet.computeVertexNormals();
-  mesh(sheet,'#454059',0,0,.001,fascia).name='Corrugated fascia';
+  mesh(sheet,'#849fb5',0,0,.001,fascia).name='Corrugated fascia';
   function lampPart(part:THREE.Mesh,name:string,light:XYZ){
     part.name=name;part.userData.signLight=light;
   }
@@ -402,16 +402,45 @@ export function createRememberedWaterfront(font:Font,waterTime={value:0},nightIn
   });
   const lettersX=.409;
   mesh(new THREE.ExtrudeGeometry(shapes,{depth:.018,bevelEnabled:false,curveSegments:2}),'#313139',lettersX+.005,0,.007,fascia).name='Dark sign returns';
-  lampPart(mesh(new THREE.ShapeGeometry(shapes,2),'#dfb03f',lettersX,0,.026,fascia),"SINBAD'S",[.85,.61,.066]);
-  // Two nested red outlines represent the small seal. Its pictured interior is unresolved.
-  for(const radius of [.063,.045]){
-    const ring=mesh(new THREE.RingGeometry(radius-.006,radius,24),'#c46155',-.73,0,.012,fascia);
-    ring.scale.x=.75;lampPart(ring,'Red entrance emblem',[.94,.053,.032]);
+  lampPart(mesh(new THREE.ShapeGeometry(shapes,2),'#eee0a5',lettersX,0,.026,fascia),"SINBAD'S",[.85,.61,.066]);
+  // Joe Thompson's March 2015 port-side view and the closer daylight photograph
+  // resolve the crab's square plate, inward-facing pincers and four hooded floods.
+  // https://www.cable-car-guy.com/ferry/images/sinbad_20150313_001.jpg
+  const crab=group('Red entrance emblem',[-.73,0,.008],fascia);
+  box(.186,.186,.009,0,0,0,'#344556',crab).name='Crab backing plate';
+  const shell=[[-.046,.019],[-.041,.036],[-.022,.046],[-.013,.041],[0,.046],[.013,.041],[.022,.046],[.041,.036],[.046,.019],[.041,-.016],[.026,-.037],[.010,-.033],[0,-.040],[-.010,-.033],[-.026,-.037],[-.041,-.016]];
+  mesh(new THREE.ShapeGeometry(new THREE.Shape(shell.map(([x,y])=>new THREE.Vector2(x,y)))),'#b99173',0,0,.008,crab).name='Crab carapace';
+  function crabTube(name:string,points:number[][],width:number){
+    const positions:number[]=[],indices:number[]=[];
+    points.forEach(([x,y],i)=>{
+      const a=points[Math.max(0,i-1)],b=points[Math.min(points.length-1,i+1)];
+      const dx=b[0]-a[0],dy=b[1]-a[1],scale=width/(2*Math.hypot(dx,dy));
+      positions.push(x-dy*scale,y+dx*scale,0,x+dy*scale,y-dx*scale,0);
+      const k=i*2;if(i)indices.push(k-2,k-1,k,k,k-1,k+1);
+    });
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);geo.computeVertexNormals();
+    lampPart(mesh(geo,'#ce9b82',0,0,.012,crab),name,[.92,.05,.028]);
   }
-  for(const x of [.785,.867]){
-    beam([x,halfH-.012,-.012],[x,halfH+.032,.032],.011,'#6c625b',fascia);
-    const bulb=mesh(new THREE.SphereGeometry(.018,9,5),'#ffc773',x,halfH+.037,.037,fascia);
-    lampPart(bulb,'Amber sign lamp',[1,.62,.20]);
+  crabTube('Carapace outline',[...shell,shell[0]],.004);
+  for(const side of [-1,1]){
+    const reflect=(points:number[][])=>points.map(([x,y])=>[x*side,y]);
+    crabTube('Crab pincer',reflect([[.033,-.019],[.050,-.035],[.054,-.053],[.047,-.069],[.029,-.079],[.009,-.082],[.022,-.071],[.031,-.057],[.012,-.061],[.003,-.055],[.017,-.044],[.039,-.044]]),.006);
+    for(let leg=0;leg<4;leg++){
+      const step=leg*.010;
+      crabTube('Crab leg',reflect([[.036,-.023+step],[.054+.004*leg,-.025+step],[.079-.004*leg,-.009+step],[.081-.006*leg,.019+step],[.073-.007*leg,.042+step]]),.0038);
+    }
+  }
+  for(const x of [-.714,-.642,.800,.868]){
+    const pale=x<0,w=pale?.049:.035;
+    beam([x,halfH-.008,-.025],[x,halfH+.030,.018],.007,'#4a4e4c',fascia);
+    const fixture=group('Hooded sign flood',[x,halfH+.034,.019],fascia);
+    fixture.rotation.x=.65;
+    box(w,.025,.024,0,0,0,pale?'#cecbbd':'#484e4c',fixture);
+    box(w+.003,.004,.030,0,.013,.004,pale?'#e1dfd2':'#60615a',fixture);
+    const lens=box(w-.007,.017,.003,0,-.001,.013,'#52514c',fixture);
+    lens.name='Unlit crab flood lens';
+    if(!pale)lampPart(lens,'Amber sign lamp',[1,.62,.20]);
   }
   lampPart(box(.038,.004,.027,.919,-halfH-.008,-.023,'#e3c48a',fascia),'Entry downlight',[.81,.53,.23]);
   // The downlight picks out the lattice on the return, immediately around
