@@ -32,7 +32,10 @@ test('the 2024 turn box, arrows and hatching share the crossing bake and cover o
     const hits=inspect(x,z),painted=hits.filter(h=>h.object.geometry.userData.roadPaint);
     assert.equal(painted.length,1,'paint layers intersect at '+[x,z]);assert.equal(painted[0].object,paint);
     const base=hits.find(h=>h.object!==paint);
-    assert.ok(base);assert.equal(pigment(base),'899692');
+    assert.ok(base);
+    const u=(x+56)*132,v=(2-z)*132;
+    const roadEdge=400.4+(u-4398)*.12;
+    assert.equal(pigment(base),u>=4354&&v>roadEdge-37.4&&v<roadEdge-25.4?'707e7d':'899692');
     assert.ok(Math.abs(painted[0].point.y-base.point.y-.00024)<1e-5);
   }
   for(const [u,v] of [[4175,385],[4210,380],[4270,370],[4307,389]]){

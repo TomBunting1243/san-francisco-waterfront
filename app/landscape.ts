@@ -46,7 +46,7 @@ import {createWaterfrontTraffic} from './waterfront-traffic.ts';
 import {createPlazaSkaters} from './plaza-skaters.ts';
 import {createPeople} from './people.ts';
 import {pier14Visitors,updatePier14Visitors} from './pier14-visitors.ts';
-import {bicycleScale,bicycleWheelBottom,rinconGround,rinconApproach,rinconExit,routes,routeWidth,walkSurface,waterfrontCyclist,waterfrontWalker,waterfrontWalkerCount} from './waterfront-routes.ts';
+import {bicycleScale,bicycleWheelBottom,rinconGround,rinconApproach,rinconExit,routes,routeWidth,walkSurface,waterfrontCyclist,waterfrontCyclistCount,waterfrontWalker,waterfrontWalkerCount} from './waterfront-routes.ts';
 import {harborBuilding,smallHarborBuildings,harborPublicPiers,ferryPortal} from './harbor-architecture.ts';
 import {buildFerryTerminal,prepareFerryTerminalTide,createBoardingBrows,ferryConnections,fixedFerryApron} from './ferry-terminal.ts';
 import {ferryHall,ferryPublicRealm} from './ferry-architecture.ts';
@@ -66,6 +66,8 @@ import {bakeBlockGroups,bakeRigidChunk,freezeBakedArchitecture,retireBakedMeshes
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
 import {steuartHotelPlan,steuartHotelShell} from './steuart-hotel-shell.ts';
+import {addAgricultureBuilding} from './agriculture-building.ts';
+import {bicycleContacts,createWaterfrontBicycle} from './waterfront-bicycle.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
 import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
 import {waterfrontGardens,waterfrontLandscape} from './waterfront-gardens.ts';
@@ -284,6 +286,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(b.name==='Fireboat Station 35'){
       const station=fireboatStation(b,font,mesh);root.add(station.root);windowPositions.push(...station.windows);return;
     }
+    if(addAgricultureBuilding(b,root,windowPositions))return;
     if(isMooredVessel(b)){
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;
@@ -338,7 +341,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(background){root.add(background.root);windowPositions.push(...background.windows);return;}
     const ribbed=b.name.includes('Embarcadero Center');
     const hotel=b.name.includes('Hyatt Regency');
-    const historic=['Southern Pacific Building','The Audiffred Building','Ferry Station Post Office Building','Pier 1'].includes(b.name);
+    const historic=['Southern Pacific Building','The Audiffred Building','Pier 1'].includes(b.name);
     const color=hasNeighborhoodDetail(b)?neighborhoodColor(b):referenceColor(b)??characterColors[b.name]??(b.name==='Southern Pacific Building'?'#ad765d':b.name==='The Audiffred Building'?'#b57e62':historic?'#d3c4a9':ribbed||hotel?'#d4cdb9':b.id===28240176?'#66828b':h>8?['#8ba8af','#7496a5','#b3bbb6','#a8b4b3'][family%4]:['#e1c193','#caab95','#d3ccac','#9fbab0','#cf9e87'][family%5]);
     if(!reference&&hasShorelineFacade(b)){
       const detail=shorelineFacade(b,detailedBuildings,color);root.add(detail.root);windowPositions.push(...detail.windows);return;
@@ -655,20 +658,14 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const walkers=people.bodies,walkerHeads=people.heads;
   const convoy=createWaterfrontTraffic(vehiclePaint),streetCars=convoy.root,traffic=convoy.traffic;
   root.add(streetCars);
-  const cyclists=Array.from({length:3},(_,i)=>{
-    const g=new THREE.Group();root.add(g);
+  const cyclePaint=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.86});
+  const cyclists=Array.from({length:waterfrontCyclistCount},(_,i)=>{
+    const bike=createWaterfrontBicycle(i,cyclePaint);
     const p=waterfrontCyclist(0,i);
-    g.scale.setScalar(bicycleScale);g.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);g.rotation.y=-p.heading;
-    for(const x of [-.4,.4])mesh(new THREE.TorusGeometry(.25,.025,5,14),dark,x,.3,0,g);
-    const color=['#ce8650','#467f8a','#b65344'][i];
-    for(const [ax,ay,bx,by] of [[-.4,.3,0,.3],[0,.3,-.14,.7],[-.14,.7,-.4,.3],[0,.3,.3,.68],[.3,.68,.4,.3],[-.14,.7,.3,.68]])pole(new THREE.Vector3(ax,ay,0),new THREE.Vector3(bx,by,0),.022,color,g);
-    box(.21,.06,.1,-.14,.77,0,dark,g);pole(new THREE.Vector3(.3,.65,0),new THREE.Vector3(.27,.88,0),.025,dark,g);
-    pole(new THREE.Vector3(-.12,.82,0),new THREE.Vector3(.08,1.17,0),.09,color,g);
-    mesh(new THREE.SphereGeometry(.115,6,5),'#bd9670',.14,1.3,0,g);
-    pole(new THREE.Vector3(-.12,.83,0),new THREE.Vector3(.13,.52,.05),.04,dark,g);
-    pole(new THREE.Vector3(.08,1.1,0),new THREE.Vector3(.27,.85,0),.035,'#bd9670',g);
-    return g;
+    bike.scale.setScalar(bicycleScale);bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
+    bike.rotation.y=-p.heading;root.add(bike);return bike;
   });
+  const cycleContacts=bicycleContacts(cyclists);root.add(cycleContacts.mesh);
   const gulls=new THREE.Group();root.add(gulls);
   const birds=Array.from({length:7},()=>{
     const bird=new THREE.Group();bird.scale.setScalar(.061);gulls.add(bird);
@@ -705,7 +702,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
   }
-  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName(transitScreenName)!,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,root.getObjectByName(spearCanopyGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName(transitScreenName)!,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,root.getObjectByName(spearCanopyGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,cycleContacts.mesh,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;
@@ -768,8 +765,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   // Keep each moving object intact while batching its own small components.
   const ferryPaint=serviceFerryPaint;
   bakePccBody(tram,streetcar.glazing,streetcar.lamp);
-  for(const group of [...ferries,...cyclists]) {
-    const isFerry=ferries.includes(group);
+  for(const group of ferries) {
     const boardingBody=group.children.find(o=>o.userData.pyxisBoardingBody) as THREE.Mesh|undefined;
     group.updateMatrixWorld(true);
     const inverse=new THREE.Matrix4().copy(group.matrixWorld).invert();
@@ -781,7 +777,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse,o.matrixWorld));
       // Solid livery and opaque glazing share a draw. A separate transparent
       // or lit part can still supply its own material.
-      const solidFerryPaint=isFerry&&source instanceof THREE.MeshStandardMaterial&&!source.transparent&&!source.map&&!source.vertexColors&&
+      const solidFerryPaint=source instanceof THREE.MeshStandardMaterial&&!source.transparent&&!source.map&&!source.vertexColors&&
         source.opacity===1&&source.emissive.getHex()===0&&source.roughness===.86&&source.metalness===.02;
       const mat=solidFerryPaint?ferryPaint:source;
       if(mat===ferryPaint)g.deleteAttribute('uv');
@@ -973,7 +969,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     boardingBrows.update(i,pose);
   });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), seatStart, courtyardSlot, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, cycleContacts, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), seatStart, courtyardSlot, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   return result;
 }
 
@@ -1055,6 +1051,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
     copy.traverse(o=>{if(o instanceof THREE.Mesh){o.userData.sharedGeometry=true;o.material=Array.isArray(o.material)?o.material.map(copiedMaterial):copiedMaterial(o.material);}});
     root.add(copy);return copy;
   }):[];
+  const cycleContacts=bicycleContacts(cyclists);root.add(cycleContacts.mesh);
   const tram=source.tram.clone();tram.traverse(o=>{if(o instanceof THREE.Mesh){o.userData.sharedGeometry=true;o.material=Array.isArray(o.material)?o.material.map(copiedMaterial):copiedMaterial(o.material);}});root.add(tram);
   const convoy=createWaterfrontTraffic(copiedMaterial(source.traffic[0].material as THREE.MeshStandardMaterial) as THREE.MeshStandardMaterial,variant,source.traffic);
   const traffic=convoy.traffic;root.add(convoy.root);
@@ -1099,6 +1096,6 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
     if(tidalPanes.length)windows.instanceMatrix.needsUpdate=true;
   },seatStart,courtyardSlot:-1,streetGlobes,lampGlow,glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
     streetcarGlazing:copiedMaterial(source.streetcarGlazing) as THREE.MeshStandardMaterial,streetcarLamp:copiedMaterial(source.streetcarLamp) as THREE.MeshStandardMaterial,
-    coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cyclists,hitTargets:[],
+    coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cycleContacts,cyclists,hitTargets:[],
     seaLion:new THREE.Group(),sealFlippers:[]};
 }

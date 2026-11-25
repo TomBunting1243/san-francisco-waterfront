@@ -25,6 +25,7 @@ import { harborStars, starVisibility } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
 import {howardBealeAttendance,howardBealeWalkerCount} from './howard-beale-walkers';
 import {marketShopperAttendance} from './market-shoppers';
+import {pedalBicycle} from './waterfront-bicycle';
 import {bicycleScale,bicycleWheelBottom,frontMarketShopperStart,howardBealeWalkerStart,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,compactDevice,createQualityMonitor,drawingPixelRatio} from './city-runtime';
 
@@ -202,7 +203,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const culled=instanceModule?.cullHarborInstances(renderer,world.root,world.windowMesh);
       let maxQuality=economy?0:compact||streetView||host.clientWidth<650?1:2;
       let quality=compact?0:maxQuality,qualityMonitor=createQualityMonitor(maxQuality,quality);
-      let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastTransitMinute=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
+      let width=1, height=1, elapsed=0, frame=0, lastMotion=-1, lastRoadMotion=-1, lastTransitMinute=-1, lastDraw=0, lastInput=0, renderedFrames=0, lastFpsReport=performance.now(), visible=true, intersecting=true, rendering=true, presented=false, lastVisual='',lastInk='';
       let lens=openingLens(host.clientWidth,host.clientHeight);
       let clockFraming=clockArrivalFraming(host.clientWidth,host.clientHeight);
       let arrivalComplete=streetView||!!cinematic;
@@ -821,7 +822,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const courtyardOpen=courtyardSlot>=0&&courtyardVisitorOpen(ferryClock.weekend,(civilEpoch/1000+expressWallOffset)/60);
         const courtyardChanged=courtyardOpen!==courtyardWasOpen||(courtyardOpen&&roadSeconds!==lastCourtyardTime);
         courtyardWasOpen=courtyardOpen;lastCourtyardTime=roadSeconds;
-        const motionChanged=elapsed!==lastMotion;
+        const motionChanged=elapsed!==lastMotion||roadSeconds!==lastRoadMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         const pyxisPose=world.ferries.length&&(motionChanged||viewerChanged)?ferryPose(elapsed,0,ferryClock):null;
         if(motionChanged||viewerChanged||attendanceChanged||howardChanged||courtyardChanged){
@@ -887,13 +888,14 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         world.seaLion.rotation.set(Math.sin(elapsed*2)*.06,Math.atan2(Math.sin(sealT)*3,Math.cos(sealT)*1.1),Math.sin(elapsed*2)*.025);
         world.sealFlippers.forEach((flipper,i)=>{flipper.rotation.x=Math.sin(elapsed*2.5+i*Math.PI)*.38;});
         world.cyclists.forEach((bike,i)=>{
-          const p=waterfrontCyclist(elapsed,i);
-          bike.scale.setScalar(bicycleScale);
+          const p=waterfrontCyclist(roadSeconds,i);
+          pedalBicycle(bike,p.crank);
           bike.position.set(p.x,p.y-bicycleScale*bicycleWheelBottom,p.z);
           bike.rotation.y=-p.heading;
         });
+        world.cycleContacts.update();
         world.birds.forEach((bird,i)=>{const pose=birdPose(elapsed,i);bird.group.position.set(pose.x,pose.y,pose.z);bird.group.rotation.set(0,pose.heading,Math.cos(elapsed*.1+i)*.12);bird.wings[0].rotation.x=pose.flap;bird.wings[1].rotation.x=-pose.flap;});
-        lastMotion=elapsed;
+        lastMotion=elapsed;lastRoadMotion=roadSeconds;
         }
         if(motionChanged||callChanged){
           world.tram.position.set(tramPose.x,tramPose.y,tramPose.z);

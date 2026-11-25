@@ -6,6 +6,7 @@ import {spearWalkerCount,spearWalkerPose} from './spear-walkers.ts';
 import {chestnutWalkerCount,chestnutWalkerPose} from './chestnut-crossing.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
 import {northRefugeOffset,northWaterfrontGrade,streetPoses} from './streets.ts';
+import {protectedTrackRider} from './protected-track-riders.ts';
 import {pier2931Walk} from './north-quay-promenade.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
@@ -88,6 +89,7 @@ const rinconCyclists=laneOffset(rincon,-.065);
 export const walkingRouteLength={rincon:rinconWalkers.getLength(),ferry:ferry.getLength()};
 export const cyclingRouteLength=rinconCyclists.getLength();
 export const cyclingPace=.355;
+export const waterfrontCyclistCount=5;
 
 function along(line:THREE.CatmullRomCurve3,time:number,speed:number,progress:number){
   const u=((progress+time*speed/line.getLength())%1+1)%1;
@@ -283,5 +285,6 @@ export function waterfrontCar(time:number,index:number,region?:Region){
 }
 
 export function waterfrontCyclist(time:number,index:number){
-  return along(rinconCyclists,time,cyclingPace,.205+index*.323);
+  if(index>=3)return protectedTrackRider(time,index-3);
+  return {...along(rinconCyclists,time,cyclingPace,.205+index*.323),crank:time*4.4+index*2};
 }

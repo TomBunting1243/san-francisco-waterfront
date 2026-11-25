@@ -11,8 +11,8 @@ import {center,footprintGeometry,mappedBuildings} from './sf-map.ts';
 
 type Building={id:number;name:string;p:number[][];h:number;minH?:number;parent?:number};
 type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
-export const characterBuildings=new Set(['Hotel Griffon','Harbor Court Hotel','Army and Navy Y.M.C.A. Building','Steuart Place','1 Hotel San Francisco','Pier 5','Ferry Station Post Office Building','Fireboat Station 35']);
-export const characterColors:Record<string,string>={'Hotel Griffon':'#c5b699','Harbor Court Hotel':'#ad8066','Army and Navy Y.M.C.A. Building':'#b58a70','Steuart Place':'#d0bfa5','1 Hotel San Francisco':'#b78870','Pier 5':'#d9ceb9','Ferry Station Post Office Building':'#d9ccb4','Fireboat Station 35':'#a6b6b4'};
+export const characterBuildings=new Set(['Hotel Griffon','Harbor Court Hotel','Army and Navy Y.M.C.A. Building','Steuart Place','1 Hotel San Francisco','Pier 5','Fireboat Station 35']);
+export const characterColors:Record<string,string>={'Hotel Griffon':'#c5b699','Harbor Court Hotel':'#ad8066','Army and Navy Y.M.C.A. Building':'#b58a70','Steuart Place':'#d0bfa5','1 Hotel San Francisco':'#b78870','Pier 5':'#d9ceb9','Fireboat Station 35':'#a6b6b4'};
 // The mapped footprints are shared read-only by the architecture and gardens passes.
 const surveyedBounds = new WeakMap(mappedBuildings.map(({p}) => {
   const xs = p.map(point => point[0]), zs = p.map(point => point[1]);
@@ -96,9 +96,9 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
         const bays=Math.floor(len/.28);for(let i=0;i<bays;i++)pane(-len/2+(i+.5)*len/bays,b.h*.69,.23,.15,face);
         if(nz>.1){box(.46,.35,.06,0,.255,.08,'#a55345',face);for(let y=.14;y<.42;y+=.05)box(.43,.01,.025,0,y,.122,'#ca8970',face);text('FIREBOAT 35',.078,0,b.h-.08,.1,face);}
       }else if(len>.7){pane(0,.42,len*.74,.5,face);for(let x=-len*.3;x<len*.35;x+=.16)box(.018,.52,.04,x,.42,.103,dark,face);}
-    }else if(b.name==='Pier 5'||b.name==='Ferry Station Post Office Building'){
-      const pier=b.name==='Pier 5';band(.08,.085,.13,cream);band(b.h-.11,.055,.12,trim);band(b.h+.02,.075,.18,cream);
-      const spacing=pier?.48:.44,bays=Math.max(1,Math.round(len/spacing));
+    }else if(b.name==='Pier 5'){
+      band(.08,.085,.13,cream);band(b.h-.11,.055,.12,trim);band(b.h+.02,.075,.18,cream);
+      const spacing=.48,bays=Math.max(1,Math.round(len/spacing));
       for(let i=0;i<bays;i++){
         const x=-len/2+(i+.5)*len/bays,w=Math.min(.29,len/bays*.66);if(!exposed(face,x,b.h*.4))continue;
         pane(x,b.h*.41,w,b.h*.58,face);mesh(new THREE.TorusGeometry(w/2+.028,.023,5,16,Math.PI),cream,x,b.h*.69,.10,face);
@@ -106,13 +106,13 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
         for(let y=.17;y<b.h-.13;y+=.1){box(.065,.027,.012,x-len/bays/2,y,.10,trim,face);}
         box(.045,.05,.12,x,b.h-.055,.085,trim,face);
       }
-      if(face===front?.face||pier&&nz<-.8&&len>2){box(Math.min(len*.7,1.25),.16,.08,0,b.h+.025,.085,cream,face);text(pier?'PIER 5':'FERRY STATION',pier?.14:.085,0,b.h-.013,.138,face);}
+      if(face===front?.face||nz<-.8&&len>2){box(Math.min(len*.7,1.25),.16,.08,0,b.h+.025,.085,cream,face);text('PIER 5',.14,0,b.h-.013,.138,face);}
     }
   }
   // Modest roof furniture stays on uncovered portions of the mapped roof.
   const roofPoints=b.p.map(([x,z])=>[cx+(x-cx)*.88,cz+(z-cz)*.88]);
   const roofClear=(x:number,z:number)=>insideBuilding(x,z,b.p)&&!peers.some(n=>n.h>b.h-.01&&insideBuilding(x,z,n.p));
-  if(classic||b.name==='Ferry Station Post Office Building'||b.name==='Fireboat Station 35'){
+  if(classic||b.name==='Fireboat Station 35'){
     if(!hotelPlan)mesh(footprintGeometry(roofPoints,.018),classic?'#a79d89':'#a9b7ac',0,b.h+.005,0);
     if(roofClear(cx,cz)){box(.23,.11,.22,cx,b.h+.072,cz,'#8f9e95');for(let i=0;i<4;i++)box(.19,.008,.017,cx,b.h+.13,cz-.075+i*.05,dark);}
   }

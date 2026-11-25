@@ -1,3 +1,4 @@
+import {howardMissionAsphalt} from './howard-mission-bikeway.ts';
 import {cutCurbPalmBed,curbPalmBeds,medianPalmBeds,openMedianSidewalk} from './median-palm-sites.ts';
 import {addMedianBedSurface} from './median-bed-surface.ts';
 import {setPackedNormals} from './packed-normals.ts';
@@ -268,7 +269,11 @@ export function addSurveyBlocks(mesh:Surface){
       }else{
         const tile=at(piece);
         tile.roadClass=kind==='street'?1:kind==='alley'||kind==='private'?2:0;
-        tile.top(kind==='sidewalk'?openMedianSidewalk(piece):piece,height,color);tile.roadClass=0;
+        if(kind==='street'&&i===91){
+          tile.top([...piece,howardMissionAsphalt],height,color);
+          tile.top([howardMissionAsphalt],height,'#707e7d');
+        }else tile.top(kind==='sidewalk'?openMedianSidewalk(piece):piece,height,color);
+        tile.roadClass=0;
       }
     }
   }

@@ -1,3 +1,4 @@
+import {addHowardMissionBikeway} from './howard-mission-bikeway.ts';
 import {addHowardWaterfrontPaint} from './howard-waterfront-corner.ts';
 import * as THREE from 'three';
 import paint from '../public/data/promenade-crossings.json' with {type:'json'};
@@ -7,6 +8,7 @@ export const promenadeCrossings=paint.crossings;
 type Surface=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 export function addPromenadeCrossings(mesh:Surface){
   addHowardWaterfrontPaint(mesh);
+  addHowardMissionBikeway(mesh);
   const tiles=new Map<number,number[]>();
   const tones=new Map<number,number[]>();
   for(const [leg,crossing] of [...promenadeCrossings,paint.howardJunction].entries())for(const triangle of crossing){
