@@ -28,7 +28,9 @@ export const howardSidewalk=howard.walk;
 export const howardStreet=howard.road;
 const portalCurbs:Record<string,number[][][]>=portal.curbs;
 export const curbRuns=frostCurbRuns(data.lines as Run[]).flatMap((run):Run[]=>{
-  const [source,median,path]=run,cut=portalCurbs[source+':'+path[0][0]+','+path[0][1]];
+  const [source,median,path]=run;
+  if(data.westCityLanding.retiredCurbs.includes(source))return [];
+  const cut=portalCurbs[source+':'+path[0][0]+','+path[0][1]];
   if(howardCurbs[source])return [[source,median,howardCurbs[source]]];
   return cut?cut.map(points=>[source,median,points]):[run];
 });
@@ -52,8 +54,22 @@ export function ferryRefugeGround(x:number,z:number){
 export const bealeSidewalk=data.bealeWalk;
 export const bealeBeds=data.bealeBeds;
 export const westGradeCut=data.westCut, westParkPlans=data.westPark;
+export const westCityLanding=data.westCityLanding;
+const westCityFacets=[...westCityLanding.border,...westCityLanding.inset,...westCityLanding.walk];
+const westCityCurbFacets:number[][][]=[];
+const westCityCurb=data.lines.find(([id])=>id===-202402)![2] as number[][];
+for(let i=1;i<westCityCurb.length;i++){
+  const a=curbSection(westCityCurb[i-1],0,.031),b=curbSection(westCityCurb[i],0,.031);
+  for(let j=0;j<3;j++)westCityCurbFacets.push([a[j],b[j],b[j+1]],[a[j],b[j+1],a[j+1]]);
+}
+export function westCityLandingGround(x:number,z:number){
+  if(x< -1.9||x>-.25||z> -6.0||z< -6.63)return undefined;
+  return facetHeight(westCityFacets,x,z)??facetHeight(westCityCurbFacets,x,z);
+}
 export const marketAxis=(z:number)=>-.13+(z+1.813)*.177;
 export function westMarketGround(x:number,z:number){
+  const landing=westCityLandingGround(x,z);
+  if(landing!==undefined)return landing;
   const run=Math.max(0,Math.min(-6.249-z,z+9.066));
   const grade=Math.min(.139,gutterTop+run/12);
   const flare=THREE.MathUtils.clamp((Math.abs(x-marketAxis(z))-.92)/.31,0,1);
@@ -126,6 +142,8 @@ function steuartRoadEdge(ring:number[][]){
   return [...ring.slice(0,40),...stations,...ring.slice(40)];
 }
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
+  const landingCuts=westCityLanding.cuts as Record<string,Record<string,number[][][][]>>;
+  if(landingCuts[kind]?.[index])return landingCuts[kind][index];
   if(kind==='street'&&index===91){
     const [ring,...holes]=original;return [[steuartRoadEdge(ring),...holes]];
   }
@@ -193,6 +211,7 @@ export function addSurveyCurbs(mesh:MeshFactory){
         continue;
       }
       for(let j=0;j<4;j++){
+        if(source===-202402&&j===3)continue;
         if((source===3803776||source===3800838)&&howardWaterfrontCurb(source,j,a[j],b[j],b[j+1],a[j+1],triangle))continue;
         if(source===3833285&&j===3){
           const outside=(data.ferryRefugeAprons as Record<string,number[][][]>)[i-1];
@@ -213,6 +232,9 @@ export function addSurveyCurbs(mesh:MeshFactory){
     for(const t of tris){
       const v=t.map(([x,z]):Vec=>[x,y(x,z),z]);triangle(v[0],v[1],v[2],color);
     }
+  }
+  for(const [triangles,color] of [[westCityLanding.border,'#aeaa9e'],[westCityLanding.inset,'#c7c4b7'],[westCityLanding.road,'#899692']] as const){
+    for(const [a,b,c] of triangles)triangle(a,b,c,color);
   }
   surface(data.westFlanks,westMarketGround,'#b58a73');
   for(const [id,t] of tiles){

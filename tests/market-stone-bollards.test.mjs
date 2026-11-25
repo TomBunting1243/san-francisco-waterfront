@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {ferryPublicRealm} from '../app/ferry-architecture.ts';
+import {addSurveyBlocks} from '../app/survey-blocks.ts';
 import {createMarketPaving} from '../app/market-paving.ts';
-import {curbRuns,harryBridgesGround,medianGrade,medianTop,addSurveyCurbs,westMarketGround} from '../app/curb-survey.ts';
+import {curbRuns,harryBridgesGround,medianGrade,medianTop,addSurveyCurbs,westCityLanding,westCityLandingGround,westMarketGround} from '../app/curb-survey.ts';
 import {plazaCrossingPose,plazaCrossingCount} from '../app/plaza-walkers.ts';
 import {plazaSkaterPose,plazaSkaterCount} from '../app/plaza-skaters.ts';
 import {signalPeriod} from '../app/waterfront-signals.ts';
@@ -66,4 +67,46 @@ test('the measured wide median ramp is physically lowered and sampled walkers fo
   for(let i=0;i<plazaSkaterCount;i++)for(let t=0;t<110;t+=.35){
     const p=plazaSkaterPose(t,i);for(const b of row.children)assert.ok(Math.hypot(p.x-b.position.x,p.z-b.position.z)>.09);
   }
+});
+
+test('the city-side Market landing joins the painted road, lowered lip, two flares and inland granite on the same physical faces',()=>{
+  const objects=[paving];
+  addSurveyBlocks(g=>{const m=new THREE.Mesh(g,material);g.computeBoundingBox();objects.push(m);return m;});
+  paving.geometry.computeBoundingBox();
+  const area=new THREE.Box3(new THREE.Vector3(-1.9,.025,-6.65),new THREE.Vector3(-.25,.10,-5.95));
+  const local=objects.filter(m=>m.geometry.boundingBox.intersectsBox(area)&&!m.geometry.userData.roadPaint);
+  const footprint=(u,v)=>[-56+u/132,2-v/132];
+  const at=(u,v)=>down(local,...footprint(u,v));
+  const lip=u=>1074+(u-7204)*6/112;
+  // 73 aerial pixels at 7.92 pixels/metre. The 2023 point bands are
+  // flush in the center, with a 12 cm south and 14 cm north flank.
+  assert.equal(Math.round((7293-7220)/7.92*100),922);
+  for(const [u,h] of [[7205,.12],[7211,.072],[7220,0],[7237,0],[7265,0],[7293,0],[7302,.06],[7314,.14]]){
+    const top=at(u,lip(u)+.55)[0].point.y;
+    assert.ok(Math.abs((top-.0315)/.06-h)<.012,'lip height at '+u);
+    for(const d of [-3.1,2,5.3,12.1,17.3]){
+      const xz=footprint(u+.12,lip(u+.12)+d);
+      const hits=down(local,...xz);
+      assert.equal(hits.length,1,'single surface along the curb and apron '+[u,d]);
+      assert.ok(Math.abs(hits[0].point.y-westCityLandingGround(...xz))<.00002);
+    }
+  }
+  // Check all material joins from either side, including the fragments
+  // of the old granite ribbon. There must be only one supporting surface.
+  for(const set of [westCityLanding.walk,westCityLanding.border,westCityLanding.inset,westCityLanding.remainder]){
+    for(const tri of set){
+      const p=[0,1,2].map(k=>tri[0][k]*.21+tri[1][k]*.38+tri[2][k]*.41);
+      const hits=down(local,p[0],p[2]);
+      assert.equal(hits.length,1,'overlap at '+p);
+      assert.ok(Math.abs(hits[0].point.y-p[1])<.00002);
+    }
+  }
+  let crossings=0;
+  for(let i=0;i<plazaCrossingCount;i++)for(let t=0;t<signalPeriod*2;t+=.31){
+    const p=plazaCrossingPose(t,i),height=westCityLandingGround(p.x,p.z);
+    if(height===undefined)continue;
+    const hits=down(local,p.x,p.z);
+    assert.ok(hits.length&&Math.abs(hits[0].point.y-p.y)<.00005);crossings++;
+  }
+  assert.ok(crossings>40);
 });

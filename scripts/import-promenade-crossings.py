@@ -102,7 +102,8 @@ gutters=[]; levels=[]; faces=[]
 def edge(station,offset):
  x,z,nx,nz=station[:4]
  return [x+nx*offset,z+nz*offset]
-for _,median,line in curbs['lines']:
+for source,median,line in curbs['lines']:
+ if source in curbs.get('westCityLanding',{}).get('retiredCurbs',[]):continue
  for a,b in zip(line,line[1:]):
   back=.157 if min(a[4],b[4])<1 else .031
   # A ramp station may set its own sidewalk-side width in curbSection.

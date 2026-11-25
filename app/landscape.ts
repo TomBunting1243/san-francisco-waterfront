@@ -646,7 +646,9 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   residentPositions.push({...loadingWait,loadingPassenger:true});
   const passengerStart=walkerCount+residentPositions.length,seatStart=passengerStart+ferryPassengerCount;
   const courtyardSlot=seatStart+pier14Visitors.length;
-  const people=createPeople(courtyardSlot+1,pier14Visitors.length+1);
+  const foundrySlot=courtyardSlot+1;
+  const people=createPeople(foundrySlot+1,pier14Visitors.length+2);
+  people.hide(foundrySlot);
   people.hide(courtyardSlot);
   for(let i=0;i<walkerCount;i++){
     const poseAt=(offset:number)=>waterfrontWalker(offset,i);
@@ -971,7 +973,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     boardingBrows.update(i,pose);
   });
   freezeBakedArchitecture(root,architectureChunks,moving);
-  const result={ root, cycleContacts, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), seatStart, courtyardSlot, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
+  const result={ root, cycleContacts, tidalPanes,updateTide, windowMesh, clockCenter:new THREE.Vector3(hall.towerX,2.035,hall.towerZ), seatStart, courtyardSlot, foundrySlot, updateFerryPassengers, updatePyxisBoardingDoor, glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock, pier14Visitors, ferryClock, streetGlobes, boardingBrows, updateBridgeTraffic:bridgeTraffic.update, updateTraffic:convoy.update, walkerCount, skaters:skaters as ReturnType<typeof createPlazaSkaters>|undefined, transit:transit as typeof transit|undefined, ferryFlag:ferryFlag as typeof ferryFlag|undefined, leafSun, treeDraw, treeBatches, ferryMarket, lampGlow, nightInk, relief, updateApproach, updateMarina:southernWaterfront.updateMarina, hullShadows, ...bayWeather, sailboats, fireboat:fireboat as ReturnType<typeof createFireboat>|undefined, architectureChunks, residentPositions, coffeeMaterial, ferryConnections, pierSupports, people, streetcarGlazing:streetcar.glazing, streetcarLamp:streetcar.lamp, seaMist, rainOnStone, bayLights, roadLightMaterial, edgeFogColor, waterMaterial, waterTime, windowMaterial, ferries, cars, tram, gulls, birds, walkers, walkerHeads, traffic, cyclists, seaLion, sealFlippers, hitTargets, clockHands, ferryBuilding };
   return result;
 }
 
@@ -1096,7 +1098,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
     water.position.y=waterSurface.level+offset;updateVignetteTide(offset);
     for(const {i,y} of tidalPanes){windows.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windows.instanceMatrix.needsUpdate=true;
-  },seatStart,courtyardSlot:-1,streetGlobes,lampGlow,glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
+  },seatStart,courtyardSlot:-1,foundrySlot:-1,streetGlobes,lampGlow,glassSky:facadeClock.glassSky,setFacadeClock:facadeClock.setFacadeClock,pier14Visitors:visitors,updateBridgeTraffic:()=>{},updateTraffic:convoy.update,walkerCount,skaters,transit,ferryFlag,treeDraw,treeBatches,ferryMarket,updateApproach:()=>{},sailboats:[],fireboat:undefined,architectureChunks,residentPositions:residents,people,walkers:people.bodies,walkerHeads:people.heads,waterMaterial:water.material,waterTime,windowMaterial,tram,traffic,
     streetcarGlazing:copiedMaterial(source.streetcarGlazing) as THREE.MeshStandardMaterial,streetcarLamp:copiedMaterial(source.streetcarLamp) as THREE.MeshStandardMaterial,
     coffeeMaterial:copiedMaterial(source.coffeeMaterial) as THREE.MeshStandardMaterial,clockHands,ferries:[],cars:[],birds:[],cycleContacts,cyclists,hitTargets:[],
     seaLion:new THREE.Group(),sealFlippers:[]};

@@ -3,6 +3,7 @@ Run: survey-env/bin/python scripts/import-curb-survey.py <reference-survey>
 """
 import json, math, runpy, sys
 from pathlib import Path
+from market_west_landing import apply_market_west_landing
 from shapely import STRtree, set_precision
 from shapely.affinity import affine_transform
 from shapely.geometry import LineString, Point, Polygon, box, shape
@@ -360,5 +361,6 @@ park=Polygon(next(v['p'] for v in sf['parks'] if v['name']=='Embarcadero Plaza')
 data['westCut']=ring(west.exterior)
 data['westPark']=[plan(p) for p in pieces(park.difference(west),'Polygon')]
 data['westFlanks']=grid(west.difference(strip(-6.249,-9.066,.92)).intersection(park))
+apply_market_west_landing(data,slabs)
 (D/'curb-survey.json').write_text(json.dumps(data,separators=(',',':'))+'\n')
 print('curb runs / stations / crossing centres',len(out),sum(len(v[2]) for v in out),len(data['ramps']))

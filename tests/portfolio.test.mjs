@@ -236,7 +236,8 @@ test('ferry hulls and wakes share the waterfront mist bank and one weather-drive
   }
   assert.equal(world.seatStart,world.walkerCount+world.residentPositions.length+4);
   assert.equal(world.courtyardSlot,world.seatStart+world.pier14Visitors.length);
-  assert.equal(world.walkerHeads.count,world.courtyardSlot+1);
+  assert.equal(world.foundrySlot,world.courtyardSlot+1);
+  assert.equal(world.walkerHeads.count,world.foundrySlot+1);
   const pyxis=world.ferries[0],positions=pyxis.children[0].geometry.getAttribute('position');
   const version=positions.version;
   world.updatePyxisBoardingDoor(pyxis,1);

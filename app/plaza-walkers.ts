@@ -1,7 +1,7 @@
 // The Market-axis paving runs from the west plaza across the southbound
 // carriageway to Harry Bridges Plaza. Both ends of this crossing have a
 // ramp. The signal, curb and paving builders use the same surveys.
-import {gutterTop,harryBridgesGround,westMarketGround} from './curb-survey.ts';
+import {gutterTop,harryBridgesGround,westCityLandingGround,westMarketGround} from './curb-survey.ts';
 import {marketWalkDelay,signalPeriod} from './waterfront-signals.ts';
 
 type Stop=readonly [seconds:number,x:number,z:number];
@@ -55,6 +55,6 @@ export function plazaCrossingPose(time:number,index:number){
   const tz=6*u*v*s.dz+v*(1-3*u)*s.sz+u*(3*u-2)*s.ez;
   const standing=s.dx===0&&s.dz===0;
   const heading=standing?(z< -6?Math.PI/2:z< -5?-Math.PI/2:.65):Math.atan2(tz,tx);
-  const y=z<=-6.249?westMarketGround(x,z):(harryBridgesGround(x,z)??gutterTop);
+  const y=westCityLandingGround(x,z)??(z<=-6.249?westMarketGround(x,z):(harryBridgesGround(x,z)??gutterTop));
   return {x,y,z,heading,standing};
 }

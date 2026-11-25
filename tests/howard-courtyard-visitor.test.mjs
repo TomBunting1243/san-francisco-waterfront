@@ -60,8 +60,8 @@ test('city appends one hidden seat-capable slot and seeking restores the same po
   const city=createLandscape(),slot=city.seatStart+city.pier14Visitors.length,people=city.people;
   assert.equal(city.walkerCount,waterfrontWalkerCount());
   assert.equal(city.courtyardSlot,slot);
-  assert.equal(city.walkerHeads.count,slot+1);
-  assert.equal(people.group.getObjectByName('Contour trousers').count,2*(slot+1+city.pier14Visitors.length+1));
+  assert.equal(city.walkerHeads.count,slot+2);
+  assert.equal(people.group.getObjectByName('Contour trousers').count,2*(slot+2+city.pier14Visitors.length+2));
   assert.ok(people.isHidden(slot));
   const poses=people.bodies.instanceMatrix.array.slice(0,slot*16);
   updateCourtyardVisitor(people,slot,32,true);assert.ok(!people.isHidden(slot));

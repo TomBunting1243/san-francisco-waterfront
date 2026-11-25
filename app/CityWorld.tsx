@@ -22,6 +22,7 @@ import {cinematicOrbit} from './cinematic-camera';
 import type {CinematicOpening} from './cinematic-player';
 import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { harborStars, starVisibility } from './sky';
+import {updateFoundryVisitor} from './foundry-visitor';
 import {updatePier14Visitors} from './pier14-visitors';
 import {howardBealeAttendance,howardBealeWalkerCount} from './howard-beale-walkers';
 import {loadingCallAllowed,loadingPassenger} from './mission-loading';
@@ -300,7 +301,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const figureRegion=streetView?variant:undefined;
       const howardStart=howardBealeWalkerStart(figureRegion);
       const howardEnd=howardStart<0?-1:howardStart+howardBealeWalkerCount;
-      let previousHowardAttendance=-1,previousLoading=false;
+      let previousHowardAttendance=-1,previousLoading=false,previousFoundryHour=-1;
       const {courtyardSlot}=world;
       let courtyardWasOpen=false,lastCourtyardTime=NaN;
       const rearSlots=world.residentPositions.flatMap((p,i)=>p.rearShopper?[world.walkerCount+i]:[]);
@@ -822,13 +823,15 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const howardAttendance=howardBealeAttendance(lighting.hours);
         const howardChanged=howardAttendance!==previousHowardAttendance;
         previousHowardAttendance=howardAttendance;
+        const foundryChanged=world.foundrySlot>=0&&previousFoundryHour!==lighting.hours;
+        previousFoundryHour=lighting.hours;
         const courtyardOpen=courtyardSlot>=0&&courtyardVisitorOpen(ferryClock.weekend,(civilEpoch/1000+expressWallOffset)/60);
         const courtyardChanged=courtyardOpen!==courtyardWasOpen||(courtyardOpen&&roadSeconds!==lastCourtyardTime);
         courtyardWasOpen=courtyardOpen;lastCourtyardTime=roadSeconds;
         const motionChanged=elapsed!==lastMotion||roadSeconds!==lastRoadMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         const pyxisPose=world.ferries.length&&(motionChanged||viewerChanged)?ferryPose(elapsed,0,ferryClock):null;
-        if(motionChanged||viewerChanged||attendanceChanged||howardChanged||courtyardChanged||loadingChanged){
+        if(motionChanged||viewerChanged||attendanceChanged||howardChanged||courtyardChanged||loadingChanged||foundryChanged){
           figureViewX=camera.position.x;figureViewZ=camera.position.z;
           world.people.setViewer(figureViewX,figureViewZ);
           for(let i=0;i<world.walkerCount;i++){
@@ -854,6 +857,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           if(pyxisPose)world.updateFerryPassengers(world.people,world.walkerCount+world.residentPositions.length,elapsed,pyxisPose,hoveredPerson);
           updatePier14Visitors(world.people,world.seatStart,world.pier14Visitors,elapsed,hoveredPerson);
           if(courtyardSlot>=0)updateCourtyardVisitor(world.people,courtyardSlot,roadSeconds,courtyardOpen,hoveredPerson===courtyardSlot?1:0);
+          if(world.foundrySlot>=0)updateFoundryVisitor(world.people,world.foundrySlot,roadSeconds,lighting.hours,figureViewX,figureViewZ,hoveredPerson);
           world.people.flush();
         }
         const localMinutes=lighting.hours*60+lighting.minutes;

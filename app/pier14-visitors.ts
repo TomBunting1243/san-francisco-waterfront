@@ -20,7 +20,7 @@ const ease=(t:number)=>t*t*(3-2*t);
 const settle=1.25,turn=1.65;
 // The hips move back over the seat while the feet stay on the paving in front.
 export const seatTravel=.037;
-export function pier14Visit(site:Visit,elapsed:number){
+export function seatVisitMotion(site:Pick<Visit,'facing'|'distance'|'rest'|'look'|'offset'>,elapsed:number){
   const ramp=.55,walking=site.distance/pedestrianPace+ramp;
   function stride(t:number){
     if(t<ramp)return .5*pedestrianPace*t*t/ramp;
@@ -52,6 +52,10 @@ export function pier14Visit(site:Visit,elapsed:number){
     seated=ease((t-sit)/settle);
   }
   const along=.004+seatTravel*(1-seated)+travel;
+  return {along,facing,pace,seated};
+}
+export function pier14Visit(site:Visit,elapsed:number){
+  const {along,facing,pace,seated}=seatVisitMotion(site,elapsed);
   const x=site.x+along*Math.cos(site.facing),z=site.z+along*Math.sin(site.facing);
   return {x,z,y:site.pier?harborDatum.pierDeck:pier14Ground(x,z),heading:facing,pace,seated};
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {westCityLandingGround} from './curb-survey.ts';
 import {howardPedestrianHeads} from './howard-junction-signals.ts';
 import {bealePedestrianHeads} from './howard-beale-signals.ts';
 import {fremontPedestrianHeads} from './fremont-howard-signals.ts';
@@ -15,13 +16,18 @@ import {marketPedestrianPhase,signalPeriod} from './waterfront-signals.ts';
 // https://data.sfgov.org/Transportation/Traffic-Signals/ybh5-27n2
 // https://commissions.sfplanning.org/hpcpackets/2014-001363COA.pdf#page=26
 // City imagery layer p2024_rgb8cm from tile.sf.gov.
+// City-side pole foot is at the pavement end of the pin/shadow pair,
+// u7310.6 v1085.7 in the registered 2024 aerial. Its face and opposite
+// indication look at one another from the sides of the striped route.
+const westFoot={x:-56+7310.6/132,z:2-1085.7/132};
+const westBearing=Math.atan2(-.5303-westFoot.x,-5.3864-westFoot.z);
 export const marketPedestrianHeads=[
   {x:-1.0227,z:-3.1742,y:.04099,angle:.010},
   {x:-1.0152,z:-2.3712,y:.04073,angle:Math.PI+.010},
   {x:.5833,z:-3.1742,y:.04064,angle:.057},
   {x:.6288,z:-2.3712,y:.04064,angle:Math.PI+.057},
-  {x:-.6439,z:-6.1515,y:.04064,angle:.147},
-  {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+.147},
+  {...westFoot,y:westCityLandingGround(westFoot.x,westFoot.z)!,angle:westBearing},
+  {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+westBearing},
 ] as const;
 type Head={x:number;y:number;z:number;angle:number;side?:number;clockOffset?:number};
 const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads,...bealePedestrianHeads,...fremontPedestrianHeads];

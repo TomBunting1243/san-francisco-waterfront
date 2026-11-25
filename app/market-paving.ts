@@ -1,5 +1,5 @@
 import {stationPavingCut} from './embarcadero-station-sites.ts';
-import {ferryRefugePaving,marketAxis,medianGrade,medianPaving,medianSlab,westMarketGround} from './curb-survey.ts';
+import {ferryRefugePaving,marketAxis,medianGrade,medianPaving,medianSlab,westCityLanding,westMarketGround} from './curb-survey.ts';
 import {frostBrickTriangles,frostWalkHeight} from './california-sidewalk.ts';
 import * as THREE from 'three';
 
@@ -31,7 +31,15 @@ export function createMarketPaving(){
     const up=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]);
     indices.push(n,n+(up>0?1:2),n+(up>0?2:1));
   }
-  for(let i=0;i<32;i++){
+  // First five rows meet the surveyed city landing. Their remaining
+  // granite triangles share the exact boundary and elevations of the apron.
+  for(const tri of [...westCityLanding.walk,...westCityLanding.remainder]){
+    const n=positions.length/3,[a,b,c]=tri;
+    for(const [x,y,z] of tri){positions.push(x,y,z);surface.push(x-marketAxis(z),-z);}
+    const up=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]);
+    indices.push(n,n+(up>0?1:2),n+(up>0?2:1));
+  }
+  for(let i=5;i<32;i++){
     const z=-6.249-i*2.817/32,next=-6.249-(i+1)*2.817/32;
     const a=[marketAxis(z)-.92,z],b=[marketAxis(z)+.92,z],c=[marketAxis(next)-.92,next],d=[marketAxis(next)+.92,next];
     paint([a,b,c],westMarketGround);paint([b,d,c],westMarketGround);

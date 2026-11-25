@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import {FacadePanels,type FacadePoint} from './facade-panels.ts';
 
+import {addFoundryPlazaApron} from './foundry-plaza-apron.ts';
+import {addFoundryPlazaGardens} from './foundry-plaza-gardens.ts';
+import {addFoundryPlazaGlass,bakeFoundryPlazaSpill} from './foundry-plaza-glass.ts';
+
 type Plan=[number,number];
 type Window={x:number;y:number;z:number;ry:number;w:number;h:number};
 type Wall=(s:number,h:number,d?:number)=>FacadePoint;
@@ -55,12 +59,13 @@ function streetWall(f:FacadePanels,a:Plan,b:Plan,base:number,stone:string,alongH
       const bulk=floor===0?'#737c77':alongHoward?stone:aluminum;
       panel(f,at,l,r,lo,sill,bulk);panel(f,at,l,r,head,hi,bulk);
       const rail=sill+(head-sill)*.72;
-      for(const [x,y] of [[l,mid-.05],[mid+.05,r]]){
-        panel(f,at,x,y,sill,rail,floor?officeGlass:groundGlass,recess);
-        panel(f,at,x,y,rail,rail+.08,frame,recess+.018);
-        panel(f,at,x,y,rail+.08,head,floor?'#698080':'#4b6362',recess);
-        if((i*7+floor*3+(alongHoward?2:0))%9===1)addWindow(at,x+.018,y-.018,sill+.018,rail-.018,recess,windows);
-      }
+      // One pane behind the physical mullion keeps the same two visible
+      // lights while eliminating three hidden splits in each office bay.
+      panel(f,at,l,r,sill,rail,floor?officeGlass:groundGlass,recess);
+      panel(f,at,l,r,rail,rail+.08,frame,recess+.018);
+      panel(f,at,l,r,rail+.08,head,floor?'#698080':'#4b6362',recess);
+      if((i*7+floor*3+(alongHoward?2:0))%9===1)for(const [x,y] of [[l,mid-.05],[mid+.05,r]])
+        addWindow(at,x+.018,y-.018,sill+.018,rail-.018,recess,windows);
       panel(f,at,mid-.05,mid+.05,sill,head,frame,recess+.025);
     }
   }
@@ -77,20 +82,33 @@ function upper(f:FacadePanels,west:number,east:number,slices:Slice[],lo:number,i
     for(const [x0,x1] of cut?[[west,holeWest],[holeEast,east+17]]:[[west,east+17]]){
       f.quad(point([x0,v0],h0),point([x0,v1],h1),point([x1,v1],h1),point([x1,v0],h0),'#aeb1aa');
     }
-    const rear=makeWall([west,v0],[west,v1]);
-    f.quad(rear.at(0,lo),rear.at(rear.length,lo),rear.at(rear.length,h1),rear.at(0,h0),'#71807e');
-    // Looking west from Fremont the upper glass sits about nine metres
-    // behind the masonry. The sheet-metal brow has a visible underside.
-    const front=makeWall([east,v1],[east,v0]),w=front.at;
-    const bays=Math.max(1,Math.round(front.length/2.0));
-    for(let j=0;j<bays;j++){
-      const s=front.length*j/bays,t=front.length*(j+1)/bays;
-      const a=h1+(h0-h1)*j/bays,b=h1+(h0-h1)*(j+1)/bays;
-      f.quad(w(s,lo),w(t,lo),w(t,b-.36),w(s,a-.36),'#658087');
-      f.quad(w(s,lo,.025),w(s+.065,lo,.025),w(s+.065,a-.36,.025),w(s,a-.36,.025),aluminum);
-      for(let y=lo+3.8;y<Math.min(a,b)-.38;y+=3.8)panel(f,w,s,t,y,y+.09,aluminum,.03);
-      if(j%7===2&&i%2)addWindow(w,s+.10,t-.12,lo+.32,lo+3.25,0,windows);
+    const front=makeWall([east,v1],[east,v0]);
+    for(const street of ['First','Fremont'] as const){
+      const firstStreet=street==='First';
+      const wall=firstStreet?makeWall([west,v0],[west,v1]):front,w=wall.at;
+      const start=firstStreet?h0:h1,end=firstStreet?h1:h0;
+      const bays=Math.max(1,Math.round(wall.length/2)),pitch=wall.length/bays;
+      f.quad(w(0,lo),w(wall.length,lo),w(wall.length,end-.36),w(0,start-.36),
+        firstStreet?'#47656e':'#658087');
+      for(let j=0;j<bays;j++){
+        const s=j*pitch,h=start+(end-start)*j/bays;
+        panel(f,w,s,s+.065,lo,h-.36,aluminum,.025);
+        if(!firstStreet&&j%7===2&&i%2)addWindow(w,s+.10,s+pitch-.12,lo+.32,lo+3.25,0,windows);
+      }
+      // Clip a whole horizontal transom to the sloping roof once per run.
+      for(let y=lo+3.8;y+.09<Math.max(start,end)-.36;y+=3.8){
+        const clipped=THREE.MathUtils.clamp((y+.09+.36-start)/(end-start||1),0,1)*wall.length;
+        const s=start<y+.45?clipped:0,t=end<y+.45?clipped:wall.length;
+        if(t>s)panel(f,w,s,t,y,y+.09,aluminum,.035);
+      }
+      if(firstStreet){
+        const brow=1.25;
+        f.quad(w(0,start-.36,brow),w(wall.length,end-.36,brow),w(wall.length,end,brow),w(0,start,brow),'#869395');
+        f.quad(w(0,start-.36),w(wall.length,end-.36),w(wall.length,end-.36,brow),w(0,start-.36,brow),'#70807e');
+        f.quad(w(0,start,brow),w(wall.length,end,brow),w(wall.length,end),w(0,start),'#aeb1aa');
+      }
     }
+    const w=front.at;
     const eave=17/7;
     f.quad(w(0,h1-.36,eave),w(front.length,h0-.36,eave),w(front.length,h0,eave),w(0,h1,eave),'#8b9594');
     f.quad(w(0,h1-.36),w(front.length,h0-.36),w(front.length,h0-.36,eave),w(0,h1-.36,eave),'#7b8584');
@@ -106,11 +124,16 @@ export function addFoundrySquare(building:{id:number},root:THREE.Group,windows:W
   const isSouth=building.id===136104349;
   if(!isSouth&&building.id!==136104348)return false;
   const f=new FacadePanels(),outer=isSouth?south:north,base=isSouth?31.6:32.6;
+  const illumination=new Map<number,[number,number,number]>();
   const stone=isSouth?'#989e97':'#c4a165';
   for(let i=0;i<outer.length;i++){
     const a=outer[i],b=outer[(i+1)%outer.length];
     const fremont=Math.min(a[0],b[0])>24,howard=isSouth?Math.max(a[1],b[1])<=312:Math.min(a[1],b[1])>128;
-    if(fremont||howard)streetWall(f,a,b,base,stone,howard,windows);
+    const plazaStart=isSouth?1:9;
+    if(i===plazaStart||i===plazaStart+1){
+      const w=makeWall(a,b);
+      addFoundryPlazaGlass(f,w.at,w.length,base,i===plazaStart+1,isSouth,illumination);
+    }else if(fremont||howard)streetWall(f,a,b,base,stone,howard,windows);
     else{
       const w=makeWall(a,b);panel(f,w.at,0,w.length,0,base,'#788985');
       for(let h=4.6;h<base;h+=4.3)panel(f,w.at,0,w.length,h,h+.32,aluminum,.02);
@@ -126,6 +149,13 @@ export function addFoundrySquare(building:{id:number},root:THREE.Group,windows:W
     });
     upper(f,-383,-35,[[324,44.7],[415,46.1],[550,45.3],[645,44.6],[742,41.5],[878,40.5]],base,true,windows);
   }else upper(f,-382,-33,[[-187,47.2],[-125,48.1],[-25,47.6],[62,47.0],[116,46.2]],base,false,windows);
-  const mesh=f.mesh(material);mesh.name=isSouth?'Foundry Square II / 405 Howard Street':'Foundry Square I / 400 Howard Street';root.add(mesh);
+  const firstPlazaVertex=f.positions.length/3;
+  addFoundryPlazaGardens(f,isSouth,point);
+  addFoundryPlazaApron(f,isSouth,point);
+  const mesh=f.mesh(material),light=new Uint8Array(f.positions.length);
+  for(const [vertex,rgb] of illumination)light.set(rgb,vertex*3);
+  bakeFoundryPlazaSpill(f,firstPlazaVertex,isSouth,light,point([0,0],0));
+  mesh.geometry.setAttribute('signLight',new THREE.Uint8BufferAttribute(light,3,true));
+  mesh.name=isSouth?'Foundry Square II / 405 Howard Street':'Foundry Square I / 400 Howard Street';root.add(mesh);
   return true;
 }

@@ -12,6 +12,9 @@ test('the six Market heads stand on real landings and face the opposite side of 
   const housing=createSignalHousings();
   const lighting=createStreetIllumination(new THREE.Group(),[],new THREE.MeshBasicMaterial());
   lighting.update(39,1);
+  const cityEnd=marketPedestrianHeads[4];
+  assert.ok(Math.abs((cityEnd.x+56)*132-7310.6)<1);
+  assert.ok(Math.abs((2-cityEnd.z)*132-1085.7)<1);
   for(const [i,head] of marketPedestrianHeads.entries()){
     const h=marketPedestrianHeads[i^1],dx=h.x-head.x,dz=h.z-head.z;
     const nx=Math.sin(head.angle),nz=Math.cos(head.angle);
