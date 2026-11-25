@@ -189,6 +189,18 @@ test('constructed pavement supports the five-lane tunnel entrance and all three 
     for(const offset of [-.054,0,.054])
       tireOnRoad(eye.x-(.38*.06+offset)*vz/n,eye.z+(.38*.06+offset)*vx/n,eye.y-1.18*.06);
   }
+  // Sweep the sedan's entire wheel envelope through the northern refuge
+  // flare and back into its ordinary lane, including both transition ends.
+  for(let tick=4350;tick<4640;tick++){
+    const {eye,look}=driverPose('bridge',tick/10);
+    if(eye.x<12.55||eye.x>16.75)continue;
+    const vx=look.x-eye.x,vz=look.z-eye.z,n=Math.hypot(vx,vz);
+    for(const fore of [-.10,.10])for(const side of [-.054,.054]){
+      const x=eye.x+(fore*vx-(.0228+side)*vz)/n;
+      const z=eye.z+(fore*vz+(.0228+side)*vx)/n;
+      tireOnRoad(x,z,northWaterfrontGrade(x));
+    }
+  }
   // Continue down the road visible ahead of the parked sedan, across the
   // far end of the survey into the lower-detail boulevard.
   for(const x of [84,89,95.93,96,96.07,98,102]){

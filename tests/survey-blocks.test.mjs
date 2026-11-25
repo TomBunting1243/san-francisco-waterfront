@@ -142,7 +142,7 @@ test('the two distal streets retain surveyed walks, trees, tracks and continuous
   // Current geometry uses 3,491 triangles for Market and 3,130 for the quay,
   // including its asphalt cutouts. Allow under 1% headroom independently.
   assert.ok(market.geometry.index.count/3<=3520,'Market survey triangle budget');
-  assert.ok(quay.geometry.index.count/3<=3155,'north quay survey triangle budget');
+  assert.ok(quay.geometry.index.count/3<=3155+10*4,'north quay survey plus ten four-corner palm openings');
   const down=new THREE.Raycaster(new THREE.Vector3(),new THREE.Vector3(0,-1,0));
   const surfaces=(m,x,z)=>{
     down.ray.origin.set(x,8,z);

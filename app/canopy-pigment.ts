@@ -96,7 +96,21 @@ export function createCanopyMaterial(base:THREE.MeshStandardMaterial,sun:{value:
       '#include <begin_vertex>\nleafPosition=position;leafWeight=foliageMask;');
     shader.fragmentShader='uniform highp sampler3D sprayField; uniform highp sampler2DArray leafPigment; uniform vec3 leafSun; varying float leafWeight; varying vec3 leafPosition;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       vec3 spraySlope=vec3(0.);
-      if(leafWeight>.1){
+      if(leafWeight>0.&&leafWeight<.1){
+        // The same mipmapped 3-D density swatch describes pits and irregular
+        // vertical strands. Their world-space axes follow this upright trunk.
+        vec3 here=leafPosition;
+        float footprint=max(length(dFdx(here)),length(dFdy(here)));
+        float detail=1.-smoothstep(.0014,.005,footprint);
+        if(detail>0.){
+          vec4 pits=texture(sprayField,here*vec3(49.,65.,51.));
+          float grain=texture(sprayField,vec3(213.*here.x+57.*here.y,48.*here.y,209.*here.z-40.*here.y)+vec3(.37*pits.r,0.,.4)).r;
+          float cavity=smoothstep(.28,.63,pits.r);
+          diffuseColor.rgb*=mix(vec3(1.),mix(vec3(.66,.58,.53),vec3(1.22,1.17,1.06),cavity)*
+            (.74+.52*smoothstep(.32,.67,grain)),detail);
+          spraySlope=(pits.gba-.5)*detail*.38;
+        }
+      }else if(leafWeight>.1){
         // Shallow, ascending fans of leaves follow the boughs. The packed
         // gradient is transformed by the same chart as the density sample.
         vec3 sprayChart=vec3(leafPosition.x*2.9,leafPosition.y*6.4-leafPosition.x*1.1-leafPosition.z*.8,leafPosition.z*3.2);
@@ -139,6 +153,6 @@ export function createCanopyMaterial(base:THREE.MeshStandardMaterial,sun:{value:
         }
       #endif`);
   };
-  material.customProgramCacheKey=()=>'waterfront-leaf-relief-v4';
+  material.customProgramCacheKey=()=>'waterfront-leaf-relief-v5';
   return material;
 }

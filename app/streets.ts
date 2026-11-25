@@ -32,6 +32,11 @@ export function streetPoses(x:number){
   return [pose(positions[0],Math.PI),pose(positions[positions.length-1],0)] as const;
 }
 
+// The northbound lanes ease 33 cm bayward around the short rail-refuge flare.
+export function northRefugeOffset(x:number){
+  return .020*(1-THREE.MathUtils.smoothstep(Math.abs(x-14.63),.70,1.90));
+}
+
 /** Sample the actual curved carriageways, retaining their mapped separation. */
 export function streetPose(x:number,direction=1){
   return streetPoses(x)[direction>0?1:0];

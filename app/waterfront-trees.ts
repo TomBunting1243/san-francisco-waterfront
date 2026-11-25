@@ -445,6 +445,92 @@ function palmPanel(paint:Paint,points:Point[],colors:THREE.Color[]){
     paint.quad(ids[0],ids[1],ids[2],ids[3]);
   }
 }
+// JackPav / KartaView 1944457 (2016): https://kartaview.org/details/7021/1934/track-info
+// Along the Embarcadero the date palms have
+// dark fibrous feet, then conspicuous overlapping leaf bases above the flare.
+function datePalmStem(mesh:PlantMesh,x:number,y:number,z:number,id:number,h:number,r:number,top:Point){
+  const sectors=10,fold=Math.PI/sectors,turn=seed(id,42)*tau;
+  const flare=1.66+.025*seed(id,39),courseScale=Math.min(1,h/.58);
+  const lower=[
+    [0,flare],[.006,flare*.995],[.015,1.50],[.026,1.20],[.038,1.07],
+    [.048,1.035],[.060,1.025],[.075,1.025],[.091,1.025],[.109,1.025],
+    [.135,1.025],[.173,1.015],[.222,.995],
+  ];
+  const collar=Math.min(r,h*.082);
+  const rows=[...lower.map(([level,width])=>[level*courseScale,width]),
+    [h*.52,.90],[h-collar*3.1,.94],[h-collar*.78,1.32],[h,1.05]];
+  const rings=rows.map(([level,width],j)=>Array.from({length:sectors},(_,i)=>{
+    const angle=turn+tau*i/sectors+(j%2)*fold+.18*fold*(seed(id,291+i+19*j)-.5);
+    const noise=seed(id,177+i+31*j)-.5;
+    const irregular=j===0?.024:j<4?.065:j<11?.018:.05;
+    const radial=r*(width+noise*irregular);
+    // Worn pits and uneven fibers belong to the collar. The first ring rests
+    // on the supporting soil; keep its elevation and the measured DBH stable.
+    const dy=j>0&&j<lower.length?noise*.003*courseScale:0;
+    const f=(level+dy)/h;
+    return vec(top.x*f+radial*Math.cos(angle),level+dy,top.z*f+radial*Math.sin(angle));
+  }));
+  const dark=pigment('#493e34','#706050','#8d7964'),scar=pigment('#766653','#a08b72','#bba58a');
+  const paint=new Paint(),ring=(j:number,i:number)=>rings[j][(i+sectors)%sectors];
+  // Reuse the ring corners wherever adjacent facets have the same pigment.
+  // The cut edge splits only where the illuminated lip changes to dark fiber.
+  const corners=new Map<Point,Map<THREE.Color,number>>();
+  function corner(point:Point,tint:THREE.Color){
+    let colors=corners.get(point);
+    if(!colors){colors=new Map();corners.set(point,colors);}
+    let index=colors.get(tint);
+    if(index===undefined){index=paint.vertex(point,tint);colors.set(tint,index);}
+    return index;
+  }
+  function facet(a:Point,b:Point,c:Point,colors:THREE.Color[]){
+    paint.indices.push(corner(a,colors[0]),corner(b,colors[1]),corner(c,colors[2]));
+  }
+  // Each leaf scar spans two staggered courses. Its lower lip is in shade,
+  // while the upper cut face catches the light. Adjacent scars share edges.
+  const last=lower.length;
+  for(let j=0;j<last;j++)for(let i=0;i<sectors;i++){
+    const k=i-(j%2===0?1:0),lo=ring(j,i);
+    const tones=j<3?dark:scar;
+    const mid=tones[seed(id,73*j+i*5)>.70?2:1];
+    const left=ring(j+1,k),right=ring(j+1,k+1);
+    const pitSite=(j*3+Math.floor(seed(id,57)*sectors))%sectors;
+    if(j<10&&(i===pitSite||j<4&&i===(pitSite+5)%sectors)){
+      // Inset a worn pocket within an existing face. Its three border
+      // edges still meet their neighbours; no decal hovers over the wood.
+      const pit=lo.clone().multiplyScalar(.55).addScaledVector(left,.25).addScaledVector(right,.20);
+      const center=top.clone().multiplyScalar(pit.y/h);
+      pit.lerp(center,j<4?.13:.026);
+      facet(lo,left,pit,[tones[0],mid,dark[0]]);
+      facet(left,right,pit,[mid,tones[1],dark[0]]);
+      facet(right,lo,pit,[tones[1],tones[0],dark[0]]);
+    }else facet(lo,left,right,[tones[0],mid,tones[1]]);
+    if(j+2<=last)facet(ring(j+2,i),right,left,[tones[0],tones[2],mid]);
+    if(j===0)facet(lo,ring(1,k+1),ring(j,i+1),[dark[0],dark[1],dark[0]]);
+  }
+  for(let j=last;j<rows.length-1;j++)for(let i=0;i<sectors;i++){
+    const a=ring(j,i),b=ring(j+1,i),c=ring(j+1,i+1),d=ring(j,i+1);
+    const tint=scar[seed(id,32*j+i)>.7?2:1];
+    facet(a,b,c,[scar[1],tint,tint]);facet(a,c,d,[scar[1],tint,scar[1]]);
+  }
+  const end=rows.length-1;
+  for(let i=0;i<sectors;i++)facet(top,ring(end,i+1),ring(end,i),[scar[0],scar[0],scar[0]]);
+  const stem=paint.finish(mesh,x,y,z,'Palm trunk')!;
+  // Keep the angular breaks of individual leaf bases without making each
+  // color boundary a hard crease in the round shaft.
+  const pos=stem.geometry.attributes.position,norm=stem.geometry.attributes.normal;
+  const radial=vec(0,0,0),normal=vec(0,0,0);
+  for(let i=0;i<pos.count;i++){
+    const level=pos.getY(i),f=level/h;
+    normal.fromBufferAttribute(norm,i);
+    if(level===h&&normal.y>.99)continue;
+    radial.set(pos.getX(i)-top.x*f,0,pos.getZ(i)-top.z*f).normalize();
+    const flareSlope=level<.032*courseScale?.38:0;
+    radial.y=flareSlope;radial.normalize();
+    normal.lerp(radial,.49).normalize();norm.setXYZ(i,normal.x,normal.y,normal.z);
+  }
+  stem.geometry.userData.datePalmAxis=[top.x/h,top.z/h];
+}
+
 export function waterfrontPalm(mesh:PlantMesh,x:number,y:number,z:number,id:number,h:number,radius:number,measuredTrunkRadius?:number,species='Phoenix canariensis'){
   const fan=/Washingtonia/i.test(species),angle=seed(id,19)*tau,anchor={};
   const tagged:PlantMesh=(g,c,px,py,pz)=>{
@@ -458,14 +544,16 @@ export function waterfrontPalm(mesh:PlantMesh,x:number,y:number,z:number,id:numb
     const member=tagged(new THREE.CylinderGeometry(end,r,direction.length(),8),c,x+mid.x,y+mid.y,z+mid.z);
     member.name='Palm trunk';member.quaternion.setFromUnitVectors(vec(0,1,0),direction.normalize());
   };
-  limb(vec(0,0,0),joint,trunk,trunk*.86,fan?'#a0957f':'#81725d');
-  limb(joint,top,trunk*.86,trunk*(fan?.72:1.04),fan?'#b1a58e':'#988364');
-  const collarCount=fan?4:7;
-  for(let j=0;j<collarCount;j++){
-    const f=j/(collarCount-1),center=top.clone().addScaledVector(vec(0,1,0),-trunk*(.28+j*.58));
-    const r=trunk*(fan?.95:1.32-.44*f);
-    limb(center,center.clone().add(vec(0,trunk*.46,0)),r*.82,r,j%2?'#928260':'#aa956f');
-  }
+  if(!/^Phoenix\b/i.test(species)){
+    limb(vec(0,0,0),joint,trunk,trunk*.86,fan?'#a0957f':'#81725d');
+    limb(joint,top,trunk*.86,trunk*(fan?.72:1.04),fan?'#b1a58e':'#988364');
+    const collars=fan?4:7;
+    for(let j=0;j<collars;j++){
+      const center=top.clone().addScaledVector(vec(0,1,0),-trunk*(.28+j*.58));
+      const r=trunk*(fan?.95:1.32-.44*j/(collars-1));
+      limb(center,center.clone().add(vec(0,trunk*.46,0)),r*.82,r,j%2?'#928260':'#aa956f');
+    }
+  }else datePalmStem(tagged,x,y,z,id,h,trunk,top);
   const paint=new Paint(),rib=new Paint(),count=fan?14:23;
   for(let i=0;i<count;i++){
     const az=angle+i*2.39996+.19*(seed(id,i+18)-.5),out=vec(Math.cos(az),0,Math.sin(az)),side=vec(-out.z,0,out.x);

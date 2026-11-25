@@ -1,3 +1,5 @@
+import {cutCurbPalmBed,curbPalmBeds,medianPalmBeds,openMedianSidewalk} from './median-palm-sites.ts';
+import {addMedianBedSurface} from './median-bed-surface.ts';
 import {setPackedNormals} from './packed-normals.ts';
 import {northWaterfrontGrade} from './north-quay-grade.ts';
 import {addFolsomPortal,folsomPavement} from './folsom-portal.ts';
@@ -52,7 +54,7 @@ class Tile {
     const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height+(grade?grade(x):0),-y]);
     const i=this.vertices(points,color);
     for(const [a,b,c] of faces){
-      const cut=height>=.025&&height<=.06?stationPavingCut(points[a],points[b],points[c]):undefined;
+      const cut=height>=.025&&height<=.06?(stationPavingCut(points[a],points[b],points[c])??cutCurbPalmBed(points[a],points[b],points[c])):undefined;
       if(!cut){this.indices.push(i+a,i+b,i+c);continue;}
       for(const tri of cut){
         const first=this.vertices(tri,color);
@@ -143,7 +145,7 @@ function addSightlineStreets(mesh:Surface){
     for(const plan of extensions[kind]){
       const tile=plan[0][0][0]>0?quay:market;
       tile.roadClass=kind==='street'||kind==='bars'?1:0;
-      tile.top(plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
+      tile.top(kind==='sidewalk'?openMedianSidewalk(plan):plan,height,color,tile===quay?x=>northWaterfrontGrade(x)-.031:undefined);
     }
   }
   market.roadClass=0;quay.roadClass=1;
@@ -220,6 +222,16 @@ export function addSurveyBlocks(mesh:Surface){
     return tile;
   }
   const at=(plan:Plan)=>tileAt(plan[0][0][0],plan[0][0][1]);
+  for(const bed of medianPalmBeds.values())addMedianBedSurface(tileAt(bed.x,bed.z),bed);
+  // These four holes run across the sloping back of curb. Their stone
+  // outer faces meet the original, varying street finish along the cut.
+  for(const bed of curbPalmBeds){
+    const tile=tileAt(bed.x,bed.z);
+    for(let i=0;i<4;i++){
+      const [x,z]=bed.outline[i],[u,v]=bed.outline[(i+1)%4];
+      tile.quad([x,bed.grade,z],[u,bed.grade,v],[u,.030,v],[x,.030,z],'#898477');
+    }
+  }
   addRinconCurbEdge(tileAt(-28,-2));
   addFolsomPortal(mesh);
   for(const plan of [...bealeSidewalk,...howardSidewalk])at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
@@ -245,11 +257,11 @@ export function addSurveyBlocks(mesh:Surface){
       if(kind==='sidewalk'&&piece[0].some(([x,z])=>x>=-56&&x<=30&&z>=-8&&z<=2)){
         const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
         if(!tile)walkTiles.set(id,tile=new Tile());
-        tile.top(piece,height,'#c4bdac');
+        tile.top(openMedianSidewalk(piece),height,'#c4bdac');
       }else{
         const tile=at(piece);
         tile.roadClass=kind==='street'?1:kind==='alley'||kind==='private'?2:0;
-        tile.top(piece,height,color);tile.roadClass=0;
+        tile.top(kind==='sidewalk'?openMedianSidewalk(piece):piece,height,color);tile.roadClass=0;
       }
     }
   }

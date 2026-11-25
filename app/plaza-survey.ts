@@ -60,7 +60,19 @@ export function addSurveyedTree(mesh:MeshFactory,root:THREE.Group,record:Canopy,
   const scale=d/Math.sqrt(size.x*size.z);
   if(palm&&trunkRadius){
     for(const member of tree.children){
-      if(member instanceof THREE.Mesh&&member.geometry instanceof THREE.CylinderGeometry)member.scale.set(1/scale,1,1/scale);
+      if(!(member instanceof THREE.Mesh))continue;
+      if(member.geometry instanceof THREE.CylinderGeometry)member.scale.set(1/scale,1,1/scale);
+      const g=member.geometry,axis=g.userData.datePalmAxis;
+      if(axis){
+        // Fit the surveyed crown spread and trunk lean, while retaining the
+        // measured radius at each stem ring around its own local center.
+        const inverseScale=1/scale,shear=1-inverseScale;
+        g.applyMatrix4(new THREE.Matrix4().set(
+          inverseScale,axis[0]*shear,0,0,
+          0,1,0,0,
+          0,axis[1]*shear,inverseScale,0,
+          0,0,0,1));
+      }
     }
   }
   tree.scale.set(scale,h/bounds.max.y,scale);

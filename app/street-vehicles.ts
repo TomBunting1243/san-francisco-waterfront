@@ -56,11 +56,13 @@ class VehiclePaint {
     source.dispose();
   }
 
-  contact(length:number,width:number){
+  contact(length:number,width:number,wheelbase:number){
+    const halfLength=length*.47,halfWidth=width*.5+.09;
     const corners=[[-1,-1],[-1,1],[1,1],[-1,-1],[1,1],[1,-1]];
     for(const [x,z] of corners){
-      this.vertices.push(x*length*.47,.012,z*width*.48);
-      this.colors.push(.023,.020,.046);
+      this.vertices.push(x*halfLength,.012,z*halfWidth);
+      // The opaque paint shader reads the wheel centers in normalized receiver coordinates.
+      this.colors.push(wheelbase/(2*halfLength),(width*.5-.095)/halfWidth,0);
       this.marks.push(x,z,2);
     }
   }
@@ -104,8 +106,8 @@ export function streetVehicleMaterial() {
   lights.set(material,light);
   material.onBeforeCompile=shader=>{
     shader.uniforms.vehicleSky=light.glass;shader.uniforms.vehicleCast=light.cast;
-    shader.vertexShader='attribute vec3 vehiclePaint; varying vec3 vehicleMark; uniform vec3 vehicleCast;\n'+
-      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvehicleMark=vehiclePaint;')
+    shader.vertexShader='attribute vec3 vehiclePaint; varying vec3 vehicleMark; varying vec2 tireReceiver; uniform vec3 vehicleCast;\n'+
+      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvehicleMark=vehiclePaint;tireReceiver=vehiclePaint.xy;')
       .replace('#include <project_vertex>',`#include <project_vertex>
         if(vehiclePaint.z>1.5 && vehicleCast.z>.001){
           mat4 carFrame=modelMatrix;
@@ -124,11 +126,15 @@ export function streetVehicleMaterial() {
             drift.y=clamp(drift.y,-.018,.018);
           #endif
           vec2 reach=max(sign(drift)*vehiclePaint.xy,0.)*drift;
-          // Extend the contact shadow along the grade under both axles.
+          // Keep tire occlusion fixed in vehicle coordinates as the sun lengthens
+          // the outer shape. The two effects share a single receiving quad.
+          vec2 halfSize=abs(position.xz)*vec2(length(carFrame[0].xyz),length(carFrame[2].xyz));
+          tireReceiver+=reach/max(halfSize,vec2(.0001));
+          // Extend the cast shadow along the grade under both axles.
           mvPosition+=viewMatrix*vec4(carX*reach.x+carZ*reach.y,0.);
           gl_Position=projectionMatrix*mvPosition;
         }`);
-    shader.fragmentShader='uniform vec3 vehicleSky; varying vec3 vehicleMark;\n'+
+    shader.fragmentShader='uniform vec3 vehicleSky; varying vec3 vehicleMark; varying vec2 tireReceiver;\n'+
       shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
         if(vehicleMark.z>.5 && vehicleMark.z<1.5)diffuseColor.rgb=mix(diffuseColor.rgb,vehicleSky,.74);`)
       .replace('#include <opaque_fragment>',`
@@ -137,13 +143,18 @@ export function streetVehicleMaterial() {
           // same opaque vehicle batch, including its markings and lamp pools.
           const float stipple[16]=float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
           ivec2 texel=ivec2(gl_FragCoord.xy)%4;
-          float cover=.34*(1.-smoothstep(.53,1.,length(vehicleMark.xy)));
+          vec2 tire=(abs(tireReceiver)-vColor.rg)/vec2(.135,.20);
+          float underTires=.67*(1.-smoothstep(.26,1.05,length(tire)));
+          float underBody=.34*(1.-smoothstep(.53,1.,length(vehicleMark.xy)));
+          float cover=max(underTires,underBody);
           if(cover<(stipple[texel.x+texel.y*4]+.5)/16.)discard;
-          outgoingLight=vec3(.023,.020,.046);
         }
-        #include <opaque_fragment>`);
+        #include <opaque_fragment>
+        // Streetlamp and wet-road shaders also feed the opaque surface. Apply
+        // coverage after those lighting terms so a shadow cannot become a lamp.
+        if(vehicleMark.z>1.5)gl_FragColor.rgb=vec3(0.);`);
   };
-  material.customProgramCacheKey=()=> 'painted-road-traffic-v1';
+  material.customProgramCacheKey=()=> 'painted-road-traffic-v2';
   return material;
 }
 
@@ -232,11 +243,15 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
 
   const box=(w:number,h:number,d:number,c:THREE.Color,x:number,y:number,z:number)=>
     form.component(new THREE.BoxGeometry(w,h,d),c,x,y,z);
+  const tyreSegments=distant?8:12,halfFacet=Math.PI/tyreSegments;
+  // A loaded tire rests on a short chord. Align a tread facet with the road
+  // and lower the axle to its rolling radius, keeping the rim concentric.
+  const axleHeight=p.tyre*Math.cos(halfFacet);
   for(const axle of axles){
     for(const side of [-1,1]){
       const z=side*(wide-.095);
-      form.component(new THREE.CylinderGeometry(p.tyre,p.tyre,.19,distant?8:12).rotateX(Math.PI/2),rubber,axle,p.tyre,z);
-      if(!distant)form.component(new THREE.CylinderGeometry(p.tyre*.58,p.tyre*.58,.018,10).rotateX(Math.PI/2),rim,axle,p.tyre,side*(Math.abs(z)+.101));
+      form.component(new THREE.CylinderGeometry(p.tyre,p.tyre,.19,tyreSegments).rotateX(Math.PI/2).rotateZ(halfFacet),rubber,axle,axleHeight,z);
+      if(!distant)form.component(new THREE.CylinderGeometry(p.tyre*.58,p.tyre*.58,.018,10).rotateX(Math.PI/2),rim,axle,axleHeight,side*(Math.abs(z)+.101));
     }
   }
   for(const side of [-1,1]){
@@ -259,7 +274,7 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
     form.panel([lip,.461,-wide*.78],[lip,.461,wide*.78],[-half,.461,wide*.78],[-half,.461,-wide*.78],edge);
   }else if(!distant)box(.05,.071,.23,plate,-half+.014,.48,0);
 
-  form.contact(p.length,p.width);
+  form.contact(p.length,p.width,p.wheelbase);
   const vehicle = new THREE.Group();
   vehicle.name = p.name;
   const mesh = new THREE.Mesh(form.geometry(),material);

@@ -65,6 +65,8 @@ export function bakeTreeBatches(meshes:PaintedMesh[],material:THREE.MeshStandard
       const g=part.geometry,n=g.getAttribute('position').count,index=g.index;
       const isCrown=part.userData.plantCrown||g.userData.plantCrown;
       if(isCrown)foliage.fill(part.userData.waterfrontPlant==='palm'?128:g.userData.planeLeaf?224:255,start,start+n);
+      // Low nonzero masks select date-palm bark without classifying the shaft as foliage.
+      else if(g.userData.datePalmAxis)foliage.fill(16,start,start+n);
       if(isCrown&&(index?.count??n)>300)reducedCrown(high,part,start,indices);
       else for(let i=0;i<(index?.count??n);i++)indices.push(start+(index?index.getX(i):i));
       start+=n;

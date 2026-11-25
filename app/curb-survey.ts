@@ -1,3 +1,4 @@
+import {cutCurbPalmBed} from './median-palm-sites.ts';
 import * as THREE from 'three';
 import howard from '../public/data/howard-trees.json' with {type:'json'};
 import portal from '../public/data/folsom-portal.json' with {type:'json'};
@@ -98,8 +99,16 @@ export function addSurveyCurbs(mesh:MeshFactory){
     const key=Math.floor(a[0]/16)+','+Math.floor(a[2]/16);
     let tile=tiles.get(key);if(!tile)tiles.set(key,tile={p:[],c:[]});
     let pigment=palette.get(color);if(!pigment)palette.set(color,pigment=new THREE.Color(color));
-    tile.p.push(...a,...(dot<0?c:b),...(dot<0?b:c));
-    for(let k=0;k<3;k++)tile.c.push(pigment.r,pigment.g,pigment.b);
+    const cut=cutCurbPalmBed(a,b,c);
+    if(cut){
+      for(const [p,q,r] of cut){
+        tile.p.push(...p,...(dot<0?r:q),...(dot<0?q:r));
+        for(let k=0;k<3;k++)tile.c.push(pigment.r,pigment.g,pigment.b);
+      }
+    }else{
+      tile.p.push(...a,...(dot<0?c:b),...(dot<0?b:c));
+      for(let k=0;k<3;k++)tile.c.push(pigment.r,pigment.g,pigment.b);
+    }
   }
   const apronCuts:Record<string,{warning:boolean;points:number[][]}[]>=data.bealeAprons;
   for(const [source,median,path] of curbRuns){

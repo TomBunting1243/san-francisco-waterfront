@@ -138,7 +138,7 @@ test('production renderer submits a bounded subset on the fixed desktop and phon
   }
 });
 
-test('canopy detail uses a filtered relief texture on foliage and leaves bark unmarked',async()=>{
+test('canopy detail uses a filtered relief texture on foliage and leaves ordinary bark unmarked',async()=>{
   const {leafReliefTile}=await import('../app/canopy-pigment.ts');
   const parts=plant(2,'#71824f'),[tile]=bakeTreeBatches(parts,material);
   const mask=tile.high.getAttribute('foliageMask');
@@ -149,6 +149,33 @@ test('canopy detail uses a filtered relief texture on foliage and leaves bark un
   assert.notDeepEqual(texture.image.data.subarray(0,128*128*4),texture.image.data.subarray(128*128*4));
   const red=texture.image.data.filter((_v,i)=>i%4===0);
   assert.ok(Math.max(...red)-Math.min(...red)>64);texture.dispose();
+});
+
+test('only Phoenix bark receives the near-grain mask in both batched LODs',async()=>{
+  const {waterfrontPalm}=await import('../app/waterfront-trees.ts');
+  const {createCanopyMaterial}=await import('../app/canopy-pigment.ts');
+  for(const species of ['Phoenix canariensis','Washingtonia robusta','unidentified palm']){
+    const parts=[];
+    waterfrontPalm((g,c,x,y,z)=>{
+      const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c}));
+      m.position.set(x,y,z);m.updateMatrixWorld();parts.push(m);return m;
+    },0,0,0,132106,.8,.25,.018,species);
+    const [tile]=bakeTreeBatches(parts,material),mask=tile.high.attributes.foliageMask;
+    assert.equal(tile.low.attributes.foliageMask,mask);
+    let k=0;
+    for(const part of parts){
+      const n=part.geometry.attributes.position.count;
+      assert.ok(mask.array.subarray(k,k+n).every(v=>v===(part.userData.plantCrown?128:
+        species.startsWith('Phoenix')&&part.name==='Palm trunk'?16:0)));
+      k+=n;
+    }
+  }
+  const bark=createCanopyMaterial(material,{value:new THREE.Vector3(0,1,0)});
+  const shader={...THREE.ShaderLib.standard,uniforms:{}};
+  bark.onBeforeCompile(shader);
+  assert.match(shader.fragmentShader,/1\.-smoothstep\(\.0014,\.005,footprint\)/);
+  assert.deepEqual(Object.keys(shader.uniforms).sort(),['leafPigment','leafSun','sprayField']);
+  bark.dispose();
 });
 
 // Orthographic coverage at a 120-pixel-high crown. Count daylight large

@@ -193,7 +193,7 @@ test('the Bay Bridge anchorages and Pier W1 leave both road decks clear',()=>{
   assert.equal(bridge.getObjectsByProperty('name','Continuous land cable tail').length,2);
 });
 
-test('vehicle glazing tracks the local sky and a two-triangle contact stays between the tire walls',async()=>{
+test('vehicle glazing tracks the sky and one shadow quad registers all four loaded tire footprints',async()=>{
   const {setVehiclePaintLight}=await import('../app/street-vehicles.ts');
   const paint=streetVehicleMaterial(),glass=new THREE.Color('#94b1c5');
   setVehiclePaintLight(paint,glass,[.6,.2,-.8],1);
@@ -202,6 +202,7 @@ test('vehicle glazing tracks the local sky and a two-triangle contact stays betw
     mat.onBeforeCompile(shader,{});return shader;
   }
   const shader=compile(paint);
+  assert.match(shader.fragmentShader,/#include <opaque_fragment>[\s\S]*if\(vehicleMark.z>1.5\)gl_FragColor.rgb=vec3\(0\.\);/,'shadow samples remove light from the receiving road');
   assert.equal(shader.uniforms.vehicleSky.value.getHex(),glass.getHex());
   assert.deepEqual(shader.uniforms.vehicleCast.value.toArray(),[-.6,.8,5]);
   const copy=paint.clone();copy.onBeforeCompile=paint.onBeforeCompile;
@@ -220,6 +221,21 @@ test('vehicle glazing tracks the local sky and a two-triangle contact stays betw
     assert.equal(marks.length,6);assert.ok(panes.length>=18);
     const minY=Math.min(...p.array.filter((_,k)=>k%3===1));
     for(const j of marks)assert.ok(Math.abs((p.getY(j)-minY)/.24-.012)<.00001);
+    const m=marks[0],color=g.attributes.color;
+    const shadowX=Math.abs(p.getX(m)),shadowZ=Math.abs(p.getZ(m));
+    const centerX=shadowX*color.getX(m),centerZ=shadowZ*color.getY(m);
+    for(const side of [-1,1])for(const end of [-1,1]){
+      const xs=new Set(),zs=new Set();
+      for(let j=0;j<p.count;j++){
+        if(p.getY(j)>minY+1e-6||Math.sign(p.getX(j))!==end||Math.sign(p.getZ(j))!==side)continue;
+        xs.add(Math.abs(p.getX(j)));zs.add(Math.abs(p.getZ(j)));
+      }
+      assert.equal(xs.size,2,'the tread has a finite length on asphalt');
+      assert.equal(zs.size,2,'the full tire width meets the road');
+      assert.ok(Math.abs((Math.max(...xs)+Math.min(...xs))/2-centerX)<1e-6);
+      assert.ok(Math.abs((Math.max(...zs)+Math.min(...zs))/2-centerZ)<1e-6);
+      assert.ok(shadowZ>Math.max(...zs),'soft shade can extend beyond the wheel');
+    }
     assert.ok(panes.every(j=>p.getY(j)>minY+.14));
   }
 });

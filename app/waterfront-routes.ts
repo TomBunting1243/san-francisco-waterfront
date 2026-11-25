@@ -4,7 +4,7 @@ import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.
 import {spearWalkerCount,spearWalkerPose} from './spear-walkers.ts';
 import {chestnutWalkerCount,chestnutWalkerPose} from './chestnut-crossing.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
-import {northWaterfrontGrade,streetPoses} from './streets.ts';
+import {northRefugeOffset,northWaterfrontGrade,streetPoses} from './streets.ts';
 import {pier2931Walk} from './north-quay-promenade.ts';
 import {pierOneHalfPassageHeight} from './central-pier-access.ts';
 import {roadStopLines,signalPeriod} from './waterfront-signals.ts';
@@ -213,7 +213,7 @@ const carriageways=Array.from({length:1601},(_,i)=>{
   const south=.055*(1-THREE.MathUtils.smoothstep(x,-47,-45));
   const folsom=.22*(1-THREE.MathUtils.smoothstep(Math.abs(x+36.8),.3,1.8));
   const north=.027*THREE.MathUtils.smoothstep(x,11,13)*(1-THREE.MathUtils.smoothstep(x,23,25));
-  lanes[1].z+=(south+folsom+.063*howard+north)/Math.cos(lanes[1].heading);
+  lanes[1].z+=(south+folsom+.063*howard+north+northRefugeOffset(x))/Math.cos(lanes[1].heading);
   return lanes;
 });
 export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-30,37]:[streetStart,streetEnd];

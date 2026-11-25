@@ -1,6 +1,6 @@
 import {CatmullRomCurve3,MathUtils,Vector3} from 'three';
 import {fremontExitDistance,westboundExitPose} from './approach-road.ts';
-import {northWaterfrontGrade,streetPose} from './streets.ts';
+import {northRefugeOffset,northWaterfrontGrade,streetPose} from './streets.ts';
 import {crossStreetGreenStart,crossStreetGreenEnd,howardTurnStopLine,roadStopLines,signalPeriod,spearStopLine} from './waterfront-signals.ts';
 
 // SF Public Works active centerlines (3psu-pn9h), with lane offsets.
@@ -15,7 +15,8 @@ const roads=[[landing.x,landing.z],
 const waterfrontEndX=82.53; // Stop on the approach to Chestnut, with continuous road ahead.
 function northLane(x:number){
   const road=streetPose(x,1);
-  return [x+.185*Math.sin(road.heading),road.z+.185*Math.cos(road.heading)];
+  const offset=.185+northRefugeOffset(x);
+  return [x+offset*Math.sin(road.heading),road.z+offset*Math.cos(road.heading)];
 }
 for(let x=-23.58;x<waterfrontEndX+4;x+=.25)roads.push(northLane(x));
 const route=new CatmullRomCurve3(roads.map(([x,z])=>new Vector3(x,0,z)));

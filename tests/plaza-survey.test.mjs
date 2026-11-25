@@ -5,8 +5,9 @@ import {ferryPublicRealm} from '../app/ferry-architecture.ts';
 import {driverPose,museumLegDuration} from '../app/driver-rides.ts';
 import {createRideInteriors,placePassenger} from '../app/ride-interior.ts';
 import {createLandscape} from '../app/landscape.ts';
-import {plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
+import {addSurveyedTree,plazaBenches,plazaTreeRecords,southPlazaTop} from '../app/plaza-survey.ts';
 import {waterfrontGardens} from '../app/waterfront-gardens.ts';
+import {medianPalmBeds} from '../app/median-palm-sites.ts';
 import {sfMap} from '../app/sf-map.ts';
 import survey from '../public/data/plaza-survey.json' with {type:'json'};
 
@@ -28,8 +29,10 @@ test('all observed crowns are rendered on mapped stems at lidar height and sprea
     if(tree.userData.stationClearance){
       assert.ok(Math.abs(x-row.p[0])<.0015&&Math.abs(z-row.p[1])<.19,'small cross-track registration of obscured wells');
       assert.equal(gardens.treeAnchors.find(t=>t.id===row.id).z,z);
-    }else if(row.id===13605369993){
-      assert.ok(Math.abs(x-row.p[0])<.00051&&Math.abs(z-row.p[1]-.052)<.00051,'yard palm registers to planting side of curb');
+    }else if(medianPalmBeds.has(row.id)){
+      const bed=medianPalmBeds.get(row.id);
+      assert.deepEqual([x,z],[bed.x,bed.z]);
+      assert.ok(Math.hypot(x-row.p[0],z-row.p[1])<.24,'median registration stays within four metres of the OSM stem');
     }else assert.ok(Math.hypot(x-row.p[0],z-row.p[1])<.0015);
     assert.equal(gardens.treeAnchors.filter(t=>t.id===row.id).length,1);
     const bounds=new THREE.Box3().setFromObject(tree,true),size=bounds.getSize(new THREE.Vector3());
@@ -229,7 +232,7 @@ test('plaza date palm crowns hold a layered feather silhouette and warm lower fr
       const m=new THREE.Mesh(g);m.position.set(x,y,z);group.add(m);return m;
     },0,0,0,id,row.heightM*.06,row.crownM*.03,.02);
     const crown=group.getObjectByName('Date palm foliage');
-    assert.equal(group.children.length,10);
+    assert.equal(group.children.length,2);
     assert.ok(group.children.reduce((count,m)=>count+m.geometry.index.count/3,0)<=2016);
     const {position,color}=crown.geometry.attributes,bounds=new THREE.Box3().setFromObject(crown,true);
     let ochreBelow=0,sageAbove=0;
@@ -253,4 +256,44 @@ test('plaza date palm crowns hold a layered feather silhouette and warm lower fr
   }
   const coverage=filled/samples;
   assert.ok(coverage>1/3&&coverage<.60,'projected fronds carry continuous color with open sky between them: '+coverage);
+});
+
+
+test('surveyed Phoenix trunks have a continuous flared collar, pitted leaf scars and the recorded breast-height diameter',async()=>{
+  const {northQuayPalms}=await import('../app/north-quay-palms.ts');
+  const ray=new THREE.Raycaster();
+  for(const [id,, ,heightM,crownM,dbh] of northQuayPalms){
+    const root=new THREE.Group(),r=dbh*.0254*.03;
+    const tree=addSurveyedTree((g,c,x,y,z,parent)=>{
+      const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c}));m.position.set(x,y,z);parent.add(m);return m;
+    },root,{id,supplemental:false,heightM,crownM},0,0,0,true,'Phoenix canariensis',r);
+    root.updateMatrixWorld(true);
+    const stem=tree.getObjectByName('Palm trunk'),g=stem.geometry,p=g.attributes.position;
+    assert.equal(tree.getObjectsByProperty('name','Palm trunk').length,1);
+    assert.ok(g.userData.paintVertices&&g.hasAttribute('color'));
+    const incidences=new Map(),key=i=>[p.getX(i),p.getY(i),p.getZ(i)].join(',');
+    for(let n=0;n<g.index.count;n+=3)for(let j=0;j<3;j++){
+      const a=g.index.getX(n+j),b=g.index.getX(n+(j+1)%3),edge=[key(a),key(b)].sort().join('/');
+      const e=incidences.get(edge)??{count:0,atSoil:p.getY(a)===0&&p.getY(b)===0};
+      e.count++;incidences.set(edge,e);
+    }
+    for(const e of incidences.values())assert.equal(e.count,e.atSoil?1:2,'only the soil ring is open');
+    const axis=g.userData.datePalmAxis;
+    for(const [y,minimum,maximum] of [[.001,1.60,1.70],[1.3716*.06,.986,1.015]]){
+      const widths=[];
+      for(let i=0;i<24;i++){
+        const d=new THREE.Vector3(Math.cos(i*Math.PI/24),0,Math.sin(i*Math.PI/24));
+        const center=new THREE.Vector3(y*tree.scale.x*axis[0]/tree.scale.y,y,y*tree.scale.z*axis[1]/tree.scale.y);
+        const hits=[-1,1].map(sign=>{
+          ray.set(center.clone().addScaledVector(d,.2*sign),d.clone().multiplyScalar(-sign));
+          return ray.intersectObject(stem,false)[0]?.point;
+        });
+        assert.ok(hits.every(Boolean),'solid cross-section throughout');
+        const width=hits[0].distanceTo(hits[1])/(2*r);widths.push(width);
+        if(y>.01)assert.ok(Math.abs(width-1)<.045);
+      }
+      const mean=widths.reduce((sum,w)=>sum+w,0)/widths.length;assert.ok(mean>=minimum&&mean<=maximum,[id,y,mean]);
+    }
+    assert.ok(Math.abs(new THREE.Box3().setFromObject(tree,true).max.y-heightM*.06)<.0001);
+  }
 });

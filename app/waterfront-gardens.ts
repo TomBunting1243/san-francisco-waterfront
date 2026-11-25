@@ -1,3 +1,5 @@
+import {medianPalmBeds} from './median-palm-sites.ts';
+import {medianBedSoilHeight} from './median-bed-surface.ts';
 import * as THREE from 'three';
 import {biermanGround,biermanParcel,sueBiermanPark} from './sue-bierman.ts';
 import {staticBoxes} from './static-boxes.ts';
@@ -27,15 +29,12 @@ const surveyedTrees:Record<string,{sfId:number;species:string;dbhInches:number|n
 // anchors the wood, allowing the uphill side to enter the soil.
 const tramTreeFoot=new Map<number,number>();
 for(const [y,ids] of [
-  [0.031,[10828325149,10828325156,10828325287,12793548824,12793548826,12793548828,12793548830,12793548831,12793548832,12793548834]],
-  [0.0315,[10828325157,10828325161,12793548837]],
-  [0.0316,[10828325280,12793548833,12793548836]],
-  [0.0337,[12793548835]],
-  [0.0406,[10828325159,12793548823]],
-  [0.0436,[12793548838]],
-  [0.045,[12793548822,12793548825,12793548827,12793548829]],
-  [0.054,[13605228878,13605283524,13605283526,13605283528]],
-  [0.068,[13605228873,13605228874,13605228875,13605228876,13605228877,13605228879,13605228880,13605228881,13605283521,13605283522,13605283523,13605283525,13605283527]],
+  [.031,[10828325149,10828325156,10828325287]],
+  [.0315,[10828325157,10828325161]],
+  [.0316,[10828325280]],
+  [.0406,[10828325159]],
+  [.054,[13605283524,13605283526,13605283528]],
+  [.068,[13605283521,13605283522,13605283523,13605283525,13605283527]],
 ] as const)for(const id of ids)tramTreeFoot.set(id,y);
 const brickPlaza=sfMap.parks.find(park=>park.name==='Embarcadero Plaza')!;
 const rinconPaving=sfMap.parks.find(park=>park.name==='Rincon Park')!;
@@ -112,32 +111,34 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
     }
   }
   root.add(createGatewayClub(waterfrontLandscape.areas,waterfrontLandscape.paths,font).root);
-  for(const node of waterfrontLandscape.trees){
-    const [x,z]=node.p,area=areaAt(node.p),inPark=insideBuilding(x,z,rinconPaving.p),y=area?(biermanParcel(area.id)?biermanGround(x,z):height(area)):inPark?.11:-.01;
+  // Public Works 132074 fills a gap in the inland Green Street OSM row.
+  const green=medianPalmBeds.get(132074)!;
+  const greenStem={id:132074,p:[green.x,green.z],species:'Phoenix canariensis',height:null,diameter:null};
+  for(const node of [...waterfrontLandscape.trees,greenStem]){
+    const bed=medianPalmBeds.get(node.id),x=bed?.x??node.p[0],z=bed?.z??node.p[1],area=areaAt(node.p),inPark=insideBuilding(x,z,rinconPaving.p),y=area?(biermanParcel(area.id)?biermanGround(x,z):height(area)):inPark?.11:-.01;
     // Preserve street trees too, but never plant through a roof or traffic carriageway.
     if(solidAt(x,z,y)||gatewayClubGround(x,z)||ecAreas.some(a=>contains(node.p,a))||!area&&(z< -31||x< -45||x>56))continue;
-    const record=surveyedTrees[node.id],canopy=plazaTreeRecords.get(node.id);
+    // Two 20-inch dates at Green are absent from the older OSM-to-DPW join.
+    const record=surveyedTrees[node.id]??(bed&&(bed.siteId===132114||bed.siteId===132074)?
+      {sfId:bed.siteId,species:'Phoenix canariensis',dbhInches:20}:undefined);
+    const canopy=node.id===greenStem.id?{id:node.id,p:node.p,palm:true,supplemental:false,heightM:12.4,crownM:1.7}:plazaTreeRecords.get(node.id);
     const palms=canopy?.palm||record?.species==='Phoenix canariensis'||
       (node.id>=10828325148&&node.id<=10828325152)||(node.id>=10828325274&&node.id<=10828325286);
     const trunkRadius=record?.dbhInches ? record.dbhInches*.0254*.06/2 : undefined;
     // The former Market street descends through the plaza; its seven trunks
     // follow this strip's grade, including the two ends below the terrace.
     const onMarketRamp=z>=-9.066&&z<=-6.249&&Math.abs(x-marketAxis(z))<.92;
-    // Public Works palm 194324 is a yard planting. Its map point lands on
-    // the battered Don Chee curb. The nearest level .045 sidewalk supports
-    // the complete 18-inch trunk ring 0.052 units toward the planting side.
-    const medianPalm=record?.sfId===194324,plantZ=medianPalm?z+.052:z;
-    const localGrade=onMarketRamp?westMarketGround(x,z)+.00035:medianPalm?.045:tramTreeFoot.get(node.id);
+    const localGrade=bed?medianBedSoilHeight(bed):onMarketRamp?westMarketGround(x,z)+.00035:tramTreeFoot.get(node.id);
     const support=localGrade??harryBridgesGround(x,z)??(area?(biermanParcel(area.id)?y:y+.024):inPark?.11:insideBuilding(x,z,brickPlaza.p)?.11:canopy?treePavingHeight(canopy):y);
     // At these two stems the surveyed curb back stops just short of the
     // sidewalk. Fill the narrow open joint beneath the roots with earth.
     if(node.id===10828325157||node.id===10828325159){
-      const bed=mesh(new THREE.CylinderGeometry(.032,.032,.035,12),'#655947',x,support-.0175,plantZ);
+      const bed=mesh(new THREE.CylinderGeometry(.032,.032,.035,12),'#655947',x,support-.0175,z);
       bed.name='Tram median root soil';bed.castShadow=false;
     }
-    if(record)treeWell(mesh,record.sfId,x,support,plantZ,-Math.atan(.15));
-    if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,plantZ,palms,record?.species??node.species,trunkRadius)){
-      treeAnchors.push({id:node.id,x,y:support,z:plantZ});
+    if(record&&!bed)treeWell(mesh,record.sfId,x,support,z,-Math.atan(.15));
+    if(canopy&&addSurveyedTree(mesh,root,canopy,x,support,z,palms,record?.species??node.species,trunkRadius)){
+      treeAnchors.push({id:node.id,x,y:support,z});
     }else if(palms){
       const seed=Math.abs(Math.sin(node.id));
       waterfrontPalm(mesh,x,localGrade??y,z,node.id,.52+.13*seed,.20+.04*seed,trunkRadius);
