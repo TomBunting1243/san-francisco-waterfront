@@ -4,6 +4,10 @@ import {FacadePanels,type FacadePoint} from './facade-panels.ts';
 type Plan=[number,number];
 type Pane={x:number;y:number;z:number;ry:number;w:number;h:number};
 type Wall=(s:number,h:number,out?:number)=>FacadePoint;
+export const fremontGuardGlassName='215 Fremont / arcade guard glass';
+const guardMaterial=new THREE.MeshStandardMaterial({vertexColors:true,transparent:true,opacity:.18,
+  depthWrite:false,side:THREE.DoubleSide,roughness:.24,metalness:.03});
+guardMaterial.forceSinglePass=true;
 const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.69,metalness:.06});
 const stone='#c4c2b4',edge='#d1cfc3',metal='#929e9b',steel='#788984';
 const dark='#405b62',glass='#60848a',roof='#b5b6ad',grade=.045;
@@ -106,6 +110,46 @@ function offices(f:FacadePanels,w:Wall,width:number,bays:number,step:number,curt
     }
   }
 }
+// The 2017 Colliers and 2026 JLL plans put a short stair along Fremont just
+// south of the first internal pier. Street grade climbs toward the lobby.
+// Express the porch's relative reveal over the city's level sidewalk datum.
+const stairStart=pitch,going=.33,rise=.15,risers=5,stairEnd=stairStart+going*risers;
+const lobbyLanding=6*pitch;
+function porchHeight(s:number){
+  if(s<stairStart||s>=lobbyLanding)return 0;
+  if(s<stairEnd)return rise*(1+Math.floor((s-stairStart)/going+1e-8));
+  return rise*risers*(lobbyLanding-s)/(lobbyLanding-stairEnd);
+}
+function arcadeDeck(f:FacadePanels){
+  const stations=[0,...Array.from({length:risers+1},(_,i)=>stairStart+i*going),lobbyLanding,arcade];
+  for(let i=1;i<stations.length;i++){
+    const a=stations[i-1],b=stations[i],lo=porchHeight(a),hi=b<=stairEnd?lo:porchHeight(b);
+    f.quad(point(a,.16,lo),point(b,.16,hi),point(b,2.7,hi),point(a,2.7,lo),'#b8b6aa');
+    if(b<=stairEnd&&porchHeight(b)>hi+.001)
+      f.quad(point(b,.16,hi),point(b,2.7,hi),point(b,2.7,porchHeight(b)),point(b,.16,porchHeight(b)),'#8e918b');
+  }
+  f.quad(point(0,0,0),point(arcade,0,0),point(arcade,.16,0),point(0,.16,0),'#bcb9a9');
+}
+function arcadeGuard(f:FacadePanels,glazing:FacadePanels){
+  // Two exterior views show the parapet across the corner span and the
+  // separate clear panels between subsequent piers. Leave the lobby end open.
+  for(let bay=0;bay<6;bay++){
+    const a=bay*pitch+.30,b=(bay+1)*pitch-.30,west=.16,east=.36;
+    const base=(s:number)=>bay===0?.72:porchHeight(Math.max(stairEnd,s))+.12;
+    const front=(s:number,h:number)=>point(s,west,h),rear=(s:number,h:number)=>point(s,east,h);
+    const l=base(a),r=base(b);
+    f.quad(front(a,0),front(b,0),front(b,r),front(a,l),'#9c9f98');
+    f.quad(front(a,l),front(b,r),rear(b,r),rear(a,l),'#b7bab1');
+    f.quad(rear(b,0),rear(a,0),rear(a,l),rear(b,r),'#a4a69c');
+    if(bay===0)continue;
+    const top=(s:number)=>base(s)+.90;
+    for(const s of [a+.08,(a+b)/2,b-.08])box(f,s-.024,.235,s+.024,.285,base(s),top(s)-.045,'#747e79');
+    glazing.quad(point(a,.26,l+.025),point(b,.26,r+.025),point(b,.26,top(b)-.047),point(a,.26,top(a)-.047),'#85aaa6');
+    f.quad(point(a,.22,top(a)-.045),point(b,.22,top(b)-.045),point(b,.22,top(b)),point(a,.22,top(a)),'#687470');
+    f.quad(point(a,.22,top(a)),point(b,.22,top(b)),point(b,.30,top(b)),point(a,.30,top(a)),'#acb2aa');
+    f.quad(point(b,.30,top(b)-.045),point(a,.30,top(a)-.045),point(a,.30,top(a)),point(b,.30,top(b)),'#77847e');
+  }
+}
 function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boolean,windows:Pane[],rooms:OfficeGlass){
   const step=isFremont?pitch:width/bays;
   for(let i=0;i<bays;i++){
@@ -119,12 +163,13 @@ function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boole
     const cell=(r-a)/3;
     for(let k=0;k<3;k++){
       const l=a+k*cell,t=l+cell,door=inArcade&&i===5&&k===1;
-      panel(f,w,l,t,0,door?.08:.44,'#838c87',-recess);
-      panel(f,w,l,l+.09,door?.08:.44,4.12,metal,-recess);
-      panel(f,w,l+.09,t,door?.08:.44,3.36,dark,-recess);
+      const sill=inArcade?(door?porchHeight((l+t)/2)+.02:Math.max(.44,porchHeight(l)+.12,porchHeight(t)+.12)):.44;
+      panel(f,w,l,t,0,sill,'#838c87',-recess);
+      panel(f,w,l,l+.09,sill,4.12,metal,-recess);
+      panel(f,w,l+.09,t,sill,3.36,dark,-recess);
       panel(f,w,l+.09,t,3.36,3.44,metal,-recess);
       panel(f,w,l+.09,t,3.44,4.12,glass,-recess);
-      if(inArcade&&(i===0||i===3||i===5)&&k!==2)pane(w,l+.10,t,door?.09:.45,3.35,-recess,windows);
+      if(inArcade&&(i===0||i===3||i===5)&&k!==2)pane(w,l+.10,t,sill+.01,3.35,-recess,windows);
     }
     // The soffit faces down. Its own private floor meets the municipal
     // sidewalk on the surveyed outer column plane.
@@ -132,7 +177,7 @@ function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boole
     const corner=inArcade&&i<3;
     if(corner)rooms.surface(soffit,'#abaea3',[0,0,.018,.018],.34,.68);
     else f.quad(soffit[0],soffit[1],soffit[2],soffit[3],'#abaea3');
-    if(isFremont||!cornerReturn)
+    if(!inArcade&&!cornerReturn)
       f.quad(w(a,0),w(r,0),w(r,0,-recess),w(a,0,-recess),'#bcb9a9');
     if(corner)rooms.surface([w(a,4.12),w(b,4.12),w(b,4.70),w(a,4.70)],edge,
       [.017,.017,.044,.044],.34,.68);
@@ -154,6 +199,7 @@ export function add215Fremont(building:{id:number},root:THREE.Group,windows:Pane
     const s=i*pitch,half=.30;
     box(f,Math.max(0,s-half),.03,s+half,.70,0,4.12,'#acafa7');
   }
+  const guards=new FacadePanels();arcadeDeck(f);arcadeGuard(f,guards);
   // Closed side of the arcade where the southern flush frontage begins.
   panel(f,wall(arcade,2.7,0,-1),0,2.7,0,4.12,stone);
   offices(f,fremont,68.5,11,pitch,i=>i<7,windows,rooms,fremontRooms);
@@ -165,5 +211,6 @@ export function add215Fremont(building:{id:number},root:THREE.Group,windows:Pane
   const lit=rooms.mesh(material);lit.name='215 Fremont / occupied office glazing';
   lit.geometry.setAttribute('facadeGrid',new THREE.Float32BufferAttribute(rooms.grid,4));
   mesh.add(lit);
+  const glazing=guards.mesh(guardMaterial);glazing.name=fremontGuardGlassName;glazing.castShadow=false;root.add(glazing);
   return true;
 }

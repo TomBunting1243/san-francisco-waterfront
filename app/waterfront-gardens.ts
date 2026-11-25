@@ -5,6 +5,7 @@ import {biermanGround,biermanParcel,sueBiermanPark} from './sue-bierman.ts';
 import {staticBoxes} from './static-boxes.ts';
 import {addSteuartHotelTrees} from './steuart-hotel-trees.ts';
 import {addHowardTrees} from './howard-trees.ts';
+import {addFremontGinkgos} from './fremont-ginkgos.ts';
 import {addFoundryTrees} from './foundry-trees.ts';
 import {treeWell} from './tree-wells.ts';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
@@ -150,7 +151,7 @@ export function waterfrontGardens(buildings:Building[],font?:Font){
       tree(x,z,localGrade??y,node.id,record?.species??node.species,node.height,atRincon?'rincon':area?'garden':'street');
     }
   }
-  treeAnchors.push(...addHowardTrees(mesh),...addFoundryTrees(mesh),...addSteuartHotelTrees(mesh));
+  treeAnchors.push(...addHowardTrees(mesh),...addFoundryTrees(mesh),...addFremontGinkgos(mesh),...addSteuartHotelTrees(mesh));
   for(const [id,x,z,heightM,crownM,dbh] of northQuayPalms){
     const y=northWaterfrontGrade(x)+.014;
     addSurveyedTree(mesh,root,{id,p:[x,z],heightM,crownM,palm:true,supplemental:false},

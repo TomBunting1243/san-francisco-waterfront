@@ -119,6 +119,7 @@ const units={
  'south-beach':'buildings:building features docks:dock features roads:road features','steuart-junction':'curves:track curves',
  'survey-blocks':'buildings:building features outsideRoads:road segments','survey-shore':'piles:pile positions decks:deck outlines',
  'natoma-landings':'vertices:curb and paving vertices faces:paving and curb surface classes',
+ 'fremont-ginkgos':'$:Public Works ginkgo locations',
  'fremont-approach-curbs':'vertices:surveyed and fitted sidewalk mesh vertices','fremont-markings':'batches:paint colors','fremont-corner-curbs':'stations:pavement classes with corrected curb stations',
  'surveyed-shopfronts':'$:storefront records','transbay-crossings':'sites:crossing sites','tree-wells':'$:tree-well records',
  'waterfront-landscape':'areas:landscape areas paths:path features trees:tree records','waterfront-tree-survey':'trees:tree records',
@@ -160,7 +161,7 @@ const assetHosts={'CLARION-FREMONT':'imperial.granicus.com','TJPA-SECTION':'www.
   'SF-CHRONICLE':'s.hdnux.com','TOWN-HALL-PHOTO':'storage.ghost.io','HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],
   'WEST-SPAN-PHOTO':['thumb.wikimedia.org','tile.loc.gov'],'SOUTH-BASIN-PHOTO':['www.sfcta.org','images.squarespace-cdn.com'],
   'HUNTSMAN-WAKELY':'static.wixstatic.com','PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
-  'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};
+  'SF-PUBLIC-WORKS':['sfpublicworks.org','data.sfgov.org'],'PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};
 const rideCredits=[...files.get('references/RESEARCH-SOURCES.md').toString().matchAll(
   /\| (KartaView|Wikimedia Commons) (\d+) \| [^|]+ \| \d{4}-\d{2}-\d{2} \| \[CC[^\]]*\]\(https:\/\/creativecommons\.org\//g
 )].map(([,provider,id])=>(provider==='KartaView'?'RIDE-KARTAVIEW':'RIDE-COMMONS')+':'+id);

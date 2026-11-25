@@ -9,12 +9,12 @@ import {fremontClockOffset} from './waterfront-signals.ts';
 // to the 2024 city 8 cm ortho. Arm reaches and heights are photo estimates.
 // https://kartaview.org/details/366261/2071/track-info
 // https://data.sf.gov/resource/ybh5-27n2.json?cnn=24527000
-function landing(u:number,v:number){
+function landing(u:number,v:number,y=.045){
   // Seven pixels per metre, positive u along Howard eastbound and v down Fremont.
-  return new Vector3(-28.766041+.001297019*(u-455)-.008473203*(v-245),.045,
+  return new Vector3(-28.766041+.001297019*(u-455)-.008473203*(v-245),y,
     -30.979132+.008473203*(u-455)+.001297019*(v-245));
 }
-export const fremontPoles={ne:landing(391,140),nw:landing(266,135),sw:landing(252,303),se:landing(411,303)};
+export const fremontPoles={ne:landing(391,140),nw:landing(266,135),sw:landing(252,303),se:landing(411,303,.04353575)};
 const north=new Vector3(.98849,0,-.15131),east=new Vector3(.15131,0,.98849),up=new Vector3(0,1,0);
 type Pole=keyof typeof fremontPoles;
 type Arm={pole:Pole;reach:number;along:Vector3;face:Vector3;axis:0|1;blade?:string};
@@ -49,10 +49,21 @@ export function addFremontStandards(a:StreetAssembly){
   const steel='#89918b';
   function tube(lo:Vector3,hi:Vector3,r:number,t:number){
     const d=hi.clone().sub(lo),mid=lo.clone().lerp(hi,.5);
-    a.add(new CylinderGeometry(t,r,d.length(),8),steel,mid.x,mid.y,mid.z).quaternion.setFromUnitVectors(up,d.normalize());
+    const shaft=a.add(new CylinderGeometry(t,r,d.length(),8),steel,mid.x,mid.y,mid.z);
+    shaft.quaternion.setFromUnitVectors(up,d.normalize());
+    return shaft;
   }
-  for(const [id,p] of Object.entries(fremontPoles))
-    tube(p,p.clone().addScaledVector(up,.06*(id==='se'?3.25:6.18)),.0075,.0042);
+  for(const [id,p] of Object.entries(fremontPoles)){
+    const shaft=tube(p,p.clone().addScaledVector(up,.06*(id==='se'?3.25:6.18)),.0075,.0042);
+    if(id==='se'){
+      // The 2024-registered corner return descends between the two warning
+      // panels. Fit the foot to that single apron facet, keeping the post upright.
+      const position=shaft.geometry.getAttribute('position');
+      for(let i=0;i<position.count;i++)if(position.getY(i)<0)
+        position.setY(i,position.getY(i)+.09740*position.getX(i)+.07154*position.getZ(i));
+      shaft.geometry.computeVertexNormals();
+    }
+  }
   for(const arm of arms){
     const arc=new QuadraticBezierCurve3(point(arm,0,4.48),point(arm,arm.reach*.62,6.32),point(arm,arm.reach,upperRise+.30));
     for(let i=0;i<5;i++)tube(arc.getPoint(i/5),arc.getPoint((i+1)/5),.0047-.00044*i,.00426-.00044*i);

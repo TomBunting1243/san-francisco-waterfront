@@ -53,7 +53,7 @@ test('each southern crossing entrance has a sloped warning strip with one operat
     assert.equal(tone(at[0]),'c0a16b');
     assert.ok(y>.031&&y<.045&&at[0].face.normal.y>.9&&at[0].face.normal.y<.9999);
     assert.equal(at.filter(h=>Math.abs(h.point.y-y)<.00003).length,1);
-    groups.add((u<100?'west':'east')+(v<303?'Howard':'Fremont'));
+    groups.add((u<100?'west':'east')+((u>100?u>198:v<303)?'Howard':'Fremont'));
   }
   assert.deepEqual([...groups].sort(),['eastFremont','eastHoward','westFremont','westHoward']);
 });
@@ -62,14 +62,14 @@ test('the four Howard mouths retain continuous RX-6 rows at 1.66 inch pitch, wit
   const {bakeRigidChunk}=await import('../app/city-blocks.ts');
   const warnings=meshes.find(m=>m.name==='Fremont and Howard detectable warnings');
   const g=warnings.geometry,uv=g.attributes.walkPanel,position=g.attributes.position;
-  assert.equal(position.count,38+new Set(natoma.faces.warning).size);
+  assert.equal(position.count,new Set(survey.faces.warning).size+new Set(natoma.faces.warning).size);
   assert.equal(g.index.count,survey.faces.warning.length+natoma.faces.warning.length);
   assert.ok(g.attributes.roadExposure.array.every(code=>code===1));
   assert.ok(meshes.filter(m=>m!==warnings&&m.geometry.hasAttribute('walkPanel')).every(m=>{
     const a=m.geometry.attributes.walkPanel;for(let i=0;i<a.count;i++)if(a.getX(i)>=1024)return false;return true;
   }));
   const basis=[[31.89,297.03,-.178244,.983986],[48.88,310.55,-.994267,.106926],
-    [208.23,297.47,.310957,.950424],[195.52,309.44,.951267,.308368]];
+    [205.775,289.825,.1078,.9942],[192.0,305.65,.9995,.0327]];
   const inchPitch=1.66*.0254*7;
   for(let i=0;i<survey.faces.warning.length;i+=3){
     for(let j=0;j<3;j++){
@@ -77,7 +77,7 @@ test('the four Howard mouths retain continuous RX-6 rows at 1.66 inch pitch, wit
       const p=survey.vertices[survey.faces.warning[k]],q=survey.vertices[survey.faces.warning[l]];
       const measured=point(...p),actual=new T.Vector3().fromBufferAttribute(position,a);
       assert.ok(measured.distanceTo(actual)<.000003);
-      const [, ,dx,dy]=basis[(p[0]>100?2:0)+(p[1]>303?1:0)];
+      const [, ,dx,dy]=basis[p[0]>100?(p[0]<198?3:2):(p[1]>303?1:0)];
       assert.ok(uv.getX(a)>1024);
       const du=q[0]-p[0],dv=q[1]-p[1];
       assert.ok(Math.abs(uv.getX(b)-uv.getX(a)-(du*dx+dv*dy)/inchPitch)<.0004);
@@ -102,4 +102,38 @@ test('the warning shader perturbs only resolved relief, preserves the far ochre 
   assert.ok(relief.includes('normal=normalize(')&&!s.vertexShader.includes('displacement='));
   assert.ok(relief.includes('crown=.23/1.66,base=.455/1.66')&&relief.includes('-.0003048'));
   m.dispose();
+});
+
+test('the 215 Fremont mouths and their road edge land on the two 2024 warning marks',()=>{
+  // Pixel centers in the city 8 cm aerial resampled to the 7 px/m plate.
+  // In v52 both of these points were unmarked, flat asphalt.
+  for(const [u,v,road,cap] of [
+    [192.0,305.65,[186.8,305.65],[188.8,305.65]],
+    [205.8,289.8,[205.8,284.9],[205.8,286.85]],
+  ]){
+    const center=sample(u,v),threshold=sample(...cap),street=sample(...road);
+    assert.equal(center.length,1);
+    assert.equal(tone(center[0]),'c0a16b');
+    assert.ok(center[0].point.y>.03145&&center[0].point.y<.045);
+    assert.ok(center[0].face.normal.y>.98);
+    assert.equal(street.length,1);
+    assert.ok(Math.abs(street[0].point.y-.031)<.00002);
+    assert.equal(threshold.length,1);
+    assert.ok(Math.abs(threshold[0].point.y-.03145)<.00003);
+    const from=point(...road,.03124),direction=point(...cap,.03124).sub(from);
+    const hit=new T.Raycaster(from,direction.clone().normalize(),0,direction.length()).intersectObjects(meshes)[0];
+    assert.ok(hit&&tone(hit)==='aeaa9f'&&hit.face.normal.dot(direction.normalize())<-.8);
+  }
+  for(const [u,v] of [[200.9,308.5],[200.83,307.3],[200.94,310.4],[205.8,311.7]]){
+    const hits=sample(u,v);
+    assert.equal(hits.length,1,'closed former seam at '+[u,v]);
+    assert.ok(hits[0].point.y>=.03145&&hits[0].point.y<.0451);
+  }
+  // Check the whole patch against the survey, including the actual warning
+  // polygons on either side of grid boundaries and the arc between them.
+  for(let u=187.17;u<220;u+=1.77)for(let v=284.21;v<320;v+=1.39){
+    if(u>=206&&v>=311)continue; // The private arcade starts here.
+    const ground=sample(u,v).filter(h=>!h.object.geometry.userData.roadPaint);
+    assert.equal(ground.length,1,'one continuous ground face at '+[u,v]);
+  }
 });

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as T from 'three';
-import {fremontPedestrianHeads,fremontPoles,fremontVehicleHeads} from '../app/fremont-howard-signals.ts';
+import {StreetAssembly} from '../app/street-amenities.ts';
+import {addFremontStandards,fremontPedestrianHeads,fremontPoles,fremontVehicleHeads} from '../app/fremont-howard-signals.ts';
 import {createStreetIllumination,createSignalHousings,signalLensCenter} from '../app/street-illumination.ts';
 import {signalAspects,fremontClockOffset} from '../app/waterfront-signals.ts';
 import {driverPose} from '../app/driver-rides.ts';
@@ -37,15 +38,28 @@ test('photographed Howard and Fremont vehicle faces operate on the Fremont cabin
 });
 test('four corner shafts sit fully on raised paving and serve all four pedestrian crossings',()=>{
   const paving=[];addSurveyBlocks(g=>{g.computeBoundingBox();const m=new T.Mesh(g);paving.push(m);return m;});
+  const assembly=new StreetAssembly();addFremontStandards(assembly);
+  const shafts=assembly.parts.filter(m=>m.geometry.parameters?.radiusBottom===.0075);
+  assert.equal(shafts.length,4);
   for(const pole of Object.values(fremontPoles)){
     const attached=fremontPedestrianHeads.filter(h=>h.x===pole.x&&h.z===pole.z);
     assert.equal(attached.length,2);
     assert.ok(Math.abs(Math.cos(attached[0].angle-attached[1].angle))<.25);
-    for(let i=0;i<12;i++){
-      const x=pole.x+.0075*Math.cos(i*Math.PI/6),z=pole.z+.0075*Math.sin(i*Math.PI/6);
-      const ray=new T.Raycaster(new T.Vector3(x,.10,z),new T.Vector3(0,-1,0),0,.10);
-      const top=ray.intersectObjects(paving)[0];assert.ok(top&&Math.abs(top.point.y-pole.y)<.0001);
+    const shaft=shafts.find(m=>Math.hypot(m.position.x-pole.x,m.position.z-pole.z)<.000001);
+    assert.ok(shaft&&Math.abs(shaft.quaternion.w-1)<1e-8,'vertical shaft');
+    const pos=shaft.geometry.getAttribute('position');
+    shaft.updateMatrixWorld();
+    const seats=new Set();
+    for(let i=0;i<pos.count;i++)if(pos.getY(i)<0){
+      const foot=shaft.localToWorld(new T.Vector3().fromBufferAttribute(pos,i));
+      const ray=new T.Raycaster(new T.Vector3(foot.x,.10,foot.z),new T.Vector3(0,-1,0),0,.10);
+      const top=ray.intersectObjects(paving)[0];
+      assert.ok(top&&Math.abs(top.point.y-foot.y)<.00001,'actual shaft bottom is flush around the entire footprint');
+      const color=new T.Color().fromBufferAttribute(top.object.geometry.attributes.color,top.face.a).getHexString();
+      assert.ok(['cac6b3','c7c3b7','c7c1b1'].includes(color),'shaft clear of warning panels and roadway');
+      seats.add(foot.y.toFixed(5));
     }
+    assert.equal(seats.size>1,pole===fremontPoles.se,'only the southeast foot meets a slope');
   }
   const g=lighting.lenses.geometry;
   for(const t of [24,50]){

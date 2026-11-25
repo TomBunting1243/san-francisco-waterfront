@@ -125,7 +125,7 @@ import {add199Fremont} from './199-fremont.ts';
 import {transitScreenName} from './transit-center-screen.ts';
 import {addSalesforceTransitCenter} from './salesforce-transit-center.ts';
 import {addTownHall} from './town-hall.ts';
-import {add215Fremont} from './215-fremont.ts';
+import {add215Fremont,fremontGuardGlassName} from './215-fremont.ts';
 import {addFoundrySquare} from './foundry-square.ts';
 import {add425Market} from './425-market.ts';
 import {add455Market} from './455-market.ts';
@@ -706,7 +706,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
   }
-  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName(transitScreenName)!,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,root.getObjectByName(spearCanopyGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,cycleContacts.mesh,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName(transitScreenName)!,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,root.getObjectByName(spearCanopyGlassName)!,root.getObjectByName(fremontGuardGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,cycleContacts.mesh,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;

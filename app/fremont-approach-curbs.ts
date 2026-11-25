@@ -2,7 +2,7 @@ import paving from '../public/data/fremont-approach-curbs.json' with {type:'json
 
 type Point=[number,number,number];
 type Tile={vertices(points:Point[],color:string):number;indices:number[];roadClass:number};
-const tint:Record<string,string>={face:'#aeaa9f',cap:'#d2cdc0',shoulder:'#c7c1b1',warning:'#c0a16b',joint:'#aca89c',walk:'#c7c3b7'};
+const tint:Record<string,string>={face:'#aeaa9f',cap:'#d2cdc0',soil:'#665b48',shoulder:'#c7c1b1',warning:'#c0a16b',joint:'#aca89c',walk:'#c7c3b7'};
 const remainder:Record<string,number[][][][]>=paving.remainder;
 
 // The two surveyed approach strips previously supplied plan-view caps only.
@@ -20,7 +20,7 @@ export function fremontPavingRemainder(kind:string,index:number){
 // https://sfpublicworks.org/sites/default/files/RX-6_0.pdf
 const warningAxes=[
   [31.8855,297.0327,-.178244,.983986],[48.8771,310.5492,-.994267,.106926],
-  [208.2269,297.4672,.310957,.950424],[195.5153,309.4385,.951267,.308368],
+  [205.775,289.825,.1078,.9942],[192.0,305.65,.9995,.0327],
 ];
 const pitchPixels=.0254*1.66*7;
 export function addFremontApproachCurbs(tile:Tile,warningTile:Tile){
@@ -39,7 +39,7 @@ export function addFremontApproachCurbs(tile:Tile,warningTile:Tile){
       if(local.has(id))continue;
       local.set(id,vertices.length);vertices.push(points[id]);
       if(surface==='warning'){
-        const [u,v]=paving.vertices[id],i=(u>100?2:0)+(v>303?1:0);
+        const [u,v]=paving.vertices[id],i=u>100?(u<198?3:2):(v>303?1:0);
         const [x,y,dx,dy]=warningAxes[i],a=u-x,b=v-y;
         // Ordinary pavement UVs elsewhere span less than 1000 panels.
         warningUV.push(2048+(a*dx+b*dy)/pitchPixels,(b*dx-a*dy)/pitchPixels);
