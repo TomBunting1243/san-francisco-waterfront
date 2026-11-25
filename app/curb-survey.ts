@@ -1,3 +1,4 @@
+import {howardWaterfrontCurb} from './howard-waterfront-corner.ts';
 import {cutCurbPalmBed} from './median-palm-sites.ts';
 import * as THREE from 'three';
 import howard from '../public/data/howard-trees.json' with {type:'json'};
@@ -81,7 +82,29 @@ export const museumWalkSeam=[backA[0]+backDx*backT,backA[1]+backDz*backT];
 // Re-register the two curb returns across the road, walk and curb-strip
 // polygons together. The map contains only changed outer-boundary stations.
 const fremontStations:Record<string,Record<string,Record<string,number[][]>>>=fremontCorners.stations;
+// Registered profile across the two 155 Steuart tree sites. U increases from
+// the road to the door. The 2023 lidar ground rises from ~3.05 to 3.26 m
+// between u3238 and u3244 at the northern site, and u3241–3246 at the south.
+const steuartPlate=(u:number,v:number)=>[-27.00800104+.0012973094*u-.0084729829*v,-33.37263659+.0084728164*u+.0012965840*v];
+const steuartV=(x:number,z:number)=>(.0012973094*(z+33.37263659)-.0084728164*(x+27.00800104))/
+  (.0012973094*.0012965840+.0084729829*.0084728164);
+const steuartStations=[[-570,0],[-555,3239],[-536,3239],[-472,3243],[-459,3243],[-445,0]];
+function steuartFraction(a:number[],b:number[],v:number){
+  const av=steuartV(a[0],a[1]),bv=steuartV(b[0],b[1]);return (v-av)/(bv-av);
+}
+function steuartRoadEdge(ring:number[][]){
+  const a=ring[39],b=ring[40];
+  const stations=steuartStations.flatMap(([v,u])=>{
+    if(u)return [steuartPlate(u-3.1,v)];
+    const t=steuartFraction(a,b,v);
+    return [[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]];
+  });
+  return [...ring.slice(0,40),...stations,...ring.slice(40)];
+}
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
+  if(kind==='street'&&index===91){
+    const [ring,...holes]=original;return [[steuartRoadEdge(ring),...holes]];
+  }
   const registered=howardPaving[kind]?.[index];
   if(registered)return registered;
   const overrides=data.overrides as Record<string,Record<string,number[][][][]>>;
@@ -132,7 +155,28 @@ export function addSurveyCurbs(mesh:MeshFactory){
         return [at(.037,.032),at(.0023,gutterTop),at(0,top),at(-.011,top),at(-back,median?medianTop:.0451)];
       }
       const a=profile(start),b=profile(end);
+      if(source===3796715&&i===15){
+        // Replace the four original curb faces, retaining both end profiles
+        // and their old sidewalk-side boundary. The leveled strip, tree wells
+        // and existing sidewalk meet at the same height.
+        const sections=[a,...steuartStations.map(([v,u])=>{
+          const t=steuartFraction(start,end,v);
+          const old=a.map((p,j)=>p.map((n,k)=>n+(b[j][k]-n)*t) as Vec);
+          if(!u)return old;
+          const at=(along:number,h:number):Vec=>{const [x,z]=steuartPlate(along,v);return [x,h,z];};
+          return [at(u-3.1,.032),at(u-.19,gutterTop),at(u,.045),at(u+.65,.045),[old[4][0],.045,old[4][2]] as Vec];
+        }),b];
+        for(let k=1;k<sections.length;k++)for(let j=0;j<4;j++){
+          const p=sections[k-1],q=sections[k],face=j===1;
+          const color=['#92928a','#a39f90','#d1cbb9','#c9c5b3'][j];
+          const nx=face?start[2]:0,ny=face?.02:1,nz=face?start[3]:0;
+          triangle(p[j],q[j],q[j+1],color,nx,ny,nz);
+          triangle(p[j],q[j+1],p[j+1],color,nx,ny,nz);
+        }
+        continue;
+      }
       for(let j=0;j<4;j++){
+        if((source===3803776||source===3800838)&&howardWaterfrontCurb(source,j,a[j],b[j],b[j+1],a[j+1],triangle))continue;
         if(source===3833285&&j===3){
           const outside=(data.ferryRefugeAprons as Record<string,number[][][]>)[i-1];
           if(outside){for(const [p,q,r] of outside)triangle(p,q,r,'#c4b8a3');continue;}

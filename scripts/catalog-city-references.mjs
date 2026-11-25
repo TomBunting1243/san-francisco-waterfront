@@ -151,6 +151,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'TJPA-SECTION':'www.tjpa.org','MTC-511':'511.org','COLLIERS-FREMONT':'listingsprod.blob.core.windows.net','FOUNDRY-SQUARE':'upload.wikimedia.org','USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
+  'STEUART-HOTELS':['image-tc.galaxy.tf','commissions.sfplanning.org','anamikaojha.com'],
   'HOWARD-STEUART':['sfplanning.s3.amazonaws.com','www.som.com','www.sfmta.com'],
   'HOWARD-COURTYARD':['www.theeastcut.org','view.publitas.com'],
   'SF-CHRONICLE':'s.hdnux.com','TOWN-HALL-PHOTO':'storage.ghost.io','HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],

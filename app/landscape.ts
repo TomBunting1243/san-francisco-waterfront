@@ -1,3 +1,4 @@
+import {addHowardRampLanding} from './howard-waterfront-corner.ts';
 import {addWestSpanTowers} from './west-span-towers.ts';
 import {howardGlassName} from './301-howard-front.ts';
 import {padelScreenName} from './park-padel.ts';
@@ -64,6 +65,7 @@ import {baySurfaceGeometry,vignetteBaySurfaceGeometry,configureBayWater,marineDi
 import {bakeBlockGroups,bakeRigidChunk,freezeBakedArchitecture,retireBakedMeshes} from './city-blocks.ts';
 import {bakeTreeBatches,createTreeDraw} from './tree-batches.ts';
 import {harborDatum,waterHeight,waterSurface} from './water-surface.ts';
+import {steuartHotelPlan,steuartHotelShell} from './steuart-hotel-shell.ts';
 import {buildingCharacter,modernBuildingAccents,characterBuildings,characterColors} from './building-character.ts';
 import {hasNeighborhoodDetail,neighborhoodColor,neighborhoodDetail,refineNeighborhoodMassing} from './neighborhood-detail.ts';
 import {waterfrontGardens,waterfrontLandscape} from './waterfront-gardens.ts';
@@ -105,6 +107,7 @@ import {add221Main} from './221-main.ts';
 import {add360Spear} from './360-spear.ts';
 import {add160Spear} from './160-spear.ts';
 export {courtyardVisitorOpen,updateCourtyardVisitor} from './howard-courtyard-visitor.ts';
+import {addOneSteuartLane} from './one-steuart-lane.ts';
 import {add188Spear,spearCanopyGlassName} from './188-spear.ts';
 import {add180Howard} from './180-howard.ts';
 import {add211Main} from './211-main.ts';
@@ -285,6 +288,11 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
       if(!b.parent){const detail=mooredVessel(b,font);root.add(detail.root);windowPositions.push(...detail.windows);}
       return;
     }
+    const steuartHotel=steuartHotelPlan(b);
+    if(steuartHotel){
+      mesh(steuartHotelShell(b,steuartHotel),characterColors[b.name],0,0,0);
+      const hotel=buildingCharacter(b,detailedBuildings,font);root.add(hotel.root);windowPositions.push(...hotel.windows);return;
+    }
     if(b.name==='1 Hotel San Francisco'){
       const hotel=buildingCharacter(b,detailedBuildings,font);root.add(hotel.root);windowPositions.push(...hotel.windows);return;
     }
@@ -299,6 +307,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(add221Main(b,root,windowPositions,font)||addAppraisersBuilding(b,root,windowPositions,font))return;
     if(add360Spear(b,root,windowPositions)||add160Spear(b,root,windowPositions,font))return;
     if(add188Spear(b,root,windowPositions))return;
+    if(addOneSteuartLane(b,root,windowPositions))return;
     if(add180Howard(b,root,windowPositions))return;
     if(add211Main(b,root,windowPositions)||add300Mission(b,root,windowPositions))return;
     if(addParkTower(b,root,windowPositions)||addHarrison(b,root,windowPositions)||add100Pine(b,root,windowPositions))return;
@@ -491,7 +500,10 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   mesh(rinconKnoll(),'#ffffff',0,0,0).name='Rincon lawn knoll';
   mesh(rinconGrass(),'#ffffff',0,0,0).name='Rincon crest grasses';
   mesh(walkSurface(routes.rincon,routeWidth.rincon,.05),'#d4cbb7',0,0,0).name='Rincon shared promenade';
-  for(const approach of [rinconApproach,rinconExit])mesh(walkSurface(approach,.24,.06),'#d4cbb7',0,0,0);
+  mesh(walkSurface(rinconApproach,.24,.06),'#d4cbb7',0,0,0);
+  const howardWalkEdge:THREE.Vector3[]=[];
+  mesh(walkSurface(rinconExit,.24,.06,howardWalkEdge),'#d4cbb7',0,0,0);
+  addHowardRampLanding(howardWalkEdge,mesh);
   // The wave-shaped seat walls sit in the scallops along the water side of the actual lawn.
   for(const points of [[[369,254],[378,254],[389,255],[401,258]],[[482,250],[498,250],[514,248],[530,243]],
     [[558,238],[575,237],[589,237],[605,240]]]){

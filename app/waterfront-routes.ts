@@ -46,17 +46,20 @@ export const rinconApproach=gradedPath([
   [-38.25,rinconGround,.68],[-37.13,rinconGround,.85],[-35.7,rinconGround,.65],[-34.60,rinconGround,.48],
 ]);
 export const rinconExit=gradedPath([
-  [-28.67,rinconGround,.04],[-27.32,rinconGround,-.12],[-25.74,rinconGround,-.22],[-25.05,rinconGround,-.29],[-24.53,rinconGround,-.25],
-  [-24.00,rinconGround,-.29],[-23.64,.118,-.29],[-23.10,.078,-.34],[-22.47,.045,-.40],
+  [-28.67,rinconGround,.04],[-27.32,rinconGround,-.12],[-25.74,rinconGround,-.22],[-25.05,.139,-.29],[-24.53,.107,-.25],
+  // Descend along the promenade to the surveyed flat back of Howard’s far curb cut.
+  [-24.00,.073,-.29],[-23.64,.051,-.29],[-23.31,.0451,-.313],[-23.10,.0451,-.34],[-22.47,.045,-.40],
 ]);
 
 /** Ribbons share the exact distance-sampled centerline and height of the moving routes. */
-export function walkSurface(line:THREE.CatmullRomCurve3,width:number,depth=.075){
+export function walkSurface(line:THREE.CatmullRomCurve3,width:number,depth=.075,landwardEdge?:THREE.Vector3[]){
   const positions:number[]=[],normals=[];
   const segments=Math.ceil(line.getLength()/.08);
   for(let i=0;i<=segments;i++){
     const t=i/segments,p=line.getPointAt(t),d=line.getTangentAt(t);
-    normals.push(p.clone().addScaledVector(new THREE.Vector3(d.z,0,-d.x),width/2),p.clone().addScaledVector(new THREE.Vector3(-d.z,0,d.x),width/2));
+    const edge=p.clone().addScaledVector(new THREE.Vector3(d.z,0,-d.x),width/2);
+    landwardEdge?.push(edge);
+    normals.push(edge,p.clone().addScaledVector(new THREE.Vector3(-d.z,0,d.x),width/2));
   }
   function facet(a:THREE.Vector3,b:THREE.Vector3,c:THREE.Vector3,d:THREE.Vector3){
     for(const p of [a,b,c,c,b,d])positions.push(...p.toArray());
@@ -217,8 +220,12 @@ const carriageways=Array.from({length:1601},(_,i)=>{
   const howard=1-THREE.MathUtils.smoothstep(Math.abs(x+23.2),.35,1.2);
   const south=.055*(1-THREE.MathUtils.smoothstep(x,-47,-45));
   const folsom=.22*(1-THREE.MathUtils.smoothstep(Math.abs(x+36.8),.3,1.8));
+  // Beyond the Howard rail nose, through vehicles follow the lane inland
+  // of the dashed divider. The inner lane narrows at the Mission rail refuge.
+  const innerWidth=.104-.036*THREE.MathUtils.smoothstep(x,-16.2,-14.7);
+  const innerLane=innerWidth*THREE.MathUtils.smoothstep(x,-23.18,-21.68)*(1-THREE.MathUtils.smoothstep(x,-12.1,-10.62));
   const north=.027*THREE.MathUtils.smoothstep(x,11,13)*(1-THREE.MathUtils.smoothstep(x,23,25));
-  lanes[1].z+=(south+folsom+.063*howard+north+northRefugeOffset(x))/Math.cos(lanes[1].heading);
+  lanes[1].z+=(south+folsom+.063*howard-innerLane+north+northRefugeOffset(x))/Math.cos(lanes[1].heading);
   return lanes;
 });
 export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-30,37]:[streetStart,streetEnd];

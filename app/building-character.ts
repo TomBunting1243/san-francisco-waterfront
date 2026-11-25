@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import {staticBoxes} from './static-boxes.ts';
 import {TextGeometry} from 'three/addons/geometries/TextGeometry.js';
 import type {Font} from 'three/addons/loaders/FontLoader.js';
+import {steuartHotelPlan,griffonStreetRoof} from './steuart-hotel-shell.ts';
+import {addGriffonEastFront} from './griffon-east-front.ts';
+import {addGriffonFront} from './griffon-front.ts';
+import {addHarborCourtFront} from './harbor-court-front.ts';
 import {railwayHotel} from './railway-museum.ts';
 import {center,footprintGeometry,mappedBuildings} from './sf-map.ts';
 
@@ -41,7 +45,8 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
   function mesh(g:THREE.BufferGeometry,c:string,x:number,y:number,z:number,parent=root){if(!materials.has(c))materials.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.83}));const m=new THREE.Mesh(g,materials.get(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
   const box=staticBoxes(mesh,root);
   function text(s:string,size:number,x:number,y:number,z:number,parent:THREE.Group,c=dark){const geo=new TextGeometry(s,{font,size,depth:.004,curveSegments:2});geo.computeBoundingBox();geo.translate(-geo.boundingBox!.max.x/2,0,0);return mesh(geo,c,x,y,z,parent);}
-  function exposed(parent:THREE.Group,x:number,y:number){const p=parent.localToWorld(new THREE.Vector3(x,y,.10));return !peers.some(n=>y>=(n.minH||0)-.015&&y<n.h+.015&&insideBuilding(p.x,p.z,n.p));}
+  const hotelPlan=steuartHotelPlan(b);
+  function exposed(parent:THREE.Group,x:number,y:number){const p=parent.localToWorld(new THREE.Vector3(x,y,.10));return (!hotelPlan||y<=hotelPlan.height(p.x,p.z)+.025)&&!peers.some(n=>y>=(n.minH||0)-.015&&y<n.h+.015&&insideBuilding(p.x,p.z,n.p));}
   function pane(x:number,y:number,w:number,h:number,parent:THREE.Group){if(!exposed(parent,x,y))return;box(w+.045,h+.045,.035,x,y,.043,dark,parent);const p=parent.localToWorld(new THREE.Vector3(x,y,.067));windows.push({x:p.x,y:p.y,z:p.z,ry:parent.rotation.y,w,h});for(const dx of [-w/2-.012,w/2+.012])box(.015,h+.035,.055,x+dx,y,.060,trim,parent);box(w+.045,.018,.085,x,y-h/2-.016,.070,trim,parent);box(.008,h,.020,x,y,.082,'#7c9690',parent);box(w,.008,.020,x,y+.025,.083,'#7c9690',parent);}
   function shrub(x:number,y:number,z:number,parent:THREE.Group){box(.19,.07,.15,x,y,z,'#a8977e',parent);for(const dx of [-.06,.03]){const leaf=mesh(new THREE.IcosahedronGeometry(.09,1),dx<0?'#6f9978':'#8ea66b',x+dx,y+.085,z,parent);leaf.scale.y=.65;}}
   const raw=b.p[0][0]===b.p.at(-1)![0]&&b.p[0][1]===b.p.at(-1)![1]?b.p.slice(0,-1):b.p;
@@ -50,6 +55,14 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
   const front=faces.filter(f=>f.len>.5).sort((a,b)=>b.nz-a.nz)[0];
   const classic=['Hotel Griffon','Harbor Court Hotel','Army and Navy Y.M.C.A. Building','Steuart Place'].includes(b.name);
   for(const {face,len,nz} of faces){if(len<.19)continue;
+    if(hotelPlan&&Math.hypot(face.position.x-hotelPlan.x,face.position.z-hotelPlan.z)<.005){
+      if(b.name==='Hotel Griffon')addGriffonFront(face,len,griffonStreetRoof,font,windows);
+      else addHarborCourtFront(face,len,b.h,font,windows);
+      continue;
+    }
+    if(b.id===193054133&&hotelPlan&&Math.hypot(face.position.x-hotelPlan.ex,face.position.z-hotelPlan.ez)<.005){
+      addGriffonEastFront(face,len,b.h,font,windows);continue;
+    }
     // Short exposed runs prevent trims crossing a neighboring building's facade.
     const band=(y:number,h:number,d:number,c:string)=>{const count=Math.ceil(len/.20);let start=-1;for(let i=0;i<=count;i++){const open=i<count&&exposed(face,-len/2+(i+.5)*len/count,y);if(open&&start<0)start=i;if(!open&&start>=0){box((i-start)*len/count+.002,h,d,-len/2+(start+i)*len/count/2,y,.05,c,face);start=-1;}}};
     if(classic){
@@ -67,16 +80,13 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
       }
       for(let y=.34;y<b.h-.15;y+=.085)band(y,.008,.018,harbor?'#c19477':'#cbbba0');
       for(const side of [-1,1])for(let y=.32;y<b.h-.12;y+=.12){const x=side*(len/2-.025);if(exposed(face,x,y))box(.065,.038,.08,x,y,.07,cream,face);}
-      if(face===front?.face){
+      if(!hotelPlan&&face===front?.face){
         box(.36,.23,.06,0,.145,.11,dark,face);box(.016,.20,.025,0,.14,.155,cream,face);
         const canopy=box(.54,.035,.27,0,.32,.18,b.name==='Steuart Place'?'#697f75':'#49675f',face);canopy.rotation.x=.08;
         for(const x of [-.24,.24]){box(.015,.27,.015,x,.18,.285,dark,face);shrub(x*1.5,.085,.16,face);}
-        if(b.name==='Hotel Griffon'){
-          const sign=new THREE.Group();sign.position.set(-len*.34,.45,.16);sign.rotation.y=-Math.PI/2;face.add(sign);box(.17,.68,.06,0,.34,0,'#364c49',sign);
-          [...'GRIFFON'].forEach((letter,i)=>text(letter,.073,0,.61-i*.086,.038,sign,cream));
-        }else if(harbor&&b.name==='Army and Navy Y.M.C.A. Building'){
+        if(b.name==='Army and Navy Y.M.C.A. Building'){
           text('YMCA',.13,0,b.h-.25,.115,face);for(const x of [-len*.34,len*.34]){box(.17,.24,.16,x,b.h+.03,-.02,'#c99e7e',face);mesh(new THREE.ConeGeometry(.18,.11,4), '#ae7155',x,b.h+.20,-.02,face).rotation.y=Math.PI/4;}
-        }else if(b.name==='Harbor Court Hotel')text('HARBOR COURT',.08,0,b.h-.25,.11,face);
+        }
       }
       if(harbor&&len>.5&&nz>.5){for(let x=-len/2+.04;x<len/2;x+=.085){const tile=box(.055,.025,.23,x,b.h+.05,-.035,'#ac7658',face);tile.rotation.x=.22;}}
     }else if(b.name==='Fireboat Station 35'){
@@ -103,7 +113,7 @@ export function buildingCharacter(b:Building,neighbors:Building[],font:Font){
   const roofPoints=b.p.map(([x,z])=>[cx+(x-cx)*.88,cz+(z-cz)*.88]);
   const roofClear=(x:number,z:number)=>insideBuilding(x,z,b.p)&&!peers.some(n=>n.h>b.h-.01&&insideBuilding(x,z,n.p));
   if(classic||b.name==='Ferry Station Post Office Building'||b.name==='Fireboat Station 35'){
-    mesh(footprintGeometry(roofPoints,.018),classic?'#a79d89':'#a9b7ac',0,b.h+.005,0);
+    if(!hotelPlan)mesh(footprintGeometry(roofPoints,.018),classic?'#a79d89':'#a9b7ac',0,b.h+.005,0);
     if(roofClear(cx,cz)){box(.23,.11,.22,cx,b.h+.072,cz,'#8f9e95');for(let i=0;i<4;i++)box(.19,.008,.017,cx,b.h+.13,cz-.075+i*.05,dark);}
   }
   if(b.name==='Army and Navy Y.M.C.A. Building'&&front){

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {steuartHotelRoof} from './steuart-hotel-shell.ts';
 import rawMap from '../public/data/sf-waterfront.json' with {type:'json'};
 type Point=number[];
 type Building={id:number;name:string;p:Point[];h:number;glass:boolean;measured:boolean;minH?:number;part?:boolean;parent?:number;roof?:string;material?:string};
@@ -9,6 +10,8 @@ export const sfMap={...rawMap} as {buildings:Building[];roads:{name:string;p:Poi
 // their shared Howard face and the sawtooth profile above the corner store.
 const spearFamily=new Set([288645263,1550628439,1550628438]);
 sfMap.buildings=sfMap.buildings.map(b=>{
+  const hotelRoof=steuartHotelRoof(b.id);
+  if(hotelRoof!==undefined)return {...b,h:hotelRoof,measured:true};
   if(b.id!==192305909&&b.id!==154217696&&!spearFamily.has(b.id))return b;
   const p=b.p.map(([x,z])=>{
     const u=.988686*(x+25.894)-.150004*(z+12.650);

@@ -201,6 +201,20 @@ test('constructed pavement supports the five-lane tunnel entrance and all three 
       tireOnRoad(x,z,northWaterfrontGrade(x));
     }
   }
+  // Both ends of the Howard–Mission inner lane narrow against refuge curbs.
+  // Check the full axle width on either side of the three closest survey seams.
+  const seams=new Set([-23.08,-14.42,-13.75]);
+  for(let t=0;t<130&&seams.size;t+=.23)for(let i=1;i<waterfrontCarCount();i+=2){
+    const car=waterfrontCar(t,i);if(!car.active)continue;
+    for(const seam of seams)if(Math.abs(car.x-seam)<.05){
+      const c=Math.cos(car.heading),s=Math.sin(car.heading);
+      for(const f of [-.10,.10])for(const side of [-.055,.055]){
+        tireOnRoad(car.x+f*c+side*s,car.z-f*s+side*c,.031);
+      }
+      seams.delete(seam);
+    }
+  }
+  assert.equal(seams.size,0,'probed both refuge ends');
   // Continue down the road visible ahead of the parked sedan, across the
   // far end of the survey into the lower-detail boulevard.
   for(const x of [84,89,95.93,96,96.07,98,102]){
@@ -297,4 +311,54 @@ test('the Howard left-turning sedan stops at its staggered stripe and clears the
     previous=nose;
   }
   assert.ok(rest>300&&departed&&passed&&merged);
+});
+
+test('the entire Howard sedan clears the two rail hatches, bicycle buffer and turn box before entering the outer motor lane',async()=>{
+  const {addHowardWaterfrontPaint}=await import('../app/howard-waterfront-corner.ts');
+  const {default:paint}=await import('../public/data/promenade-crossings.json',{with:{type:'json'}});
+  const obstacles=[];
+  addHowardWaterfrontPaint(g=>{
+    const a=g.attributes.position;
+    for(let i=0;i<a.count;i+=3)obstacles.push([0,1,2].map(j=>[a.getX(i+j),a.getZ(i+j)]));
+    return {userData:{}};
+  });
+  // Only the two rail hatch fields obstruct this movement. Its own stop line
+  // and the zebra crossings are deliberately traversed on the Howard green.
+  for(const tri of paint.howardJunction)if(tri.every(([x,z])=>{
+    const u=(x+56)*132,v=(2-z)*132;return u>4110&&u<4275&&v>435&&v<620;
+  }))obstacles.push(tri.map(([x,z])=>[x,z]));
+  const triangle=new T.Triangle();
+  // 5.0 m bumper-to-bumper, 2.13 m across mirrors, plus a 0.20 m buffer.
+  // A rectangle-triangle test also detects a stripe passing between corners.
+  const envelope=new T.Box3(new T.Vector3(-.162,-.01,-.076),new T.Vector3(.162,.01,.076));
+  let passengerAtDivider=false,ambientAtDivider=false;
+  for(let tick=36200;tick<=39200;tick+=2){
+    const t=tick/100,{eye,look}=driverPose('bridge',t),dx=look.x-eye.x,dz=look.z-eye.z,n=Math.hypot(dx,dz);
+    const f=dx/n,s=dz/n,cx=eye.x-.0228*s,cz=eye.z+.0228*f;
+    for(const points of obstacles){
+      if(Math.abs(points[0][0]-cx)>1.4||Math.abs(points[0][1]-cz)>1.4)continue;
+      for(const [i,vertex] of [triangle.a,triangle.b,triangle.c].entries()){
+        const x=points[i][0]-cx,z=points[i][1]-cz;
+        vertex.set(x*f+z*s,0,-x*s+z*f);
+      }
+      assert.ok(!envelope.intersectsTriangle(triangle),'encroaches on registered paint at '+t);
+    }
+    // At u=5047 the white separator is at v≈479; the dashed lane divider
+    // is at v≈505. Interpolate their direction across the vehicle footprint.
+    if(Math.abs((cx+56)*132-5047)<3){
+      passengerAtDivider=true;
+      for(const fore of [-.15,.15])for(const side of [-.064,.064]){
+        const u=(cx+fore*f-side*s+56)*132,v=(2-cz-fore*s-side*f)*132;
+        const section=v-.12*(u-5047);
+        assert.ok(section>479&&section<505,'sedan in outer motor lane at '+t);
+      }
+      const van=waterfrontCar(t,27),u=(van.x+56)*132;
+      if(van.active&&Math.abs(u-5047)<3){
+        ambientAtDivider=true;
+        const v=(2-van.z)*132-.12*(u-5047);
+        assert.ok(v-8.6>505&&v+8.6<533,'van in adjacent lane at '+t);
+      }
+    }
+  }
+  assert.ok(passengerAtDivider&&ambientAtDivider);
 });

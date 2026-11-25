@@ -23,11 +23,15 @@ const roads=[[landing.x,landing.z],
   // Remain on the through side of the measured Beale and Main turn pockets.
   fremontPlate(973,270.5),fremontPlate(1110,271.5),fremontPlate(1360,271.5),
   fremontPlate(1530,271.5),fremontPlate(1570,269),fremontPlate(1738,246.5),fremontPlate(1820,244),[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
-  [-24.70,-2.95],[-24.21,-1.84],[-24.13,-1.43],[-24.02,-1.14],[-23.82,-1.02]];
+  // Stay in the open rail throat, then bend inside the waterfront bicycle buffer.
+  [-24.625,-2.95],[-24.291,-2.34],[-24.145,-1.84],[-24.13,-1.48],[-24.02,-1.24],[-23.82,-1.126]];
 const waterfrontEndX=82.53; // Stop on the approach to Chestnut, with continuous road ahead.
 function northLane(x:number){
   const road=streetPose(x,1);
-  const offset=.185+northRefugeOffset(x);
+  // The 2024 orthophoto puts the outer motor lane inland of the two-way
+  // cycle track. Its separator ends at Mission, where the curb lane widens.
+  const howardInset=.106*(1-MathUtils.smoothstep(x,-12.1,-10.62));
+  const offset=.185-howardInset+northRefugeOffset(x);
   return [x+offset*Math.sin(road.heading),road.z+offset*Math.cos(road.heading)];
 }
 for(let x=-23.58;x<waterfrontEndX+4;x+=.25)roads.push(northLane(x));
