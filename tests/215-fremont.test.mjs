@@ -45,3 +45,65 @@ test('one replacement owns the correct OSM parcel and registers emitting glass o
     assert.ok(hit&&hit.distance<.003);
   }
 });
+
+test('the t251 passenger sees the office ceiling bands behind the sash and diagonal steel, above a muted corner arcade',async()=>{
+  const {driverPose}=await import('../app/driver-rides.ts');
+  const {root,mesh,panes}=model(),rooms=mesh.getObjectByName('215 Fremont / occupied office glazing');
+  const eye=new T.Vector3().copy(driverPose('bridge',251).eye),hit=(s,t,h)=>sample(root,eye,point(s,t,h));
+  assert.ok(rooms.geometry.hasAttribute('facadeGrid')&&!mesh.geometry.hasAttribute('facadeGrid'));
+  const g=rooms.geometry,grid=g.attributes.facadeGrid;
+  assert.ok(grid.count<1500&&grid.count===g.attributes.position.count);
+  assert.ok(mesh.geometry.index.count/3+g.index.count/3<3100);
+  const office=hit(2.85,.12,7.88);
+  assert.equal(office.object,rooms);
+  assert.ok(office.point.distanceTo(point(2.85,.12,7.88))<.00001);
+  const fascia=hit(4.7,0,4.58);
+  assert.equal(fascia.object,rooms);
+  assert.ok(grid.getX(fascia.face.a)<.045);
+  const pier=hit(.13,.03,1.6);assert.equal(pier.object,mesh);
+  const straight=(s,h)=>sample(root,point(s,-1,h),point(s,1,h));
+  const sill=4.70+.44,head=4.70+4.08-.12,mid=sill+(head-sill)*.70;
+  // Positives on either side of the physical curtain-wall transom. The metal
+  // remains in front, both here and on the exterior diagonal at midspan.
+  assert.equal(straight(1.50,mid-.16).object,rooms);
+  assert.equal(straight(1.50,mid+.0325).object,mesh);
+  assert.equal(straight(1.50,mid+.15).object,rooms);
+  assert.equal(straight(3.05,(head+sill)/2).object,mesh);
+  assert.equal(straight(2.85,1.75).object,mesh);
+  assert.equal(straight(2.85,4.55).object,rooms);
+  assert.equal(straight(20,4.55).object,mesh);
+  assert.equal(straight(3.05+3*6.10,26.8).object,mesh,'dark upper run');
+  assert.equal(panes.length,31,'existing occupancy retained');
+});
+
+test('only the photographed office receiver uses a dusk-to-late schedule in the existing façade shader',async()=>{
+  const {createFacadeClock,applyDowntownGlazing}=await import('../app/downtown-buildings.ts');
+  const {bakeRigidChunk}=await import('../app/city-blocks.ts');
+  const {mesh}=model(),rooms=mesh.children[0],clock=createFacadeClock(),mat=new T.MeshStandardMaterial();
+  applyDowntownGlazing(mat,clock);
+  const g=bakeRigidChunk('occupied offices',[rooms],mat).geometry;
+  const grid=g.attributes.facadeGrid;
+  assert.deepEqual(grid.array,rooms.geometry.attributes.facadeGrid.array);
+  const colors=new Set(),lateLevels=new Set();
+  for(let i=0;i<grid.count;i++){
+    assert.equal(grid.getZ(i),-3);
+    if(grid.getX(i)>.095){lateLevels.add(grid.getY(i).toFixed(3));colors.add(grid.getW(i).toFixed(2));}
+  }
+  assert.equal(colors.size,2);assert.equal(lateLevels.size,3);
+  const shader={vertexShader:T.ShaderLib.standard.vertexShader,fragmentShader:T.ShaderLib.standard.fragmentShader,uniforms:{}};
+  mat.onBeforeCompile(shader,{});
+  const branch=shader.fragmentShader.split('if(buildingGrid.z== -3.){')[1].split('}else if(buildingGrid.z< -1.5)')[0];
+  assert.ok(!branch.includes('diffuseColor')&&branch.includes('roomEmission=')&&branch.includes('smoothstep(.02,.58,roomNight)'));
+  assert.ok(branch.includes('smoothstep(.045,.44,roomQuiet)')&&branch.includes('mix(1.,buildingGrid.y,late)*clamp(roomShare/.37,0.,1.)'));
+  assert.equal(shader.uniforms.roomQuiet,clock.quiet);assert.equal(shader.uniforms.roomNight,clock.night);
+  const scale=(h,m,night,share,retained)=>{
+    clock.setFacadeClock(h,m,night,share);
+    return T.MathUtils.lerp(1,retained,T.MathUtils.smoothstep(clock.quiet.value,.045,.44))*
+      T.MathUtils.clamp(clock.litShare.value/.37,0,1)*T.MathUtils.smoothstep(clock.night.value,.02,.58);
+  };
+  assert.equal(scale(12,0,0,0,.55),0);
+  assert.equal(scale(18,30,.75,.40,.55),1);
+  assert.ok(scale(22,30,1,.30,.55)<.56&&scale(22,30,1,.30,.035)<.23);
+  assert.ok(scale(0,15,1,.30,.035)<.04);
+  mat.dispose();g.dispose();
+});

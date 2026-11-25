@@ -44,7 +44,37 @@ function diagonal(f:FacadePanels,w:Wall,x:number,y:number,toX:number,toY:number,
   const dx=toX-x,dy=toY-y,half=.095/Math.hypot(dx,dy),nx=-dy*half,ny=dx*half;
   f.quad(w(x-nx,y-ny,d),w(toX-nx,toY-ny,d),w(toX+nx,toY+ny,d),w(x+nx,y+ny,d),steel);
 }
-function offices(f:FacadePanels,w:Wall,width:number,bays:number,step:number,curtain:(i:number)=>boolean,panes:Pane[]){
+// Clarion Partners, portfolio presentation p.17 (pre-2021 dusk photograph).
+// Joined office suites read through the Fremont curtain wall. Its lighter
+// ceiling reflections end at the real sash and pass behind the steel braces.
+// No tenant or shop window lighting can be identified in the arcade.
+class OfficeGlass extends FacadePanels {
+  grid:number[]=[];
+  surface(points:FacadePoint[],color:string,levels:number[],late:number,cool:number){
+    this.quad(points[0],points[1],points[2],points[3],color);
+    for(const value of levels)this.grid.push(value,late,-3,cool);
+  }
+}
+// Model the photo's groups at structural-bay resolution; these are not
+// tenant schedules. The uppermost Fremont course has the long dark run.
+const fremontRooms=[
+  [0,1,2,4,5,6],[0,1,2,3,5,6],[0,1,3,4,5,6],
+  [1,2,3,5],[0,1,2,5,6],[0,6],
+];
+const howardRooms=[[3,5,6],[2,3,4,5,6],[1,2,4,5,6],[1,3,4,6],[2,3,5],[4]];
+function officeWindow(rooms:OfficeGlass,w:Wall,l:number,r:number,sill:number,head:number,depth:number,
+  color:string,bay:number,floor:number,glazed:boolean){
+  const tint=((Math.floor(bay/2)+floor)%3===0)?.15:.84;
+  const late=(bay<=1&&(floor===0||floor===2))?.55:(bay+floor)%4===0?.29:.035;
+  const strength=glazed?.52:.41;
+  const bands=[[0,.19],[.60,.26],[.79,1],[1,.62]];
+  for(let i=1;i<bands.length;i++){
+    const [a,low]=bands[i-1],[b,high]=bands[i],y=sill+(head-sill)*a,h=sill+(head-sill)*b;
+    rooms.surface([w(l,y,depth),w(r,y,depth),w(r,h,depth),w(l,h,depth)],color,
+      [low*strength,low*strength,high*strength,high*strength],late,tint);
+  }
+}
+function offices(f:FacadePanels,w:Wall,width:number,bays:number,step:number,curtain:(i:number)=>boolean,panes:Pane[],rooms:OfficeGlass,groups:number[][]){
   for(let i=0;i<bays;i++){
     const a=i*step,b=i===bays-1?width:(i+1)*step,glazed=curtain(i),inset=glazed?-.12:-.22;
     const left=a+(glazed?.05:.46),right=b-(glazed?.05:.46);
@@ -58,9 +88,14 @@ function offices(f:FacadePanels,w:Wall,width:number,bays:number,step:number,curt
       const count=glazed?3:2,cell=(right-left)/count;
       for(let k=0;k<count;k++){
         const l=left+k*cell,r=l+cell-.075;
-        panel(f,w,l,r,sill,head,glazed?glass:dark,inset);
+        // Existing intermittent instanced rooms retain their occupancy and
+        // daylight tint. Never place a second emitter on the same window.
+        const registered=(i*3+j*5)%11===1;
+        if(!registered&&groups[j].includes(i))
+          officeWindow(rooms,w,l,r,sill,head,inset,glazed?glass:dark,i,j,glazed);
+        else panel(f,w,l,r,sill,head,glazed?glass:dark,inset);
         panel(f,w,r,l+cell,sill,head,metal,inset+.04);
-        if((i*3+j*5)%11===1)pane(w,l,r,sill,head,inset,panes);
+        if(registered)pane(w,l,r,sill,head,inset,panes);
       }
       if(glazed){
         const mid=sill+(head-sill)*.70;
@@ -71,7 +106,7 @@ function offices(f:FacadePanels,w:Wall,width:number,bays:number,step:number,curt
     }
   }
 }
-function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boolean,windows:Pane[]){
+function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boolean,windows:Pane[],rooms:OfficeGlass){
   const step=isFremont?pitch:width/bays;
   for(let i=0;i<bays;i++){
     const a=i*step,b=i===bays-1?width:(i+1)*step;
@@ -93,10 +128,15 @@ function frontage(f:FacadePanels,w:Wall,width:number,bays:number,isFremont:boole
     }
     // The soffit faces down. Its own private floor meets the municipal
     // sidewalk on the surveyed outer column plane.
-    f.quad(w(a,4.12,-recess),w(r,4.12,-recess),w(r,4.12),w(a,4.12),'#abaea3');
+    const soffit=[w(a,4.12,-recess),w(r,4.12,-recess),w(r,4.12),w(a,4.12)];
+    const corner=inArcade&&i<3;
+    if(corner)rooms.surface(soffit,'#abaea3',[0,0,.018,.018],.34,.68);
+    else f.quad(soffit[0],soffit[1],soffit[2],soffit[3],'#abaea3');
     if(isFremont||!cornerReturn)
       f.quad(w(a,0),w(r,0),w(r,0,-recess),w(a,0,-recess),'#bcb9a9');
-    panel(f,w,a,b,4.12,4.70,edge);
+    if(corner)rooms.surface([w(a,4.12),w(b,4.12),w(b,4.70),w(a,4.70)],edge,
+      [.017,.017,.044,.044],.34,.68);
+    else panel(f,w,a,b,4.12,4.70,edge);
   }
 }
 const lower:Plan[]=[[0,0],[68.5,0],[68.5,82.6],[41.4,82.6],[41.4,54.8],[38.8,54.8],[38.8,49.8],[35.2,49.8],[35.2,46.2],[31.3,46.2],[31.3,41.1],[0,41.1]];
@@ -105,9 +145,9 @@ const lower:Plan[]=[[0,0],[68.5,0],[68.5,82.6],[41.4,82.6],[41.4,54.8],[38.8,54.
 const top:Plan[]=[[2.9,2.7],[66.2,2.7],[66.2,66.8],[60.5,66.8],[46.2,52.9],[43.7,44.1],[34.1,40.0],[16.4,40.0],[6.0,16.4],[2.9,7.8]];
 export function add215Fremont(building:{id:number},root:THREE.Group,windows:Pane[]){
   if(building.id!==192883909)return false;
-  const f=new FacadePanels(),fremont=wall(0,0,1,0),howard=wall(0,41.1,0,-1);
+  const rooms=new OfficeGlass(),f=new FacadePanels(),fremont=wall(0,0,1,0),howard=wall(0,41.1,0,-1);
   sides(f,lower,0,29.18,'#aead9f',true);lid(f,lower,29.18,roof);
-  frontage(f,fremont,68.5,11,true,windows);frontage(f,howard,41.1,7,false,windows);
+  frontage(f,fremont,68.5,11,true,windows,rooms);frontage(f,howard,41.1,7,false,windows,rooms);
   // Eleven structural bays span the Fremont wall; the first seven are the
   // open retail arcade. Use the actual arcade pitch on both levels.
   for(let i=0;i<=7;i++){
@@ -116,11 +156,14 @@ export function add215Fremont(building:{id:number},root:THREE.Group,windows:Pane
   }
   // Closed side of the arcade where the southern flush frontage begins.
   panel(f,wall(arcade,2.7,0,-1),0,2.7,0,4.12,stone);
-  offices(f,fremont,68.5,11,pitch,i=>i<7,windows);
-  offices(f,howard,41.1,7,41.1/7,i=>i===6,windows);
+  offices(f,fremont,68.5,11,pitch,i=>i<7,windows,rooms,fremontRooms);
+  offices(f,howard,41.1,7,41.1/7,i=>i===6,windows,rooms,howardRooms);
   sides(f,top,29.18,33.78,'#879b9c');lid(f,top,33.78,roof);
   for(let s=pitch;s<65;s+=pitch)panel(f,wall(2.9,2.7,1,0),s-2.9,s-2.76,29.18,33.78,metal,.018);
   box(f,31.6,23.3,53.6,40.0,33.78,37.70,'#929690');
   const mesh=f.mesh(material);mesh.name='215 Fremont Street / recessed retail arcade';root.add(mesh);
+  const lit=rooms.mesh(material);lit.name='215 Fremont / occupied office glazing';
+  lit.geometry.setAttribute('facadeGrid',new THREE.Float32BufferAttribute(rooms.grid,4));
+  mesh.add(lit);
   return true;
 }

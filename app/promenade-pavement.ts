@@ -50,13 +50,35 @@ export function applyWalkPanelJoints(mat:THREE.MeshStandardMaterial){
   mat.onBeforeCompile=shader=>{
     shader.vertexShader='attribute vec2 walkPanel; varying vec2 panelCoord;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\npanelCoord=walkPanel;');
     shader.fragmentShader='varying vec2 panelCoord;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
-      vec2 pix=max(fwidth(panelCoord),vec2(.0001));
-      vec2 distanceToJoint=abs(fract(panelCoord+.5)-.5);
-      vec2 joint=(1.-smoothstep(vec2(.004),vec2(.008)+pix*.58,distanceToJoint))*clamp(.012/pix,0.,1.);
-      float nearView=1.-smoothstep(.12,.56,max(pix.x,pix.y));
-      vec2 cell=floor(panelCoord);
-      float aggregate=fract(sin(dot(cell,vec2(61.73,27.17)))*1359.72);
-      diffuseColor.rgb*=1.+nearView*((aggregate-.5)*.055-.44*max(joint.x,joint.y));`);
+      if(panelCoord.x<1024.){
+        vec2 pix=max(fwidth(panelCoord),vec2(.0001));
+        vec2 distanceToJoint=abs(fract(panelCoord+.5)-.5);
+        vec2 joint=(1.-smoothstep(vec2(.004),vec2(.008)+pix*.58,distanceToJoint))*clamp(.012/pix,0.,1.);
+        float nearView=1.-smoothstep(.12,.56,max(pix.x,pix.y));
+        vec2 cell=floor(panelCoord);
+        float aggregate=fract(sin(dot(cell,vec2(61.73,27.17)))*1359.72);
+        diffuseColor.rgb*=1.+nearView*((aggregate-.5)*.055-.44*max(joint.x,joint.y));
+      }else{
+        // Match the low-elevation pigment multiplier of the opaque street
+        // chunk from which these four faces were taken.
+        diffuseColor.rgb*=.90052;
+      }`).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+      if(panelCoord.x>1024.){
+        // RX-6 truncated cone: 0.91 in base, 0.46 in flat crown, 0.20 in
+        // rise. Derive the shading normal without raising the walk surface.
+        vec2 dx=dFdx(panelCoord),dy=dFdy(panelCoord);
+        float footprint=max(length(dx),length(dy));
+        float detail=1.-smoothstep(.11,.47,footprint);
+        vec2 cell=fract(panelCoord+.5)-.5;
+        float r=length(cell),crown=.23/1.66,base=.455/1.66;
+        float aa=clamp(footprint*.5,.006,.14);
+        float flank=smoothstep(crown-aa,crown+aa,r)*(1.-smoothstep(base-aa,base+aa,r));
+        vec2 slope=(-.0003048/(base-crown))*cell/max(r,.0001)*flank*detail;
+        vec3 px=dFdx(-vViewPosition),py=dFdy(-vViewPosition);
+        vec3 a=cross(py,normal),b=cross(normal,px);
+        float det=dot(px,a);
+        if(abs(det)>1.e-15)normal=normalize(normal-(a*dot(slope,dx)+b*dot(slope,dy))/det);
+      }`);
   };
-  mat.customProgramCacheKey=()=>'scored-promenade-concrete-v1';
+  mat.customProgramCacheKey=()=>'scored-promenade-concrete-v2';
 }

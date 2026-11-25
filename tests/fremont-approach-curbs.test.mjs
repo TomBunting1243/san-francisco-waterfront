@@ -56,3 +56,49 @@ test('each southern crossing entrance has a sloped warning strip with one operat
   }
   assert.deepEqual([...groups].sort(),['eastFremont','eastHoward','westFremont','westHoward']);
 });
+
+test('only the four ochre mouths carry continuous RX-6 rows at 1.66 inch pitch, with all original facets and lamp receivers',async()=>{
+  const {bakeRigidChunk}=await import('../app/city-blocks.ts');
+  const warnings=meshes.find(m=>m.name==='Fremont and Howard detectable warnings');
+  const g=warnings.geometry,uv=g.attributes.walkPanel,position=g.attributes.position;
+  assert.equal(position.count,38);
+  assert.equal(g.index.count,survey.faces.warning.length);
+  assert.ok(g.attributes.roadExposure.array.every(code=>code===1));
+  assert.ok(meshes.filter(m=>m!==warnings&&m.geometry.hasAttribute('walkPanel')).every(m=>{
+    const a=m.geometry.attributes.walkPanel;for(let i=0;i<a.count;i++)if(a.getX(i)>=1024)return false;return true;
+  }));
+  const basis=[[31.89,297.03,-.178244,.983986],[48.88,310.55,-.994267,.106926],
+    [208.23,297.47,.310957,.950424],[195.52,309.44,.951267,.308368]];
+  const inchPitch=1.66*.0254*7;
+  for(let i=0;i<g.index.count;i+=3){
+    for(let j=0;j<3;j++){
+      const k=i+j,l=i+(j+1)%3,a=g.index.getX(k),b=g.index.getX(l);
+      const p=survey.vertices[survey.faces.warning[k]],q=survey.vertices[survey.faces.warning[l]];
+      const measured=point(...p),actual=new T.Vector3().fromBufferAttribute(position,a);
+      assert.ok(measured.distanceTo(actual)<.000003);
+      const [, ,dx,dy]=basis[(p[0]>100?2:0)+(p[1]>303?1:0)];
+      assert.ok(uv.getX(a)>1024);
+      const du=q[0]-p[0],dv=q[1]-p[1];
+      assert.ok(Math.abs(uv.getX(b)-uv.getX(a)-(du*dx+dv*dy)/inchPitch)<.0004);
+      assert.ok(Math.abs(uv.getY(b)-uv.getY(a)-(dv*dx-du*dy)/inchPitch)<.00005);
+    }
+  }
+  const mat=new T.MeshStandardMaterial(),baked=bakeRigidChunk('four mouths',[warnings],mat).geometry;
+  assert.deepEqual(baked.attributes.walkPanel.array,uv.array);
+  assert.deepEqual(baked.attributes.roadExposure.array,g.attributes.roadExposure.array);
+  mat.dispose();baked.dispose();
+});
+
+test('the warning shader perturbs only resolved relief, preserves the far ochre field and leaves ordinary walks scored',async()=>{
+  const {applyWalkPanelJoints}=await import('../app/promenade-pavement.ts');
+  const m=new T.MeshStandardMaterial();applyWalkPanelJoints(m);
+  const s={vertexShader:T.ShaderLib.standard.vertexShader,fragmentShader:T.ShaderLib.standard.fragmentShader,uniforms:{}};
+  m.onBeforeCompile(s,{});
+  const code=s.fragmentShader;
+  const relief=code.split('if(panelCoord.x>1024.){')[1].split('#include <clearcoat_normal_fragment_begin>')[0];
+  assert.ok(code.includes('if(panelCoord.x<1024.){')&&code.includes('diffuseColor.rgb*=.90052;'));
+  assert.ok(relief.includes('smoothstep(.11,.47,footprint)')&&relief.includes('flank*detail'));
+  assert.ok(relief.includes('normal=normalize(')&&!s.vertexShader.includes('displacement='));
+  assert.ok(relief.includes('crown=.23/1.66,base=.455/1.66')&&relief.includes('-.0003048'));
+  m.dispose();
+});

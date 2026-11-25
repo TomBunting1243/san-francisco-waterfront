@@ -238,7 +238,10 @@ export function addSurveyBlocks(mesh:Surface){
     }
   }
   addRinconCurbEdge(tileAt(-28,-2));
-  addFremontApproachCurbs(tileAt(-30,-32));
+  const warnings=new Tile(),warningUV=addFremontApproachCurbs(tileAt(-30,-32),warnings);
+  const warningGeometry=warnings.geometry();
+  warningGeometry.setAttribute('walkPanel',new THREE.Float32BufferAttribute(warningUV,2));
+  mesh(warningGeometry,'#ffffff',0,0,0).name='Fremont and Howard detectable warnings';
   addHowardBealeWalk(tileAt(-27,-22));
   addHowardPublicCourtyard(mesh);
   addFolsomPortal(mesh);

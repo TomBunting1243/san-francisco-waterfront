@@ -140,7 +140,33 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
       }
     `+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       vec3 roomEmission=vec3(0.);
-      if(buildingGrid.z< -1.5){
+      if(buildingGrid.z== -3.){
+        // Photographed interiors behind actual modeled sashes. x is emitted
+        // radiance, y is the fraction retained after hours, w is the tint.
+        float late=smoothstep(.045,.44,roomQuiet);
+        float occupied=mix(1.,buildingGrid.y,late)*clamp(roomShare/.37,0.,1.);
+        vec3 tint=mix(vec3(.98,.83,.65),vec3(.74,.94,.91),buildingGrid.w);
+        roomEmission=tint*buildingGrid.x*occupied*smoothstep(.02,.58,roomNight);
+        if(buildingGrid.x>.06 && roomNight>.02){
+          // The glazing of 215 Fremont affords oblique views of lit ceilings.
+          // Intersect the sight ray with the nearest modeled office ceiling.
+          // The short strips are an interpretation of the twilight photograph.
+          vec3 fromEye=(vec4(-vViewPosition,0.)*viewMatrix).xyz;
+          vec3 atGlass=cameraPosition+fromEye;
+          vec3 ray=isOrthographic ? -(vec4(0.,0.,1.,0.)*viewMatrix).xyz : normalize(fromEye);
+          float floorIndex=floor((atGlass.y-.045-.06*4.70)/(.06*4.08));
+          float ceiling=.045+.06*(4.70+(floorIndex+1.)*4.08-.18);
+          float reach=(ceiling-atGlass.y)/max(.055,ray.y);
+          vec2 room=(atGlass.xz+ray.xz*reach-vec2(-29.375853,-31.223999))/.06;
+          vec2 uv=vec2(dot(room,vec2(-.9885,.1513))/3.2,dot(room,vec2(.1513,.9885))/2.7);
+          vec2 footprint=max(fwidth(uv),vec2(.001));
+          vec2 gap=abs(fract(uv+.5)-.5);
+          vec2 strip=1.-smoothstep(vec2(.175,.026)-.5*footprint,vec2(.175,.026)+.5*footprint,gap);
+          float resolved=1.-smoothstep(.08,.35,max(footprint.x,footprint.y));
+          float inside=step(0.,reach)*(1.-smoothstep(.24,.42,reach))*smoothstep(.055,.13,ray.y);
+          roomEmission+=tint*.43*strip.x*strip.y*resolved*inside*occupied*smoothstep(.02,.58,roomNight);
+        }
+      }else if(buildingGrid.z< -1.5){
         // Half-lap brick. Filter in unwrapped course coordinates so the
         // stagger itself cannot inflate derivatives at a horizontal joint.
         vec2 uv=buildingGrid.xy,aa=max(fwidth(uv),vec2(.0001));
@@ -209,5 +235,5 @@ export function applyDowntownGlazing(material:THREE.MeshStandardMaterial,clock:F
       }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=roomEmission;');
   };
   bindFacadeClock(material,clock);
-  material.customProgramCacheKey=()=> 'measured-downtown-facades-v5';
+  material.customProgramCacheKey=()=> 'measured-downtown-facades-v6';
 }
