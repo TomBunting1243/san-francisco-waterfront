@@ -376,6 +376,13 @@ The 24 November Fremont and Howard study adds four KartaView frames and two full
 | [Pier 22½ historic shore firehouse](https://commons.wikimedia.org/wiki/File:Pier_22.5,_January_2020.JPG) | Wikimedia Commons 85617550 | Pi.1415926535 | 2020-01-04 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | [N Judah train at Folsom station](https://commons.wikimedia.org/wiki/File:SF_Muni_N_Judah_train_at_The_Embarcadero_and_Folsom_station_January_2026_2.jpg) | Wikimedia Commons 185376097 | 4300streetcar | 2026-01-29 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0) |
 | [Pier 14 deck lighting at night](https://commons.wikimedia.org/wiki/File:San_Francisco_as_seen_from_Pier_14_(Unsplash).jpg) | Wikimedia Commons 61712340 | Jan Senderek | 2017-01-19 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/deed.en) |
+| [180 Howard from Main Street](https://commons.wikimedia.org/wiki/File:180howardstreet.jpg) | Wikimedia Commons 56860728 | Coolcaesar | 2017-03-01 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 12602/1300](https://kartaview.org/details/12602/1300/track-info) | KartaView 6676772 | JackPav | 2016-08-17 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 12017/2493](https://kartaview.org/details/12017/2493/track-info) | KartaView 6148114 | JackPav | 2016-08-01 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 10052/1849](https://kartaview.org/details/10052/1849/track-info) | KartaView 4563424 | JackPav | 2016-07-20 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 7493/1240](https://kartaview.org/details/7493/1240/track-info) | KartaView 2923576 | JackPav | 2016-06-14 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 7492/7319](https://kartaview.org/details/7492/7319/track-info) | KartaView 2462768 | JackPav | 2016-06-15 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard and Beale, 7236/573](https://kartaview.org/details/7236/573/track-info) | KartaView 2035587 | JackPav | 2016-06-06 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 
 ## Street-level comparisons, November 2026
 

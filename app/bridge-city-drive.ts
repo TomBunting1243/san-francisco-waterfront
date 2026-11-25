@@ -19,8 +19,10 @@ const roads=[[landing.x,landing.z],
   [-33.95,-31.11],fremontPlate(139,755),fremontPlate(155,615),fremontPlate(158,520),
   fremontPlate(158,378),fremontPlate(159,304),fremontPlate(160,285),
   fremontPlate(163,274),fremontPlate(171,264),fremontPlate(183,260),fremontPlate(206,259),
-  fremontPlate(390,259),fremontPlate(710,259),fremontPlate(970,259),
-  [-26.93,-19.12],[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
+  fremontPlate(390,259),fremontPlate(710,259),fremontPlate(780,259),
+  // Remain on the through side of the measured Beale and Main turn pockets.
+  fremontPlate(973,270.5),fremontPlate(1110,271.5),fremontPlate(1360,271.5),
+  fremontPlate(1530,271.5),fremontPlate(1570,269),fremontPlate(1738,246.5),fremontPlate(1820,244),[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
   [-24.70,-2.95],[-24.21,-1.84],[-24.13,-1.43],[-24.02,-1.14],[-23.82,-1.02]];
 const waterfrontEndX=82.53; // Stop on the approach to Chestnut, with continuous road ahead.
 function northLane(x:number){

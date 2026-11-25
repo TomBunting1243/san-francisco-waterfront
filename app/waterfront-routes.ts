@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import {frontMarketShopperCount,frontMarketShopperPose} from './market-shoppers.ts';
+import {howardBealeWalkerCount,howardBealeWalkerPose} from './howard-beale-walkers.ts';
 import {spearWalkerCount,spearWalkerPose} from './spear-walkers.ts';
 import {chestnutWalkerCount,chestnutWalkerPose} from './chestnut-crossing.ts';
 import {plazaCrossingCount,plazaCrossingPose} from './plaza-walkers.ts';
@@ -165,11 +166,13 @@ type Walk={line:THREE.CatmullRomCurve3;count:number}|{pose:(time:number,index:nu
 const crossing:Walk={pose:plazaCrossingPose,count:plazaCrossingCount};
 const shoppers:Walk={pose:frontMarketShopperPose,count:frontMarketShopperCount};
 const passage:Walk={pose:passageVisitor,count:2};
+const howardBeale:Walk={pose:howardBealeWalkerPose,count:howardBealeWalkerCount};
 const cityRoutes:Walk[]=[
   {line:rinconWalkers,count:12}, {line:ferry,count:10},
   {line:pierSeven,count:10}, {line:northShore,count:8}, {line:southShore,count:10},
   {line:rinconEntryWalk,count:8}, {line:rinconExitWalk,count:7}, {pose:northPierVisitor,count:pierVisitorPhases.length},
-  {pose:spearWalkerPose,count:spearWalkerCount}, {pose:chestnutWalkerPose,count:chestnutWalkerCount}, crossing, shoppers, passage,
+  {pose:spearWalkerPose,count:spearWalkerCount}, {pose:chestnutWalkerPose,count:chestnutWalkerCount},
+  howardBeale, crossing, shoppers, passage,
 ];
 const streetRoutes=[cityRoutes[0],cityRoutes[5],cityRoutes[6],{line:southShore,count:5}];
 const plazaRoutes=[cityRoutes[1],cityRoutes[2],cityRoutes[3],crossing,shoppers,passage];
@@ -177,15 +180,17 @@ type Region='street'|'plaza';
 const walks=(region?:Region)=>region==='street'?streetRoutes:region==='plaza'?plazaRoutes:cityRoutes;
 export const waterfrontWalkerCount=(region?:Region)=>walks(region).reduce((sum,r)=>sum+r.count,0);
 
-// Resolve the same four slots in the all-city and plaza casts.
-export function frontMarketShopperStart(region?:Region){
+function walkerStart(target:Walk,region?:Region){
   let start=0;
   for(const route of walks(region)){
-    if(route===shoppers)return start;
+    if(route===target)return start;
     start+=route.count;
   }
   return -1;
 }
+
+export const frontMarketShopperStart=(region?:Region)=>walkerStart(shoppers,region);
+export const howardBealeWalkerStart=(region?:Region)=>walkerStart(howardBeale,region);
 
 export function waterfrontWalker(time:number,index:number,region?:Region){
   for(const route of walks(region)){

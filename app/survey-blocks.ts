@@ -9,6 +9,7 @@ import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
 import {addFremontApproachCurbs,fremontPavingRemainder} from './fremont-approach-curbs.ts';
+import {addHowardBealeThroughPaint,addHowardBealeWalk,cutHowardBealeWalk} from './howard-beale-through.ts';
 import {addFremontMarkings} from './fremont-markings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,howardSidewalk,howardStreet,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
@@ -56,7 +57,7 @@ class Tile {
     const points=[outer,...holes].flat().map(({x,y}):Vertex=>[x,height+(grade?grade(x):0),-y]);
     const i=this.vertices(points,color);
     for(const [a,b,c] of faces){
-      const cut=height>=.025&&height<=.06?(stationPavingCut(points[a],points[b],points[c])??cutCurbPalmBed(points[a],points[b],points[c])):undefined;
+      const cut=height>=.025&&height<=.06?(stationPavingCut(points[a],points[b],points[c])??cutCurbPalmBed(points[a],points[b],points[c])??(this.roadClass===1&&height===.031?cutHowardBealeWalk(points[a],points[b],points[c]):undefined)):undefined;
       if(!cut){this.indices.push(i+a,i+b,i+c);continue;}
       for(const tri of cut){
         const first=this.vertices(tri,color);
@@ -236,6 +237,7 @@ export function addSurveyBlocks(mesh:Surface){
   }
   addRinconCurbEdge(tileAt(-28,-2));
   addFremontApproachCurbs(tileAt(-30,-32));
+  addHowardBealeWalk(tileAt(-27,-22));
   addFolsomPortal(mesh);
   for(const plan of [...bealeSidewalk,...howardSidewalk])at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   for(const plan of howardStreet)at(plan).top(plan,pavement.street[0],pavement.street[1]);
@@ -253,7 +255,7 @@ export function addSurveyBlocks(mesh:Surface){
     tile.top([inner],.061,leaf);
   }
   const walkTiles=new Map<number,Tile>();
-  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);addFremontMarkings(mesh);
+  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);addFremontMarkings(mesh);addHowardBealeThroughPaint(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
     for(const [i,polygon] of polygons.entries())for(const piece of fremontPavingRemainder(kind,i)??folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){

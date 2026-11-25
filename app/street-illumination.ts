@@ -7,6 +7,7 @@ import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrian
 import {addChestnutStandards,chestnutVehicleHeads} from './chestnut-signals.ts';
 import {addHowardJunctionStandards,howardVehicleHeads} from './howard-junction-signals.ts';
 import {addSpearStandards,spearVehicleHeads} from './spear-signals.ts';
+import {addBealeStandards,bealeVehicleHeads} from './howard-beale-signals.ts';
 import {addFremontStandards,fremontVehicleHeads} from './fremont-howard-signals.ts';
 import {fremontClockOffset,signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
@@ -48,7 +49,7 @@ export const waterfrontSignals:Signal[]=[
   // pixel ~145,649 in the registered crossing crop. Base seated on the final mapped paved surface.
   {x:-1.902,z:-6.098,y:.031,heading:Math.PI/2+.04,axis:0,
     mount:{offset:-5.1,rise:1.38,shared:false,arm:true}},
-  ...howardVehicleHeads.filter(h=>h.section!=='rightYield'),
+  ...howardVehicleHeads.filter(h=>h.section!=='rightYield'),...bealeVehicleHeads,
 ];
 // The two permissive arrows have no steady-color spill in the shared RGB
 // field. Their flashing amber faces join the same draw as the steady lamps.
@@ -100,13 +101,20 @@ export function createSignalHousings(){
   addChestnutStandards(a);
   addSpearStandards(a);
   addFremontStandards(a);
+  const luminaireCenters=addBealeStandards(a);
   addMarketPedestrianHousings(a);
-  return a.bake('SFMTA signal standards at Howard, Mission, Market, Washington, Chestnut and Spear');
+  const standards=a.bake('SFMTA signal standards at Howard, Mission, Market, Washington, Chestnut and Spear');
+  standards.userData.luminaireCenters=luminaireCenters;
+  return standards;
 }
 
 export function collectStreetGlobes(root:THREE.Object3D,promenade:number[]){
   const all=promenade.slice(),position=new THREE.Vector3();
   root.traverse(node=>{
+    const centers:THREE.Vector3[]|undefined=node.userData.luminaireCenters;
+    if(centers)for(const center of centers){
+      node.localToWorld(position.copy(center));all.push(position.x,position.y,position.z);
+    }
     if(node.name==='Path of Gold globe'||node.name==='Ferry forecourt globe'){node.getWorldPosition(position);all.push(position.x,position.y,position.z);}
   });
   return all;

@@ -104,6 +104,7 @@ import {addBridgeview} from './bridgeview.ts';
 import {add221Main} from './221-main.ts';
 import {add360Spear} from './360-spear.ts';
 import {add160Spear} from './160-spear.ts';
+import {add180Howard} from './180-howard.ts';
 import {add211Main} from './211-main.ts';
 import {add300Mission} from './300-mission.ts';
 import {add100Pine} from './100-pine.ts';
@@ -295,6 +296,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(add101Mission(b,root,windowPositions)||addBridgeview(b,root,windowPositions,font))return;
     if(add221Main(b,root,windowPositions,font)||addAppraisersBuilding(b,root,windowPositions,font))return;
     if(add360Spear(b,root,windowPositions)||add160Spear(b,root,windowPositions,font))return;
+    if(add180Howard(b,root,windowPositions))return;
     if(add211Main(b,root,windowPositions)||add300Mission(b,root,windowPositions))return;
     if(addParkTower(b,root,windowPositions)||addHarrison(b,root,windowPositions)||add100Pine(b,root,windowPositions))return;
     if(addEmbarcaderoCenterWest(b,root,windowPositions))return;
@@ -578,7 +580,8 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const lanterns=buildPromenadeLighting(root);
   root.userData.ferryWalkPools=collectFerryWalkPools(root);
   root.userData.shelterPools=addSteuartShelterLights(root);
-  const streetGlobes=collectStreetGlobes(root,lanterns);root.add(createSignalHousings());
+  root.add(createSignalHousings());
+  const streetGlobes=collectStreetGlobes(root,lanterns);
   const streetcar=createStreetcar(),tram=streetcar.group;root.add(tram);
   // Rails and contact wire share the exact same centerline as the vehicle.
   buildStreetcarTrack(box,pole);

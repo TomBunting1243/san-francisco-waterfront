@@ -104,6 +104,7 @@ const units={
  'curb-survey':'lines:curb lines ramps:curb ramps', 'downtown-roofs':'roofs:roof measurements profiles:height profiles setbacks:setback records',
  'east-bay-shore':'coastalCells:coastal cells tidalVertices:tidal vertices','embarcadero-tracks':'ways:mapped ways',
  'folsom-portal':'sections:portal sections','frost-trees':'$:tree IDs','harbor-tide-hours':'cm:hourly water levels',
+ 'howard-beale-through':'$:paint colors',
  'howard-trees':'trees:tree records taxa:species curbs:curb runs',
  'howard-express':'$:inbound route vertices',
  'harbor-timetable':'days:service days stops:stop records', 'market-lights':'poles:lighting standards',
@@ -150,7 +151,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'TJPA-SECTION':'www.tjpa.org','MTC-511':'511.org','COLLIERS-FREMONT':'listingsprod.blob.core.windows.net','FOUNDRY-SQUARE':'upload.wikimedia.org','USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
-  'TOWN-HALL-PHOTO':'storage.ghost.io','HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],
+  'SF-CHRONICLE':'s.hdnux.com','TOWN-HALL-PHOTO':'storage.ghost.io','HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],
   'WEST-SPAN-PHOTO':['thumb.wikimedia.org','tile.loc.gov'],'SOUTH-BASIN-PHOTO':['www.sfcta.org','images.squarespace-cdn.com'],
   'HUNTSMAN-WAKELY':'static.wixstatic.com','PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
   'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};

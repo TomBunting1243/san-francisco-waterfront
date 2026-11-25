@@ -23,8 +23,9 @@ import type {CinematicOpening} from './cinematic-player';
 import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openingYaw, orbitOffset, dampCameraAxis, moveWaterfrontFocus } from './camera';
 import { harborStars, starVisibility } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
+import {howardBealeAttendance,howardBealeWalkerCount} from './howard-beale-walkers';
 import {marketShopperAttendance} from './market-shoppers';
-import {bicycleScale,bicycleWheelBottom,frontMarketShopperStart,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
+import {bicycleScale,bicycleWheelBottom,frontMarketShopperStart,howardBealeWalkerStart,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
 import {readMotionPreference,writeMotionPreference,motionEvent,clampZoom,compactDevice,createQualityMonitor,drawingPixelRatio} from './city-runtime';
 
 const seatMaxZoom=4;
@@ -295,6 +296,9 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       (scene.background as InstanceType<typeof THREE.Color>).copy(skyColor);world.waterMaterial.color.copy(waterColor);
       const stars=harborStars(THREE);scene.add(stars);
       const figureRegion=streetView?variant:undefined;
+      const howardStart=howardBealeWalkerStart(figureRegion);
+      const howardEnd=howardStart<0?-1:howardStart+howardBealeWalkerCount;
+      let previousHowardAttendance=-1;
       const rearSlots=world.residentPositions.flatMap((p,i)=>p.rearShopper?[world.walkerCount+i]:[]);
       const marketAttendance=marketShopperAttendance(frontMarketShopperStart(figureRegion),rearSlots);
       let conversation: {person:number;until:number}|null=null, speechCount=0;
@@ -808,14 +812,17 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         setFerryClockTime(world.clockHands,lighting.hours,lighting.minutes);
         const marketRevision=variant==='street'?0:world.ferryMarket.update(customEpoch??Date.now(),still||reducedMotion.current);
         const attendanceChanged=marketAttendance.update(world.ferryMarket.activity);
+        const howardAttendance=howardBealeAttendance(lighting.hours);
+        const howardChanged=howardAttendance!==previousHowardAttendance;
+        previousHowardAttendance=howardAttendance;
         const motionChanged=elapsed!==lastMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         const pyxisPose=world.ferries.length&&(motionChanged||viewerChanged)?ferryPose(elapsed,0,ferryClock):null;
-        if(motionChanged||viewerChanged||attendanceChanged){
+        if(motionChanged||viewerChanged||attendanceChanged||howardChanged){
           figureViewX=camera.position.x;figureViewZ=camera.position.z;
           world.people.setViewer(figureViewX,figureViewZ);
           for(let i=0;i<world.walkerCount;i++){
-            if(marketAttendance.absent.has(i)){
+            if(marketAttendance.absent.has(i)||(i<howardEnd&&i>=howardStart+howardAttendance)){
               world.people.hide(i);continue;
             }
             const poseAt=(offset:number)=>waterfrontWalker(roadSeconds+offset,i,figureRegion);

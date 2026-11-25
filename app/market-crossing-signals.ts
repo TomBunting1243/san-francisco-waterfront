@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {howardPedestrianHeads} from './howard-junction-signals.ts';
+import {bealePedestrianHeads} from './howard-beale-signals.ts';
 import {fremontPedestrianHeads} from './fremont-howard-signals.ts';
 import {chestnutPedestrianHeads} from './chestnut-signals.ts';
 import type {StreetAssembly} from './street-amenities.ts';
@@ -23,7 +24,7 @@ export const marketPedestrianHeads=[
   {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+.147},
 ] as const;
 type Head={x:number;y:number;z:number;angle:number;side?:number;clockOffset?:number};
-const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads,...fremontPedestrianHeads];
+const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads,...bealePedestrianHeads,...fremontPedestrianHeads];
 const lensY=.156,lensZ=.0071;
 function point(h:Head,u:number,y:number,v:number){
   const s=Math.sin(h.angle),c=Math.cos(h.angle);
