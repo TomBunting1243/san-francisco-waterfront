@@ -10,6 +10,7 @@ import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.t
 import {addTransbayCrossings} from './transbay-crossings.ts';
 import {addFremontApproachCurbs,fremontPavingRemainder} from './fremont-approach-curbs.ts';
 import {addHowardBealeThroughPaint,addHowardBealeWalk,cutHowardBealeWalk} from './howard-beale-through.ts';
+import {addHowardPublicCourtyard} from './howard-public-courtyard.ts';
 import {addFremontMarkings} from './fremont-markings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,howardSidewalk,howardStreet,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
@@ -238,6 +239,7 @@ export function addSurveyBlocks(mesh:Surface){
   addRinconCurbEdge(tileAt(-28,-2));
   addFremontApproachCurbs(tileAt(-30,-32));
   addHowardBealeWalk(tileAt(-27,-22));
+  addHowardPublicCourtyard(mesh);
   addFolsomPortal(mesh);
   for(const plan of [...bealeSidewalk,...howardSidewalk])at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   for(const plan of howardStreet)at(plan).top(plan,pavement.street[0],pavement.street[1]);

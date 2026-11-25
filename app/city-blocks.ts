@@ -180,6 +180,8 @@ export function bakeRigidChunk(name:string,parts:PaintedMesh[],material:THREE.Me
     }
     if(!paint){
       for(let j=base;j<end;j+=3){colors[j]=red;colors[j+1]=green;colors[j+2]=blue;}
+    }else if(r===1&&g===1&&b===1&&paint instanceof THREE.BufferAttribute&&paint.itemSize===3&&paint.normalized&&paint.array instanceof Uint8Array&&paint.count===pos.count){
+      colors.set(paint.array,base);
     }else if(paint instanceof THREE.BufferAttribute&&paint.itemSize===3&&!paint.normalized&&paint.array instanceof Float32Array){
       const channels=paint.array;
       for(let j=base,k=0;j<end;j+=3,k+=3){

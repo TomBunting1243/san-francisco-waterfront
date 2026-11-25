@@ -214,3 +214,26 @@ test('batch retirement preserves sibling arrays, nested attachments and native o
     if(observed)assert.deepEqual(events,[[outer,[left,right,last]],['disposed',[socket]],[last,[left,right]]]);
   }
 });
+
+test('a re-baked RGB byte slice preserves every channel at its chunk offset, while tint and RGBA retain component conversion',()=>{
+  const material=new THREE.MeshStandardMaterial({vertexColors:true});
+  const tint=new THREE.MeshStandardMaterial({color:0x829aa9,vertexColors:true});
+  const stripe=new THREE.PlaneGeometry(1,1,31,1),count=stripe.attributes.position.count;
+  const store=Uint8Array.from({length:count*3+16},(_,i)=>(i*73+17)%256);
+  const rgb=store.subarray(8,8+count*3);
+  stripe.setAttribute('color',new THREE.BufferAttribute(rgb,3,true));
+  const second=stripe.clone();
+  const rgba=Uint8Array.from({length:count*4},(_,i)=>(i*31+127)%256);
+  second.setAttribute('color',new THREE.BufferAttribute(rgba,4,true));
+  const meshes=[[second,material],[stripe,material],[stripe,tint]].map(([geometry,m],i)=>{
+    const p=new THREE.Mesh(geometry,m);p.rotation.set(.31,i*.41,-.24);p.scale.set(-.8,2.5,1.7);p.updateMatrixWorld();return p;
+  });
+  const actual=bakeRigidChunk('Nested paint',meshes,material).geometry.attributes.color.array;
+  const expected=Uint8Array.from(meshes.flatMap(p=>{
+    const c=p.geometry.attributes.color,base=p.material.color.toArray();
+    return Array.from({length:count*3},(_,i)=>Math.round(255*base[i%3]*c.getComponent(Math.floor(i/3),i%3)));
+  }));
+  assert.deepEqual(actual,expected);
+  const before=actual.slice();rgb.fill(0);
+  assert.deepEqual(actual,before);
+});
