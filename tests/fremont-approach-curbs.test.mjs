@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as T from 'three';
 import {addSurveyBlocks} from '../app/survey-blocks.ts';
+import natoma from '../public/data/natoma-landings.json' with {type:'json'};
 import survey from '../public/data/fremont-approach-curbs.json' with {type:'json'};
 import {driverPose} from '../app/driver-rides.ts';
 
@@ -57,12 +58,12 @@ test('each southern crossing entrance has a sloped warning strip with one operat
   assert.deepEqual([...groups].sort(),['eastFremont','eastHoward','westFremont','westHoward']);
 });
 
-test('only the four ochre mouths carry continuous RX-6 rows at 1.66 inch pitch, with all original facets and lamp receivers',async()=>{
+test('the four Howard mouths retain continuous RX-6 rows at 1.66 inch pitch, with all original facets and lamp receivers',async()=>{
   const {bakeRigidChunk}=await import('../app/city-blocks.ts');
   const warnings=meshes.find(m=>m.name==='Fremont and Howard detectable warnings');
   const g=warnings.geometry,uv=g.attributes.walkPanel,position=g.attributes.position;
-  assert.equal(position.count,38);
-  assert.equal(g.index.count,survey.faces.warning.length);
+  assert.equal(position.count,38+new Set(natoma.faces.warning).size);
+  assert.equal(g.index.count,survey.faces.warning.length+natoma.faces.warning.length);
   assert.ok(g.attributes.roadExposure.array.every(code=>code===1));
   assert.ok(meshes.filter(m=>m!==warnings&&m.geometry.hasAttribute('walkPanel')).every(m=>{
     const a=m.geometry.attributes.walkPanel;for(let i=0;i<a.count;i++)if(a.getX(i)>=1024)return false;return true;
@@ -70,7 +71,7 @@ test('only the four ochre mouths carry continuous RX-6 rows at 1.66 inch pitch, 
   const basis=[[31.89,297.03,-.178244,.983986],[48.88,310.55,-.994267,.106926],
     [208.23,297.47,.310957,.950424],[195.52,309.44,.951267,.308368]];
   const inchPitch=1.66*.0254*7;
-  for(let i=0;i<g.index.count;i+=3){
+  for(let i=0;i<survey.faces.warning.length;i+=3){
     for(let j=0;j<3;j++){
       const k=i+j,l=i+(j+1)%3,a=g.index.getX(k),b=g.index.getX(l);
       const p=survey.vertices[survey.faces.warning[k]],q=survey.vertices[survey.faces.warning[l]];

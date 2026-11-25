@@ -50,3 +50,37 @@ test('finished paint uses the existing offset road batch and has pavement direct
   }
   assert.ok(total>200&&total<750);
 });
+
+test('eight skewed Natoma bars and the separate incoming stop line are visible from the reported Fremont windshield',async()=>{
+  const {createLandscape}=await import('../app/landscape.ts');
+  const {root}=createLandscape();root.updateMatrixWorld(true);
+  const eye=new THREE.Vector3(-30.61555576,.1018,-31.42537578); // ride t=251
+  const ex=.15135,ez=Math.sqrt(1-ex*ex);
+  const station=(s,d)=>new THREE.Vector3(-22.938495+.06*(s*ex-d*ez),.03124,-32.902787+.06*(s*ez+d*ex));
+  const bars=[[-7.5,39],[-6,38.7],[-4.5,38.3],[-2.7,37.6],[-.8,37.2],[.8,36.7],[2.3,36.2],[3.7,35.8]];
+  const area=new THREE.Box3().setFromPoints([eye,station(-9,27),station(6,27),station(-9,44),station(6,44)]).expandByScalar(.02);
+  const meshes=[];
+  root.traverse(m=>{if(m.isMesh&&new THREE.Box3().setFromObject(m).intersectsBox(area))meshes.push(m);});
+  const paint=root.getObjectByName('SoMa approaches paint');
+  assert.ok(paint?.material.polygonOffset&&paint.material.polygonOffsetUnits<0);
+  function hasPaint(s,d){
+    const p=station(s,d);p.y=.08;
+    return new THREE.Raycaster(p,down,0,.06).intersectObject(paint,false).length>0;
+  }
+  for(const [i,[s,end]] of bars.entries()){
+    assert.ok(hasPaint(s,end-.3)&&!hasPaint(s,end+.35),'actual staggered near end '+i);
+    if(i)assert.ok(!hasPaint((s+bars[i-1][0])/2,33.7),'clear asphalt between stripes');
+  }
+  for(const [s,d] of [...bars.map(([s,end])=>[s,end-3]),[-1,42.26]]){
+    const spot=station(s,d),dir=spot.clone().sub(eye),distance=dir.length();
+    const sight=new THREE.Raycaster(eye,dir.normalize(),.06,distance+.002);
+    const hits=sight.intersectObjects(meshes,false);
+    assert.equal(hits[0]?.object,paint,'unobstructed at '+[s,d]);
+    assert.ok(Math.abs(hits[0].distance-distance)<.0001);
+    const vertical=new THREE.Raycaster(new THREE.Vector3(spot.x,.08,spot.z),down,0,.06);
+    const surfaces=vertical.intersectObjects(meshes,false);
+    assert.equal(surfaces.filter(h=>Math.abs(h.point.y-.03124)<.00002).length,1,'one painted layer');
+    assert.ok(surfaces.some(h=>Math.abs(h.point.y-.031)<.00002),'asphalt under paint');
+  }
+  assert.ok(!hasPaint(-1,40.5)&&!hasPaint(-1,43),'separate stop line');
+});

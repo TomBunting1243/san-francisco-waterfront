@@ -3,6 +3,10 @@
 Input units are pixels at 7 px/m with image right at 45 degrees from north.
 (245,245) = 37.78932357434, -122.39498414125. Intersection paint has been
 registered independently from the Beale crossing at the far end of the block.
+Natoma's eight stripes and incoming stop line use the same plate coordinates.
+The 2024 municipal tile 20/167784/405242 resolves their staggered ends; a
+tree shadow obscures the northern tip of the fourth stripe. Its tip follows
+the adjacent ends. The stop line ends at the limits of its visible paint.
 """
 import json
 from pathlib import Path

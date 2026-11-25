@@ -15,10 +15,10 @@ Follow the research behind the city, from the Ferry Building’s clock and arcad
 
 | Measure | Recorded amount |
 |---|---:|
-| Cited publication, image, data and source URLs | 873 |
-| Survey asset URLs | 2,445 (56 also directly cited) |
-| Distinct URLs across both registers | 3,262 |
-| Shipped geographic JSON files | 43 files · 9,329,040 bytes |
+| Cited publication, image, data and source URLs | 875 |
+| Survey asset URLs | 2,445 (57 also directly cited) |
+| Distinct URLs across both registers | 3,263 |
+| Shipped geographic JSON files | 44 files · 9,341,864 bytes |
 | Other shipped data JSON (portrait, wordmark, radar palette, tides and timetables) | 5 files · 54,918 bytes |
 | Measured input files in the [asset register](SURVEY-ASSETS.csv) | 2,445 files · 800,322,446 bytes |
 | LAS header records in the USGS point-cloud subset | 50,332,832 point records |
@@ -51,7 +51,7 @@ Shipped sizes use the exact JSON bytes in this repository before build compressi
 | [folsom-portal.json](../public/data/folsom-portal.json) | 12,219 | 3 portal sections |
 | [fremont-approach-curbs.json](../public/data/fremont-approach-curbs.json) | 19,814 | 469 surveyed and fitted sidewalk mesh vertices |
 | [fremont-corner-curbs.json](../public/data/fremont-corner-curbs.json) | 2,051 | 3 pavement classes with corrected curb stations |
-| [fremont-markings.json](../public/data/fremont-markings.json) | 21,091 | 3 paint colors |
+| [fremont-markings.json](../public/data/fremont-markings.json) | 22,440 | 3 paint colors |
 | [frost-trees.json](../public/data/frost-trees.json) | 1,082 | 7 tree IDs |
 | [harbor-tide-hours.json](../public/data/harbor-tide-hours.json) | 10,432 | 2,928 hourly water levels |
 | [harbor-timetable.json](../public/data/harbor-timetable.json) | 16,405 | 119 service days, 6 stop records |
@@ -61,6 +61,7 @@ Shipped sizes use the exact JSON bytes in this repository before build compressi
 | [market-lights.json](../public/data/market-lights.json) | 1,875 | 55 lighting standards |
 | [market-street.json](../public/data/market-street.json) | 17,253 | 8 platforms, 200 tree records, 29 crossings |
 | [mission-market-bikeway.json](../public/data/mission-market-bikeway.json) | 28,487 | 853 paint mesh vertices, 26 flexible post positions |
+| [natoma-landings.json](../public/data/natoma-landings.json) | 11,475 | 147 curb and paving vertices, 5 paving and curb surface classes |
 | [plaza-canopies.json](../public/data/plaza-canopies.json) | 325,674 | 36 crown geometries |
 | [plaza-survey.json](../public/data/plaza-survey.json) | 37,496 | 200 tree records, 36 bench records |
 | [promenade-crossings.json](../public/data/promenade-crossings.json) | 94,172 | 33 crossings |
@@ -88,12 +89,12 @@ Shipped sizes use the exact JSON bytes in this repository before build compressi
 
 Each URL has one entry. Page and sheet fragments share an entry and retain their individual deep links. Source types reflect the cited material; a gallery or project report may contain several kinds. File links identify where the source was recorded. For photo reuse, consult the original item’s rights statement.
 
-- [Photographs and imagery](#photographs-and-imagery) · 358
+- [Photographs and imagery](#photographs-and-imagery) · 359
 - [Maps and plans](#maps-and-plans) · 63
 - [Data and services](#data-and-services) · 67
 - [Reports and technical documents](#reports-and-technical-documents) · 116
 - [Licenses and credits](#licenses-and-credits) · 11
-- [Additional published sources](#additional-published-sources) · 258
+- [Additional published sources](#additional-published-sources) · 259
 
 ### Photographs and imagery
 
@@ -349,6 +350,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [Municipal orthophoto](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167777/405236) · tile.sf.gov — [425 Market](../references/RESEARCH-SOURCES.md#425-market) · [425 Market Street](../references/WATERFRONT-REFERENCE-AUDIT.md#425-market-street)
 - [Municipal aerial](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167783/405227) · tile.sf.gov — [Lower Market, California and Drumm](../references/WATERFRONT-REFERENCE-AUDIT.md#lower-market-california-and-drumm)
 - [2024 San Francisco municipal aerial](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167783/405245) · tile.sf.gov — [The First Street plazas at Foundry Square](../references/RESEARCH-SOURCES.md#the-first-street-plazas-at-foundry-square)
+- [Registered 2024 municipal tile](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167784/405242) · tile.sf.gov — [Fremont Street at Howard and Natoma](../references/RESEARCH-SOURCES.md#fremont-street-at-howard-and-natoma)
 - [SF 2024 orthophoto at the courts](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167785/405221) · tile.sf.gov — [Park Padel beside Vaillancourt Fountain](../references/WATERFRONT-REFERENCE-AUDIT.md#park-padel-beside-vaillancourt-fountain)
 - [2024 SF tile layer](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167785/405225) · tile.sf.gov — [Ferry Bike Racks](../references/RESEARCH-SOURCES.md#ferry-bike-racks)
 - [2024 tile service](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167786/405249) · tile.sf.gov — [500 Folsom](../references/RESEARCH-SOURCES.md#500-folsom)
@@ -978,6 +980,7 @@ Each URL has one entry. Page and sheet fragments share an entry and retain their
 - [market historic frontages · www.thespear.com](https://www.thespear.com/) · thespear.com — [market historic frontages](../app/market-historic-frontages.ts#L163)
 - [180 Spear operator](https://www.tinsf.com/locations) · tinsf.com — [Shopfront](../references/RESEARCH-SOURCES.md#shopfront) · [Spear, Main and Beale](../references/WATERFRONT-REFERENCE-AUDIT.md#spear-main-and-beale)
 - [Treasure Island Ferry](https://www.tisf.com/ferry) · tisf.com — [Ferry Routes](../references/RESEARCH-SOURCES.md#ferry-routes) · [Ferries at the downtown terminal](../references/WATERFRONT-REFERENCE-AUDIT.md#ferries-at-the-downtown-terminal)
+- [TJPA station levels](https://www.tjpa.org/salesforce-transit-center) · tjpa.org — [Fremont Street at Howard and Natoma](../references/RESEARCH-SOURCES.md#fremont-street-at-howard-and-natoma)
 - [One Market owner](https://www.tmgpartners.com/portfolio/landmark-one-market) · tmgpartners.com — [Previously detailed landmarks retained](../references/WATERFRONT-REFERENCE-AUDIT.md#previously-detailed-landmarks-retained)
 - [landscape architect](https://www.toocb.com/gap-urban-headquarters) · toocb.com — [Architecture added or corrected in this pass](../references/WATERFRONT-REFERENCE-AUDIT.md#architecture-added-or-corrected-in-this-pass)
 - [USGS elevation data](https://www.usgs.gov/3d-elevation-program) · usgs.gov — [455 Market](../references/RESEARCH-SOURCES.md#455-market) · [California Center](../references/RESEARCH-SOURCES.md#california-center) · [455 Market Street](../references/WATERFRONT-REFERENCE-AUDIT.md#455-market-street)

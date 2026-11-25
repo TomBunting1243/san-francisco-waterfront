@@ -118,6 +118,7 @@ const units={
  'sightline-streets':'street:road polygons sidewalk:sidewalk polygons curb:curb polygons bars:crossing stripes trees:tree records',
  'south-beach':'buildings:building features docks:dock features roads:road features','steuart-junction':'curves:track curves',
  'survey-blocks':'buildings:building features outsideRoads:road segments','survey-shore':'piles:pile positions decks:deck outlines',
+ 'natoma-landings':'vertices:curb and paving vertices faces:paving and curb surface classes',
  'fremont-approach-curbs':'vertices:surveyed and fitted sidewalk mesh vertices','fremont-markings':'batches:paint colors','fremont-corner-curbs':'stations:pavement classes with corrected curb stations',
  'surveyed-shopfronts':'$:storefront records','transbay-crossings':'sites:crossing sites','tree-wells':'$:tree-well records',
  'waterfront-landscape':'areas:landscape areas paths:path features trees:tree records','waterfront-tree-survey':'trees:tree records',

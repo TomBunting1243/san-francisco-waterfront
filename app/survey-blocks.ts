@@ -9,6 +9,7 @@ import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
+import {addNatomaLandings,natomaPavingRemainder} from './natoma-landings.ts';
 import {addFremontApproachCurbs,fremontPavingRemainder} from './fremont-approach-curbs.ts';
 import {addHowardBealeThroughPaint,addHowardBealeWalk,cutHowardBealeWalk} from './howard-beale-through.ts';
 import {addHowardPublicCourtyard} from './howard-public-courtyard.ts';
@@ -239,6 +240,7 @@ export function addSurveyBlocks(mesh:Surface){
   }
   addRinconCurbEdge(tileAt(-28,-2));
   const warnings=new Tile(),warningUV=addFremontApproachCurbs(tileAt(-30,-32),warnings);
+  addNatomaLandings(tileAt(-25,-33),warnings,warningUV);
   const warningGeometry=warnings.geometry();
   warningGeometry.setAttribute('walkPanel',new THREE.Float32BufferAttribute(warningUV,2));
   mesh(warningGeometry,'#ffffff',0,0,0).name='Fremont and Howard detectable warnings';
@@ -264,7 +266,7 @@ export function addSurveyBlocks(mesh:Surface){
   addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);addFremontMarkings(mesh);addHowardBealeThroughPaint(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
-    for(const [i,polygon] of polygons.entries())for(const piece of fremontPavingRemainder(kind,i)??folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
+    for(const [i,polygon] of polygons.entries())for(const piece of natomaPavingRemainder(kind,i)??fremontPavingRemainder(kind,i)??folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
       if(kind==='sidewalk'&&piece[0].some(([x,z])=>x>=-56&&x<=30&&z>=-8&&z<=2)){
         const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
         if(!tile)walkTiles.set(id,tile=new Tile());
