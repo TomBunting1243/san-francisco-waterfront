@@ -4,6 +4,7 @@ import howard from '../public/data/howard-trees.json' with {type:'json'};
 import portal from '../public/data/folsom-portal.json' with {type:'json'};
 import {frostCurbRuns,frostPavement} from './california-sidewalk.ts';
 import data from '../public/data/curb-survey.json' with {type:'json'};
+import fremontCorners from '../public/data/fremont-corner-curbs.json' with {type:'json'};
 
 export const curbFaceHeight=.1524*.06;
 export const gutterTop=.0315;
@@ -77,10 +78,19 @@ const backA=curbBack[curbBack.length-2],backB=curbBack[curbBack.length-1];
 const backDx=backB[0]-backA[0],backDz=backB[1]-backA[1],wallSlope=.340/-2.297;
 const backT=(-7.844+(backA[0]+8.554)*wallSlope-backA[1])/(backDz-wallSlope*backDx);
 export const museumWalkSeam=[backA[0]+backDx*backT,backA[1]+backDz*backT];
+// Re-register the two curb returns across the road, walk and curb-strip
+// polygons together. The map contains only changed outer-boundary stations.
+const fremontStations:Record<string,Record<string,Record<string,number[][]>>>=fremontCorners.stations;
 export function replacementPavement(kind:string,index:number,original:number[][][]):number[][][][]{
   const registered=howardPaving[kind]?.[index];
   if(registered)return registered;
   const overrides=data.overrides as Record<string,Record<string,number[][][][]>>;
+  const adjusted=fremontStations[kind]?.[index];
+  if(adjusted){
+    const [first,...unchanged]=overrides[kind]?.[index]??[original];
+    const [ring,...holes]=first;
+    return [[ring.flatMap((point,i)=>adjusted[i]??[point]),...holes],...unchanged];
+  }
   if(kind==='sidewalk'&&index===337){
     const ring=overrides.sidewalk[index][0][0];
     return [[[...ring.slice(0,6),...curbBack.slice(0,-1),museumWalkSeam]]];

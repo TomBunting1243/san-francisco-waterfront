@@ -7,10 +7,20 @@ import {crossStreetGreenStart,crossStreetGreenEnd,howardTurnStopLine,roadStopLin
 // Howard is two-way east of Fremont. The eastbound left lane crosses the
 // median at Howard to join the northbound Embarcadero carriageway.
 const landing=westboundExitPose(fremontExitDistance);
+// Registered 2024 municipal ortho, seven pixels per metre. Fremont traffic
+// moves toward decreasing v and turns into the narrow eastbound Howard lane
+// between the double yellow (v 247–249) and parking (v 269 onward).
+function fremontPlate(u:number,v:number){
+  return [-28.766041+.001297019*(u-245)-.008473203*(v-245),
+    -30.979132+.008473203*(u-245)+.001297019*(v-245)];
+}
 const roads=[[landing.x,landing.z],
   [landing.x+.25*Math.cos(landing.heading),landing.z-.25*Math.sin(landing.heading)],
-  [-33.95,-31.11],[-29.40,-31.79],[-29.10,-31.79],[-28.97,-31.70],[-28.90,-31.52],
-  [-27.91,-25.54],[-26.93,-19.12],[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
+  [-33.95,-31.11],fremontPlate(139,755),fremontPlate(155,615),fremontPlate(158,520),
+  fremontPlate(158,378),fremontPlate(159,304),fremontPlate(160,285),
+  fremontPlate(163,274),fremontPlate(171,264),fremontPlate(183,260),fremontPlate(206,259),
+  fremontPlate(390,259),fremontPlate(710,259),fremontPlate(970,259),
+  [-26.93,-19.12],[-25.78,-10.90],[-25.19,-6.19],[-24.924,-4.23],
   [-24.70,-2.95],[-24.21,-1.84],[-24.13,-1.43],[-24.02,-1.14],[-23.82,-1.02]];
 const waterfrontEndX=82.53; // Stop on the approach to Chestnut, with continuous road ahead.
 function northLane(x:number){

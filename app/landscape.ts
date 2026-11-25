@@ -113,6 +113,7 @@ import {addEmbarcaderoCenterWest} from './embarcadero-center-west.ts';
 import {add500Folsom} from './500-folsom.ts';
 import {addMetropolitanTowers,addBayCrestWings} from './rincon-residential.ts';
 import {add199Fremont} from './199-fremont.ts';
+import {addTownHall} from './town-hall.ts';
 import {add425Market} from './425-market.ts';
 import {add455Market} from './455-market.ts';
 import {add333Market} from './333-market.ts';
@@ -294,7 +295,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(addEmbarcaderoCenterWest(b,root,windowPositions))return;
     if(add500Folsom(b,root,windowPositions))return;
     if(addMetropolitanTowers(b,root,windowPositions)||addBayCrestWings(b,root,windowPositions))return;
-    if(add425Market(b,root,windowPositions)||add199Fremont(b,root,windowPositions))return;
+    if(add425Market(b,root,windowPositions)||add199Fremont(b,root,windowPositions)||addTownHall(b,root,windowPositions))return;
     if(add455Market(b,root,windowPositions))return;
     if(add333Market(b,root,windowPositions)||addCaliforniaCenter(b,root,windowPositions))return;
     if(addMarketCenter(b,root,windowPositions)||addMarketFlatiron(b,root,windowPositions))return;

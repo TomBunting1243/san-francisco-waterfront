@@ -347,7 +347,9 @@ These original image addresses were matched to retained downloads using the acqu
 
 The 20 November 2026 review consulted nine KartaView frames and eight Wikimedia Commons photographs. CanadaD’s frame 2052 establishes the yellow left edge and white right edge on the modeled Fremont exit. Jan Senderek’s nighttime photograph independently confirms the pools of light from low fixtures on Pier 14. The other views informed the review of streets, landmarks and historic conditions. The 2020 shore firehouse photograph predates the floating station.
 
-The [asset register](SURVEY-ASSETS.csv) counts one retained JPEG per photograph under its provider ID. Four photographs are represented by the largest retained version and thirteen by the provider preview. Together they occupy 33,910,006 bytes. Four additional previews of those same photographs occupy 930,732 bytes in the research archive and are excluded from the register. Five search candidates returned metadata without a usable image. The city distribution includes the attribution records only.
+The [asset register](SURVEY-ASSETS.csv) counts one retained JPEG per photograph under its provider ID. For the 20 November set, four photographs are represented by the largest retained version and thirteen by the provider preview. Those 17 files occupy 33,910,006 bytes. Four additional previews of those same photographs occupy 930,732 bytes in the research archive and are excluded from the register. Five search candidates returned metadata without a usable image. The city distribution includes the attribution records only.
+
+The 24 November Fremont and Howard study adds four KartaView frames and two full-resolution Wikimedia Commons photographs to this table. It also uses three restaurant photographs published by Tablehopper. The asset register records the individual downloads.
 
 | Source photograph | Provider ID | Creator | Capture date | License |
 |---|---:|---|---|---|
@@ -356,6 +358,12 @@ The [asset register](SURVEY-ASSETS.csv) counts one retained JPEG per photograph 
 | [Fremont exit bend and edge stripes](https://kartaview.org/details/366261/2052/track-info) | KartaView 37620547 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | [Fremont street-level approach](https://kartaview.org/details/366261/2066/track-info) | KartaView 37620561 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | [Fremont intersection during construction](https://kartaview.org/details/366261/2071/track-info) | KartaView 37620566 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont approaching Howard](https://kartaview.org/details/366261/2069/track-info) | KartaView 37620564 | CanadaD | 2017-02-03 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Fremont street-level context](https://kartaview.org/details/7492/7326/track-info) | KartaView 2462779 | JackPav | 2016-06-15 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard approaching Fremont](https://kartaview.org/details/10052/1853/track-info) | KartaView 4563234 | JackPav | 2016-07-20 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Howard frontage and signal](https://kartaview.org/details/12017/2495/track-info) | KartaView 6148133 | JackPav | 2016-08-01 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| [Marine Electric Building from Fremont](https://commons.wikimedia.org/wiki/File:181_Fremont_2.jpg) | Wikimedia Commons 101591081 | Dead.rabbit | 2021-03-15 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| [Town Hall frontage on Howard](https://commons.wikimedia.org/wiki/File:199_Fremont_Street_02.jpg) | Wikimedia Commons 105165588 | Dead.rabbit | 2021-05-09 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | [Fremont vehicle queue](https://kartaview.org/details/8646/1133/track-info) | KartaView 3620384 | JackPav | 2016-06-30 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | [Northbound Embarcadero toward the ferry clock](https://kartaview.org/details/7458/957/track-info) | KartaView 2212863 | JeremyMa | 2016-06-15 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 | [Embarcadero median and curb](https://kartaview.org/details/10526/4133/track-info) | KartaView 5447503 | CanadaD | 2016-08-02 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |

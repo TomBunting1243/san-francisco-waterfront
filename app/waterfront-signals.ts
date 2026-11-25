@@ -1,4 +1,8 @@
 export const signalPeriod=64;
+// The Fremont cabinet has GPS coordination; its programmed phase sheet is
+// unavailable. Offset the local modeled cycle so the northbound sedan enters
+// and clears on green without retiming the downstream ride.
+export const fremontClockOffset=16;
 export const crossStreetGreenStart=38,crossStreetGreenEnd=58;
 export function signalAspects(elapsed:number):[number,number]{
   const t=(elapsed%signalPeriod+signalPeriod)%signalPeriod;

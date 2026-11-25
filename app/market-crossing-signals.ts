@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {howardPedestrianHeads} from './howard-junction-signals.ts';
+import {fremontPedestrianHeads} from './fremont-howard-signals.ts';
 import {chestnutPedestrianHeads} from './chestnut-signals.ts';
 import type {StreetAssembly} from './street-amenities.ts';
 import {marketPedestrianPhase,signalPeriod} from './waterfront-signals.ts';
@@ -22,7 +23,7 @@ export const marketPedestrianHeads=[
   {x:-.5303,z:-5.3864,y:.04099,angle:Math.PI+.147},
 ] as const;
 type Head={x:number;y:number;z:number;angle:number;side?:number;clockOffset?:number};
-const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads];
+const pedestrianHeads:Head[]=[...marketPedestrianHeads,...chestnutPedestrianHeads,...howardPedestrianHeads,...fremontPedestrianHeads];
 const lensY=.156,lensZ=.0071;
 function point(h:Head,u:number,y:number,v:number){
   const s=Math.sin(h.angle),c=Math.cos(h.angle);
@@ -85,18 +86,31 @@ export function appendMarketPedestrianFaces(pos:number[],indices:number[],tints:
     }
   }
   // The displayed countdown and flash advance only when simulated time moves.
-  const first=ranges[0].start,saved=Uint16Array.from(indices.slice(first));let prior=-1;
+  const first=ranges[0].start,saved=Uint16Array.from(indices.slice(first));const offsets=[...new Set(ranges.map(part=>part.clockOffset))];
+  const previous=new Map<number,number>();
+  let lastTick=-2;
   return function update(index:THREE.BufferAttribute,elapsed:number,enabled:boolean){
+    // All cabinet offsets are whole seconds and every hand flash has a
+    // half-second boundary. A paused ride shares its last displayed indices.
+    const tick=enabled?Math.floor(2*((elapsed%signalPeriod+signalPeriod)%signalPeriod)):-1;
+    if(tick===lastTick)return;
+    lastTick=tick;
     function state(offset:number){
       const phase=marketPedestrianPhase(elapsed+offset),t=((elapsed+offset)%signalPeriod+signalPeriod)%signalPeriod;
       const seconds=phase==='clearance'?Math.ceil(60-t):0,hand=phase==='stop'||phase==='clearance'&&t%1<.5;
       return {phase,seconds,hand,key:2+seconds*4+Number(hand)*2+Number(phase==='walk')};
     }
-    const cross=state(0),through=state(38);
-    const key=enabled?cross.key*128+through.key:0;
-    if(key===prior)return;prior=key;
+    const changed=new Map<number,ReturnType<typeof state>>();
+    for(const offset of offsets){
+      const value=state(offset),key=enabled?value.key:0;
+      if(previous.get(offset)===key)continue;
+      previous.set(offset,key);changed.set(offset,value);
+    }
+    if(!changed.size)return;
     for(const part of ranges){
-      const {phase,seconds,hand}=part.clockOffset?through:cross;
+      const value=changed.get(part.clockOffset);
+      if(!value)continue;
+      const {phase,seconds,hand}=value;
       const digit=part.digit===0?Math.floor(seconds/10):seconds%10;
       const lit=enabled&&(part.kind==='walk'?phase==='walk':part.kind==='hand'?hand:
         seconds>0&&(part.digit===1||seconds>=10)&&Boolean(segments[digit]&(64>>part.segment)));

@@ -7,7 +7,8 @@ import {addMarketPedestrianHousings,appendMarketPedestrianFaces,marketPedestrian
 import {addChestnutStandards,chestnutVehicleHeads} from './chestnut-signals.ts';
 import {addHowardJunctionStandards,howardVehicleHeads} from './howard-junction-signals.ts';
 import {addSpearStandards,spearVehicleHeads} from './spear-signals.ts';
-import {signalAspects} from './waterfront-signals.ts';
+import {addFremontStandards,fremontVehicleHeads} from './fremont-howard-signals.ts';
+import {fremontClockOffset,signalAspects} from './waterfront-signals.ts';
 export {signalAspects} from './waterfront-signals.ts';
 import {StreetAssembly} from './street-amenities.ts';
 
@@ -17,7 +18,7 @@ const width=784,coreRows=672,minX=-56,minZ=-64,pitch=.12;
 const northX=78,northZ=-6.5,northRows=42,height=coreRows+2+northRows;
 type Axis=0|1;
 type MarketMount={offset:number;rise:number;shared:boolean;arm?:boolean};
-type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount;surveyed?:boolean;section?:'ball'|'left'|'rightYield'};
+type Signal={x:number;z:number;y:number;heading:number;axis:Axis;mount?:MarketMount;surveyed?:boolean;localClock?:boolean;section?:'ball'|'left'|'rightYield'};
 const fromSouth=-Math.PI/2+.13,fromNorth=Math.PI/2+.13,fromStreet=Math.PI;
 // SFMTA 9323000 (NB) and 9323500 (SB) are separate midblock controls.
 // Their inventory points identify cabinets, not mounting positions. The shared
@@ -51,7 +52,7 @@ export const waterfrontSignals:Signal[]=[
 ];
 // The two permissive arrows have no steady-color spill in the shared RGB
 // field. Their flashing amber faces join the same draw as the steady lamps.
-const displayedSignals:Signal[]=[...waterfrontSignals,...howardVehicleHeads.filter(h=>h.section==='rightYield')];
+const displayedSignals:Signal[]=[...waterfrontSignals,...fremontVehicleHeads,...howardVehicleHeads.filter(h=>h.section==='rightYield')];
 function location(head:Signal,x:number,y:number,z:number){
   const s=Math.sin(head.heading),c=Math.cos(head.heading);
   return new THREE.Vector3(head.x+.06*(c*x+s*z),head.y+.06*y,head.z+.06*(-s*x+c*z));
@@ -98,6 +99,7 @@ export function createSignalHousings(){
   addHowardJunctionStandards(a);
   addChestnutStandards(a);
   addSpearStandards(a);
+  addFremontStandards(a);
   addMarketPedestrianHousings(a);
   return a.bake('SFMTA signal standards at Howard, Mission, Market, Washington, Chestnut and Spear');
 }
@@ -198,7 +200,8 @@ function signalLenses(){
   function update(aspects:[number,number],enabled:boolean,elapsed:number){
     updatePedestrians(geo.index!,elapsed,enabled);
     const rightFlash=aspects[1]===2&&THREE.MathUtils.euclideanModulo(elapsed,1)<.5;
-    const key=enabled?2*(aspects[0]*3+aspects[1])+Number(rightFlash):18;
+    const local=signalAspects(elapsed+fremontClockOffset);
+    const key=enabled?2*(9*(local[0]*3+local[1])+aspects[0]*3+aspects[1])+Number(rightFlash):162;
     if(key===previous)return;
     const flashOnly=(key>>1)===(previous>>1);previous=key;
     if(!flashOnly){
@@ -207,7 +210,7 @@ function signalLenses(){
     for(const {head,aspect,start,end} of sections){
       const permissive=head.section==='rightYield'&&aspect===2;
       if(flashOnly&&!permissive)continue;
-      const lit=enabled&&aspects[head.axis]===aspect&&(!permissive||rightFlash);
+      const lit=enabled&&(head.localClock?local:aspects)[head.axis]===aspect&&(!permissive||rightFlash);
       const c=(lit?colors:dark)[permissive?1:aspect];
       for(let j=start;j<end;j++)color.setXYZ(j,c.r,c.g,c.b);
       if(flashOnly&&!color.updateRanges.some(r=>r.start<=start*3&&r.start+r.count>=end*3))

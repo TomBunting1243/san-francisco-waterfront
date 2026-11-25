@@ -6,8 +6,9 @@ per scene unit. Direction and widths come from the paint, not the street axis.
 """
 from pathlib import Path
 import argparse,json,math
-from shapely import Polygon,constrained_delaunay_triangles,union_all
-from shapely.geometry import box,LineString
+from shapely import Polygon
+from shapely.geometry import box
+from road_paint_surface import road_paint_surface
 BASE=Path(__file__).resolve().parents[1]/'public/data'
 C,S=.988686,-.150004
 # Centers are the bounding-box centers of SFMTA ROW polygons, projected before
@@ -53,7 +54,6 @@ def world(center,p):
  u,v=(p[0]-300)/200,(p[1]-300)/200
  return [round(center[0]+C*u-S*v,6),round(center[1]+S*u+C*v,6)]
 def mid(a):return [(a[0]+a[2])/2,(a[1]+a[3])/2]
-def read(name):return json.loads((BASE/name).read_text())
 def write_plates(folder):
  from PIL import Image
  from urllib.request import urlopen
@@ -118,59 +118,8 @@ def crossing_axes():
  return {name:[dict(side=side,axis=[world(center,mid(a)),world(center,mid(b))]) for side,a,b,_,_ in legs] for name,center,legs in sites}
 
 def build(axes):
-    blocks=read('survey-blocks.json')['streets']
-    curbs=read('curb-survey.json')
     spear_bounds=box(-27.5,-14.3,-24.3,-11.0)
-    bounds=box(-30,-30,-13,-17).union(spear_bounds)
-    def parcels(kind):
-        for i,poly in enumerate(blocks[kind]):
-            for outer,*holes in curbs['overrides'].get(kind,{}).get(str(i),[poly]):
-                p=Polygon(outer,holes)
-                if p.intersects(bounds):yield p
-    road=union_all(list(parcels('street'))).difference(union_all([*parcels('curb'),*parcels('sidewalk')]))
-    faces=[];gutters=[]
-    def offset(station,dist):return station[0]+station[2]*dist,station[1]+station[3]*dist
-    for _,_,stations in curbs['lines']:
-        for a,b in zip(stations,stations[1:]):
-            segment=LineString([a[:2],b[:2]])
-            # The Spear limit line reaches a gutter run whose far end is
-            # outside the local plate. Its overlapping surface still supports paint.
-            partial=not bounds.covers(segment)
-            if partial and not spear_bounds.intersects(segment):continue
-            back=.157 if min(a[4],b[4])<1 else .031
-            qa,qb=offset(a,.0023),offset(b,.0023)
-            face=Polygon([qa,qb,offset(b,-back),offset(a,-back)]).buffer(0)
-            faces.append(face.intersection(spear_bounds) if partial else face)
-            for coords,heights in [([offset(a,.037),offset(b,.037),qb],[.032,.032,.0315]),([offset(a,.037),qb,qa],[.032,.0315,.0315])]:
-                p=Polygon(coords)
-                if partial:p=p.intersection(spear_bounds)
-                if p.area>1e-10:gutters.append((p,coords,heights))
-    road=road.difference(union_all(faces))
-    def triangles(region,terrain=None):
-        result=[]
-        for tri in constrained_delaunay_triangles(region).geoms:
-            if tri.area<1e-8:continue
-            verts=[]
-            for x,z in list(tri.exterior.coords)[:3]:
-                y=.031
-                if terrain:
-                    ((ax,az),(bx,bz),(cx,cz)),(A,B,C)=terrain
-                    det=(bx-ax)*(cz-az)-(cx-ax)*(bz-az)
-                    u=((x-ax)*(cz-az)-(cx-ax)*(z-az))/det
-                    v=((bx-ax)*(z-az)-(x-ax)*(bz-az))/det
-                    y=A+(B-A)*u+(C-A)*v
-                verts.append([round(x,6),round(z,6),round(y+.00024,7)])
-            result.append(verts)
-        return result
-    def surface_mark(corners):
-        region=Polygon(corners).intersection(road)
-        fragments=[]
-        for gutter,coords,hs in gutters:
-            if region.intersects(gutter):
-                fragments.extend(triangles(region.intersection(gutter),(coords,hs)))
-                region=region.difference(gutter)
-        fragments.extend(triangles(region))
-        return fragments
+    surface_mark=road_paint_surface(box(-30,-30,-13,-17).union(spear_bounds),spear_bounds)
     out=[]
     for name,center,legs in sites:
         records=[]
@@ -184,12 +133,12 @@ def build(axes):
             marks=[]
             for low,high in bars:
                 corners=[edge(low,0),edge(high,0),edge(high,2),edge(low,2)]
-                fragments=surface_mark(corners)
+                fragments=surface_mark(Polygon(corners))
                 if fragments:marks.append(fragments)
             records.append({**coord,'marks':marks})
         site={'name':name,'center':center,'legs':records}
         if name in stop_bars:
-            site['stopBars']=[{'approach':approach,'triangles':surface_mark([world(center,p) for p in corners])}
+            site['stopBars']=[{'approach':approach,'triangles':surface_mark(Polygon([world(center,p) for p in corners]))}
                               for approach,corners in stop_bars[name]]
         out.append(site)
     data={'source':'https://sfplanninggis.org/1938/','imagery':'SF 2024 RGB 8 cm','sites':out}

@@ -116,6 +116,7 @@ const units={
  'sightline-streets':'street:road polygons sidewalk:sidewalk polygons curb:curb polygons bars:crossing stripes trees:tree records',
  'south-beach':'buildings:building features docks:dock features roads:road features','steuart-junction':'curves:track curves',
  'survey-blocks':'buildings:building features outsideRoads:road segments','survey-shore':'piles:pile positions decks:deck outlines',
+ 'fremont-markings':'batches:paint colors','fremont-corner-curbs':'stations:pavement classes with corrected curb stations',
  'surveyed-shopfronts':'$:storefront records','transbay-crossings':'sites:crossing sites','tree-wells':'$:tree-well records',
  'waterfront-landscape':'areas:landscape areas paths:path features trees:tree records','waterfront-tree-survey':'trees:tree records',
  'approach-soma':'buildings:building features roads:road features ramps:ramp features',
@@ -149,7 +150,7 @@ const counts=types.map(t=>[t,[...sources.values()].filter(r=>sourceType(r)===t).
 const registry=fs.readFileSync(here('references/SURVEY-ASSETS.csv'),'utf8').trimEnd().split('\n');
 assert.equal(registry.shift(),'series,asset_id,stored_bytes,point_records,source_url');
 const assetHosts={'USGS-3DEP-2023':'s3-us-west-2.amazonaws.com','NAIP-2022':'gis.wildlife.ca.gov','SF-RGB8CM-2024':'tile.sf.gov','JAMESTOWN-WATERFRONT':'www.jamestownlp.com','NPS-ALCATRAZ':'www.nps.gov','WATERFRONT-PLAZA':'images.squarespace-cdn.com',
-  'HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],
+  'TOWN-HALL-PHOTO':'storage.ghost.io','HILLS-PLAZA-PHOTO':['upload.wikimedia.org','static.squarespace.com'],
   'WEST-SPAN-PHOTO':['thumb.wikimedia.org','tile.loc.gov'],'SOUTH-BASIN-PHOTO':['www.sfcta.org','images.squarespace-cdn.com'],
   'HUNTSMAN-WAKELY':'static.wixstatic.com','PARK-PADEL':'parkpadel.com','EMBARCADERO-PLAZA':'embarcaderoplaza.com','MIKE-ORIA':'live.staticflickr.com','HOG-ISLAND':'hogislandoysters.com',
   'SF-PUBLIC-WORKS':'sfpublicworks.org','PORT-SF':'sfport.com','SF-PLANNING':'default.sfplanning.org','SHAH-KAWASAKI':'skarc.com','JLL':'res.cloudinary.com','APRIL-WAGNER':'champagnecoloredglasses.com','RIDE-KARTAVIEW':'cdn.kartaview.org','RIDE-COMMONS':['upload.wikimedia.org','thumb.wikimedia.org']};

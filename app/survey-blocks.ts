@@ -8,6 +8,7 @@ import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
+import {addFremontMarkings} from './fremont-markings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,howardSidewalk,howardStreet,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
 import survey from '../public/data/survey-blocks.json' with {type:'json'};
@@ -250,7 +251,7 @@ export function addSurveyBlocks(mesh:Surface){
     tile.top([inner],.061,leaf);
   }
   const walkTiles=new Map<number,Tile>();
-  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);
+  addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);addFremontMarkings(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
     for(const [i,polygon] of polygons.entries())for(const piece of folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
