@@ -42,6 +42,7 @@ import * as THREE from 'three';
 import {buildStreetcarTrack} from './streets.ts';
 import {addFerryMarketPlatforms} from './ferry-market-platform.ts';
 import {bakePccBody,createStreetcar} from './streetcar.ts';
+import {loadingWait} from './mission-loading.ts';
 import {createWaterfrontTraffic} from './waterfront-traffic.ts';
 import {createPlazaSkaters} from './plaza-skaters.ts';
 import {createPeople} from './people.ts';
@@ -152,7 +153,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   const root = new THREE.Group();
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   const windowPositions: { x: number; y: number; z: number; ry: number; w: number; h: number; tide?:boolean }[] = [];
-  const residentPositions:{x:number;z:number;y:number;rearShopper?:boolean}[]=[];
+  const residentPositions:{x:number;z:number;y:number;rearShopper?:boolean;loadingPassenger?:boolean}[]=[];
   const cream = '#ede4d3', dark = '#345564';
   function material(color: string) {
     if (!materials.has(color)) materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: .86, metalness: .02 }));
@@ -642,6 +643,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
   for(const side of [-1,1]){const flipper=mesh(new THREE.SphereGeometry(.2,7,5),'#786148',-.15,-.02,side*.4,seaLion);flipper.scale.set(1.5,.18,.55);flipper.rotation.y=side*.4;sealFlippers.push(flipper);}
   const walkerCount=waterfrontWalkerCount();
   const skaters=createPlazaSkaters();root.add(skaters.root);
+  residentPositions.push({...loadingWait,loadingPassenger:true});
   const passengerStart=walkerCount+residentPositions.length,seatStart=passengerStart+ferryPassengerCount;
   const courtyardSlot=seatStart+pier14Visitors.length;
   const people=createPeople(courtyardSlot+1,pier14Visitors.length+1);
@@ -1033,7 +1035,7 @@ export function createCityVignette(variant:'street'|'plaza'):ReturnType<typeof c
   indices.forEach((index,i)=>{original.getMatrixAt(index,matrix);windows.setMatrixAt(i,matrix);const color=new THREE.Color();original.getColorAt(index,color);windows.setColorAt(i,color);});root.add(windows);
   const tidalPanes=source.tidalPanes.map(({i,y})=>({i:indices.indexOf(i),y})).filter(p=>p.i>=0);
   const water=new THREE.Mesh(vignetteBaySurfaceGeometry(),new THREE.MeshStandardMaterial({color:'#a5ccd1',roughness:.65,metalness:.1}));water.rotation.x=-Math.PI/2;water.position.y=waterSurface.level;water.receiveShadow=true;root.add(water);
-  const residents=source.residentPositions.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));
+  const residents=source.residentPositions.filter(p=>!p.loadingPassenger&&bounds.containsPoint(new THREE.Vector3(p.x,p.y,p.z)));
   const walkerCount=waterfrontWalkerCount(variant);
   const skaters=variant==='plaza'&&source.skaters?createPlazaSkaters(copiedMaterial(source.skaters.material) as THREE.MeshStandardMaterial):undefined;if(skaters)root.add(skaters.root);
   const visitors=source.pier14Visitors.filter(p=>bounds.containsPoint(new THREE.Vector3(p.x,.06,p.z)));

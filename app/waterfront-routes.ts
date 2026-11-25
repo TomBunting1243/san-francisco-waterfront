@@ -230,6 +230,12 @@ const carriageways=Array.from({length:1601},(_,i)=>{
   lanes[1].z+=(south+folsom+.063*howard-innerLane+north+northRefugeOffset(x))/Math.cos(lanes[1].heading);
   return lanes;
 });
+const trafficLaneSample={z:0,heading:0};
+export function waterfrontLaneAt(x:number,north:boolean,into={z:0,heading:0}){
+  const u=Math.max(0,Math.min(1600,(x-streetStart)/step));
+  const i=Math.min(1599,Math.floor(u)),lane=north?1:0,a=carriageways[i][lane],b=carriageways[i+1][lane];
+  into.z=THREE.MathUtils.lerp(a.z,b.z,u-i);into.heading=a.heading;return into;
+}
 export const waterfrontRoadRange=(region?:Region):[number,number]=>region==='street'?[-79,-4]:region==='plaza'?[-30,37]:[streetStart,streetEnd];
 const reactionDelay=[0,1.12,2.6,4.05,5.42,6.85,8.28]; // response delay accumulated down a queue
 const queueSpace=[0,.65,1.33,1.98,2.71,3.36,4.06]; // allowance to the front bumper in scene units
@@ -275,13 +281,12 @@ export function waterfrontCar(time:number,index:number,region?:Region){
   const k=(at%circuit+circuit)%circuit;
   const span=outlet-inlet,active=k<span;
   const along=active?inlet+k:outlet-(k-span)/transfer*span;
-  const x=dir*along,u=Math.max(0,Math.min(1600,(x-streetStart)/step));
-  const i=Math.min(1599,Math.floor(u)),lane=north?1:0,a=carriageways[i][lane],b=carriageways[i+1][lane];
+  const x=dir*along,{z,heading}=waterfrontLaneAt(x,north,trafficLaneSample);
   // Bridge traffic shares this mesh. Its local tire origin is above zero.
   // Pitch the rigid car through both axle stations on the graded north quay.
   const halfAxle=.085,back=northWaterfrontGrade(x-halfAxle),front=northWaterfrontGrade(x+halfAxle);
-  return {x,z:THREE.MathUtils.lerp(a.z,b.z,u-i),y:(back+front)*.5-streetVehicleTreadHeight,
-    grade:Math.atan2(front-back,halfAxle*2),heading:a.heading,active};
+  return {x,z,y:(back+front)*.5-streetVehicleTreadHeight,
+    grade:Math.atan2(front-back,halfAxle*2),heading,active};
 }
 
 export function waterfrontCyclist(time:number,index:number){

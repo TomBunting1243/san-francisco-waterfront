@@ -63,3 +63,35 @@ test('photographed pier washes stay on masonry between the recessed Howard bays'
   assert.ok(light(mid+.43,9.34)<.25);
   assert.equal(light(mid+1.5,10.25),0);
 });
+
+test('the Fremont canopy spans its two bays and mitres into just the first Howard awning',()=>{
+  const {mesh}=model(),reach=1.38,crest=4.29,hem=3.85;
+  function cloth(u,v,expected){
+    const hits=new T.Raycaster(at(u,v,8),down,0,.40).intersectObject(mesh);
+    if(expected===null){assert.equal(hits.length,0,'open air at '+[u,v]);return;}
+    assert.equal(hits.length,1,'one exposed upper surface at '+[u,v]);
+    assert.ok(Math.abs(hits[0].point.y-at(u,v,expected).y)<.0012,[u,v,expected]);
+  }
+  for(const v of [.05,2.4,4.95,5.2,7.7,10.22]){
+    for(const d of [.16,1.32])cloth(-d,v,crest+(hem-crest)*d/reach);
+    cloth(-1.49,v,null);
+  }
+  for(const [u,v] of [[-.6,-.36],[-.36,-.6],[1.62,-1.31]])cloth(u,v,crest+(hem-crest)*Math.max(-u,-v)/reach);
+  cloth(4.70,-.64,null);
+});
+
+test('Fremont has a slender capital over its center support and transom light on either side',()=>{
+  const {mesh}=model(),middle=(72/7)/2;
+  function front(v,h){
+    const start=at(-2,v,h),dir=at(0,v,h).sub(start).normalize();
+    return new T.Raycaster(start,dir).intersectObject(mesh)[0];
+  }
+  assert.ok(front(middle,3.45).distance+.004<front(middle,2).distance);
+  for(const v of [middle-.32,middle+.32]){
+    const transom=front(v,2.96),base=front(v,.42);
+    assert.ok(Math.abs(transom.distance-.06*2.13)<.0003);
+    const wash=mesh.geometry.getAttribute('signLight');
+    assert.ok(wash.getX(transom.face.a)>.1);
+    assert.equal(wash.getX(base.face.a),0);
+  }
+});

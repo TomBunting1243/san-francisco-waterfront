@@ -55,6 +55,6 @@ export function plazaCrossingPose(time:number,index:number){
   const tz=6*u*v*s.dz+v*(1-3*u)*s.sz+u*(3*u-2)*s.ez;
   const standing=s.dx===0&&s.dz===0;
   const heading=standing?(z< -6?Math.PI/2:z< -5?-Math.PI/2:.65):Math.atan2(tz,tx);
-  const y=z<=-6.249?westMarketGround(x,z):z< -5.48?gutterTop:(harryBridgesGround(x,z)??gutterTop);
+  const y=z<=-6.249?westMarketGround(x,z):(harryBridgesGround(x,z)??gutterTop);
   return {x,y,z,heading,standing};
 }

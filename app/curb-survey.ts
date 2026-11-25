@@ -21,6 +21,7 @@ function inside(x:number,z:number,ring:number[][]){
 }
 type MeshFactory=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number)=>THREE.Mesh;
 type Run=[number,number,number[][]];
+type Vec=[number,number,number];
 const howardCurbs:Record<string,number[][]>=howard.curbs;
 const howardPaving:Record<string,Record<string,number[][][][]>>=howard.paving;
 export const howardSidewalk=howard.walk;
@@ -36,15 +37,17 @@ export const medianSlab=data.medianSlab;
 export const ferryRefugePaving=data.ferryRefugePaving;
 // Sample the very same inclined stone facets that reach the renderer. This
 // keeps feet on the two curb cuts when the surveyed paving is regenerated.
-export function ferryRefugeGround(x:number,z:number){
-  for(const [a,b,c] of ferryRefugePaving){
+function facetHeight(facets:number[][][],x:number,z:number){
+  for(const [a,b,c] of facets){
     const bx=b[0]-a[0],bz=b[2]-a[2],cx=c[0]-a[0],cz=c[2]-a[2];
     const dx=x-a[0],dz=z-a[2],area=bx*cz-bz*cx;
     if(Math.abs(area)<1e-10)continue;
     const u=(dx*cz-dz*cx)/area,v=(bx*dz-bz*dx)/area;
     if(u>=-1e-7&&v>=-1e-7&&u+v<=1.0000001)return a[1]+u*(b[1]-a[1])+v*(c[1]-a[1]);
   }
-  return gutterTop;
+}
+export function ferryRefugeGround(x:number,z:number){
+  return facetHeight(ferryRefugePaving,x,z)??gutterTop;
 }
 export const bealeSidewalk=data.bealeWalk;
 export const bealeBeds=data.bealeBeds;
@@ -56,7 +59,28 @@ export function westMarketGround(x:number,z:number){
   const flare=THREE.MathUtils.clamp((Math.abs(x-marketAxis(z))-.92)/.31,0,1);
   return THREE.MathUtils.lerp(grade,.139,flare);
 }
+function curbSection(v:number[],median:number,back:number):Vec[]{
+  const [x,z,nx,nz,q]=v;
+  const at=(offset:number,y:number):Vec=>[x+nx*offset,y,z+nz*offset];
+  const top=gutterTop+q*curbFaceHeight;
+  return [at(.037,.032),at(.0023,gutterTop),at(0,top),at(-.011,top),at(-(v[5]??back),median?medianTop:.0451)];
+}
+
+// The lowered center and the flares of the Market West ramp span several
+// stations on the photographed arc. Sample its physical curb and apron below.
+const westRampFacets:number[][][]=[];
+for(const [source,median,path] of curbRuns){
+  if(source!==3830759)continue;
+  for(let i=1;i<path.length;i++){
+    const start=path[i-1],end=path[i];
+    if(start.length===5&&end.length===5)continue;
+    const back=Math.min(start[4],end[4])<1?.157:.031;
+    const a=curbSection(start,median,back),b=curbSection(end,median,back);
+    for(let j=0;j<4;j++)westRampFacets.push([a[j],b[j],b[j+1]],[a[j],b[j+1],a[j+1]]);
+  }
+}
 export function medianGrade(x:number,z:number){
+  if(x> -1.55&&x<-.32&&z< -5.05)return facetHeight(westRampFacets,x,z)??medianTop;
   let factor=1;
   for(const g of data.medianGates){
     const across=Math.abs(x-g[0]),inward=Math.abs(z-g[1]);
@@ -121,7 +145,6 @@ export function replacementPavement(kind:string,index:number,original:number[][]
   return frostPavement(kind,index,overrides[kind]?.[index]??[original]);
 }
 
-type Vec=[number,number,number];
 export function addSurveyCurbs(mesh:MeshFactory){
   type Tile={p:number[];c:number[]};
   const tiles=new Map<string,Tile>(),palette=new Map<string,THREE.Color>();
@@ -148,13 +171,7 @@ export function addSurveyCurbs(mesh:MeshFactory){
     for(let i=1;i<path.length;i++){
       const start=path[i-1],end=path[i];
       const back=Math.min(start[4],end[4])<1?.157:.031;
-      function profile(v:number[]):Vec[]{
-        const [x,z,nx,nz,q]=v;
-        const at=(offset:number,y:number):Vec=>[x+nx*offset,y,z+nz*offset];
-        const top=gutterTop+q*curbFaceHeight;
-        return [at(.037,.032),at(.0023,gutterTop),at(0,top),at(-.011,top),at(-back,median?medianTop:.0451)];
-      }
-      const a=profile(start),b=profile(end);
+      const a=curbSection(start,median,back),b=curbSection(end,median,back);
       if(source===3796715&&i===15){
         // Replace the four original curb faces, retaining both end profiles
         // and their old sidewalk-side boundary. The leveled strip, tree wells

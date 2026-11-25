@@ -70,6 +70,42 @@ source=[(pr,g.difference(oldEdge) if pr['OBJECTID'] in bulb['sourceIds'] else g)
 # Negative source ID denotes the curb independently traced on the aerial.
 # Its terminal driveway seam stays open. The old face gets no second cap.
 source.append(({'OBJECTID':-202401,'CBB_TYPE':'BLK'},LineString(bulb['edge'])))
+# West edge of Harry Bridges Plaza on the SF 2024 orthophoto (132 px per scene
+# unit). The older ROW centerline intersects two of the measured stone bollards.
+# Preserve the two end junctions and the south-tip ramp profile.
+west_plate=[
+    (6532,789.4),(6546,795.4),(6553,798.2),(6580,810),(6610,822),(6640,833),(6670,845),
+    (6700,856.6),(6730,867.6),(6757,878.0),(6760,879.7),(6790,890.8),(6820,901.0),(6826,903.0),
+    (6850,911.0),(6880,920.8),(6895,925.0),(6910,929.1),(6940,937.1),(6964,943.0),(6970,944.8),
+    (7000,951.7),(7030,957.8),(7033,958.0),(7060,963.8),(7090,969.0),(7102,971.0),(7120,973.8),
+    (7150,977.2),(7172,980.0),(7180,981.0),(7210,984.0),(7215,983.6),(7231,984.8),(7240,985.7),
+    (7270,987.7),(7280,987.9),(7300,988.8),(7320,989.7),(7330,990.4),(7334,991.0),(7360,991.2),
+    (7390,991.7),(7404,991.0),(7420,990.2),(7450,988.4),(7480,987.0),(7481,987.0),(7510,984.9),
+    (7540,981.9),(7557,980.0),(7570,978.1),(7600,974.7),(7627,970.0),(7630,969.8),(7660,964.6),
+    (7690,959.1),(7696,958.0),(7720,952.9),(7750,946.0),(7765,942.5),(7780,938.9),(7810,930.9),
+    (7833,924.5),(7840,922.9),(7870,914.2),(7900,906.0),(7902,905.5),(7930,898.1),(7960,890.1),
+    (7972,887.0),(7990,881.5),(8020,873.3),(8040,868.0),(8050,864.8),(8080,855.2),(8100,851),
+    (8120,846),(8140,840),(8160,834),(8182,828),(8188,826),(8193,824.5),(8200,820.0),
+    (8210,811.7),(8216,805.2),(8222,798.7),
+ ]
+def west_point(u,v):return (round(-56+u/132,3),round(2-v/132,3))
+west_edge=[west_point(u,v) for u,v in west_plate if u<=8193]
+south_end,north_end=west_edge[0],west_edge[-1]
+def adjusted_west_edge(pr,line):
+    n=pr['OBJECTID']
+    if n==3830759:return LineString(west_edge[::-1])
+    if n==3833284:
+        pts=list(line.coords);pts[0]=south_end;pts[-1]=north_end
+        return LineString(pts)
+    if n==3832099:
+        pts=list(line.coords)
+        turn=[west_point(u,v) for u,v in west_plate if u>=8193]
+        # Join the photographed tip to the retained outer island at the first
+        # survey station beyond it. The adjoining roadway has its own grade.
+        k=next(i for i,p in enumerate(pts) if p[1]>turn[-1][1] and i>0)
+        return LineString(turn+pts[k:])
+    return line
+source=[(pr,adjusted_west_edge(pr,g)) for pr,g in source]
 islands=list(polygonize(unary_union([g for pr,g in source if pr['CBB_TYPE']=='ISL'])))
 median=next(p for p in islands if p.covers(Point(0,-4.46)))
 plantingIsland=next(p for p in islands if p.covers(Point(4.0556,-3.2556)))
@@ -132,11 +168,25 @@ for props,src in source:
         for t,w in openings:
             mapped.append([round(line.interpolate(t).x,3),round(line.interpolate(t).y,3)])
             stations.update(max(0,min(line.length,t+v)) for v in (-w-.058,-w,w,w+.058))
+        market_west=props['OBJECTID']==3830759
+        if market_west:
+            for u in [7215,7228,7240,7310,7322,7334]:
+                x=west_point(u,0)[0]
+                hit=line.intersection(LineString([(x,-6),(x,-4)]))
+                if hit.geom_type=='Point' and not hit.is_empty:stations.add(line.project(hit))
         points=[]
         for t in sorted(stations):
             p=line.interpolate(t);dx,dz=tangent(line,t)
             factor=min([1.]+[max(0,min(1,(abs(t-k)-w)/.058)) for k,w in openings])
             pt=[round(p.x,3),round(p.y,3),round(-dz*sign,3),round(dx*sign,3),round(factor,2)]
+            if market_west:
+                u=(p.x+56)*132
+                if 7200<u<7350:
+                    # Height breaks follow the observed flanks and the broad
+                    # lowered center. The exact ramps between LiDAR samples are fitted.
+                    pt[4]=round(max(0,min(1,max((7240-u)/12,(u-7310)/12))),3)
+                    shoulder=max(0,min(1,(u-7215)/13,(7334-u)/12))
+                    pt.append(round(.031+shoulder*(.29-.031),5))
             if not points or pt[:2]!=points[-1][:2]:points.append(pt)
         if len(points)<2:continue
         out.append([props['OBJECTID'],int(isMedian),points])
@@ -280,8 +330,10 @@ def trim_median_caps(data):
         if not median:continue
         for a,b in zip(path,path[1:]):
             back=.157 if min(a[4],b[4])<1 else .031
-            def offset(v,t):return (v[0]-t*v[2],v[1]-t*v[3])
-            for inner,outer in [(0,.011),(.011,back)]:
+            def offset(v,t):
+                if t is None:t=v[5] if len(v)>5 else back
+                return (v[0]-t*v[2],v[1]-t*v[3])
+            for inner,outer in [(0,.011),(.011,None)]:
                 p,q=offset(a,inner),offset(b,inner)
                 r,s=offset(b,outer),offset(a,outer)
                 caps.extend(t for t in [Polygon([p,q,r]),Polygon([p,r,s])] if t.area>1e-12)

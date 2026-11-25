@@ -28,6 +28,7 @@ class VehiclePaint {
   constructor(glass:THREE.Color,windshield:THREE.Color){this.glass=glass;this.windshield=windshield;}
 
   private readonly vertices: number[] = [];
+  get count(){return this.vertices.length/3;}
   private readonly colors: number[] = [];
 
   private vertex([x,y,z]: Point, color: THREE.Color) {
@@ -107,7 +108,16 @@ export function streetVehicleMaterial() {
   material.onBeforeCompile=shader=>{
     shader.uniforms.vehicleSky=light.glass;shader.uniforms.vehicleCast=light.cast;
     shader.vertexShader='attribute vec3 vehiclePaint; varying vec3 vehicleMark; varying vec2 tireReceiver; uniform vec3 vehicleCast;\n'+
-      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvehicleMark=vehiclePaint;tireReceiver=vehiclePaint.xy;')
+      shader.vertexShader.replace('#include <morphinstance_vertex>',`
+        // InstancedMesh2 globally rewrites this Three chunk to its draw ID.
+        // Only the native fleet's morph texture is addressed by gl_InstanceID.
+        #if defined(USE_INSTANCING_MORPH) && !defined(USE_INSTANCING_INDIRECT)
+          #define instanceIndex gl_InstanceID
+        #endif
+        #include <morphinstance_vertex>
+        #if defined(USE_INSTANCING_MORPH) && !defined(USE_INSTANCING_INDIRECT)
+          #undef instanceIndex
+        #endif`).replace('#include <begin_vertex>','#include <begin_vertex>\nvehicleMark=vehiclePaint;tireReceiver=vehiclePaint.xy;')
       .replace('#include <project_vertex>',`#include <project_vertex>
         if(vehiclePaint.z>1.5 && vehicleCast.z>.001){
           mat4 carFrame=modelMatrix;
@@ -154,11 +164,11 @@ export function streetVehicleMaterial() {
         // coverage after those lighting terms so a shadow cannot become a lamp.
         if(vehicleMark.z>1.5)gl_FragColor.rgb=vec3(0.);`);
   };
-  material.customProgramCacheKey=()=> 'painted-road-traffic-v2';
+  material.customProgramCacheKey=()=> 'painted-road-traffic-v3';
   return material;
 }
 
-export function createStreetVehicle(index: number, material: THREE.MeshStandardMaterial, distant = false) {
+export function createStreetVehicle(index: number, material: THREE.MeshStandardMaterial, distant = false, passengerDoor=false) {
   const p = profiles[index%profiles.length];
   const base = new THREE.Color(paint[index%paint.length]), lacquer = base.clone().lerp(new THREE.Color('#eedfc2'),.12);
   const skirt = base.clone().multiplyScalar(.70), edge = base.clone().multiplyScalar(.90);
@@ -174,7 +184,10 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
   // Sample each wheel arch along the lower silhouette. The tyre is visible through
   // the scallop, while the shoulder and roof lines carry through it.
   const archSteps = distant ? [-1,0,1] : [-1,-.75,-.40,0,.40,.75,1];
-  const xs = [...new Set([...sections.map(([x])=>x),...axles.flatMap(axle=>archSteps.map(k=>axle+k*axleCover))])].sort((a,b)=>a-b);
+  const movingVertices:number[]=[];
+  // Only the sedan used for the Ferry Plaza passenger call needs a door.
+  const doorRear=-1.59,hinge=-.515,doorOptions=passengerDoor?[doorRear,hinge]:[];
+  const xs = [...new Set([...doorOptions,...sections.map(([x])=>x),...axles.flatMap(axle=>archSteps.map(k=>axle+k*axleCover))])].sort((a,b)=>a-b);
   const rings = xs.map(x => {
     const j = Math.max(1,sections.findIndex(([edgeX])=>edgeX >= x));
     const [from,y0,w0] = sections[j-1], [to,y1,w1] = sections[j];
@@ -193,6 +206,8 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
     const rear = rings[i-1], front = rings[i], surface = [skirt,base,edge,lacquer,lacquer,lacquer,edge,base];
     for(let j=0;j<rear.length;j++){
       const next=(j+1)%rear.length;
+      if(passengerDoor&&xs[i-1]>=doorRear&&xs[i]<=hinge&&j>=1&&j<=3)
+        movingVertices.push(...Array.from({length:6},(_,k)=>form.count+k));
       form.panel(rear[j],front[j],front[next],rear[next],surface[j]);
     }
   }
@@ -216,9 +231,19 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
       if(side===1) form.panel(a,b,c,d,color);
       else form.panel(a,d,c,b,color);
     };
-    panel(0,1,0,1,base);
+    const swinging=passengerDoor&&side===1;
+    if(swinging){
+      panel(0,.064,0,1,base);panel(.44,1,0,1,base);
+      movingVertices.push(...Array.from({length:6},(_,k)=>form.count+k));
+      panel(.064,.44,0,1,base);
+      const liner=wide*.52;
+      form.panel([doorRear,.35,liner],[hinge,.35,liner],[hinge,p.height-.07,liner],[doorRear,p.height-.07,liner],rubber);
+    }else panel(0,1,0,1,base);
     const sideWindows = index%4===3 ? [[.64,.93]] : index%4===2 ? [[.055,.29],[.32,.57],[.605,.94]] : [[.064,.44],[.48,.94]];
-    sideWindows.forEach(([left,right], i) => panel(left,right,.16,.88,i%2 ? windshield : glass,.010));
+    sideWindows.forEach(([left,right], i) => {
+      if(swinging&&i===0)movingVertices.push(...Array.from({length:6},(_,k)=>form.count+k));
+      panel(left,right,.16,.88,i%2 ? windshield : glass,.010);
+    });
   }
   for (const end of [0,1]) {
     const nose = end === 1;
@@ -277,7 +302,24 @@ export function createStreetVehicle(index: number, material: THREE.MeshStandardM
   form.contact(p.length,p.width,p.wheelbase);
   const vehicle = new THREE.Group();
   vehicle.name = p.name;
-  const mesh = new THREE.Mesh(form.geometry(),material);
+  const geometry=form.geometry();
+  if(passengerDoor){
+    // One morph, on one shared fleet geometry. The per-instance influence
+    // opens only the parked car. The other sedans keep the ordinary silhouette.
+    const positions=geometry.attributes.position,normals=geometry.attributes.normal;
+    const delta=new Float32Array(positions.count*3),normalDelta=new Float32Array(delta.length);
+    const angle=1.04,cs=Math.cos(angle),sn=Math.sin(angle);
+    for(const i of movingVertices){
+      const dx=positions.getX(i)-hinge*metresToModel,dz=positions.getZ(i)-wide*.90*metresToModel;
+      delta[3*i]=dx*(cs-1)+dz*sn;delta[3*i+2]=-dx*sn+dz*(cs-1);
+      const nx=normals.getX(i),nz=normals.getZ(i);
+      normalDelta[3*i]=nx*(cs-1)+nz*sn;normalDelta[3*i+2]=-nx*sn+nz*(cs-1);
+    }
+    geometry.morphTargetsRelative=true;
+    geometry.morphAttributes.position=[new THREE.BufferAttribute(delta,3)];
+    geometry.morphAttributes.normal=[new THREE.BufferAttribute(normalDelta,3)];
+  }
+  const mesh = new THREE.Mesh(geometry,material);
   mesh.receiveShadow = true;
   vehicle.add(mesh);
   return vehicle;

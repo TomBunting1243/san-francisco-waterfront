@@ -31,7 +31,12 @@ function northLane(x:number){
   // The 2024 orthophoto puts the outer motor lane inland of the two-way
   // cycle track. Its separator ends at Mission, where the curb lane widens.
   const howardInset=.106*(1-MathUtils.smoothstep(x,-12.1,-10.62));
-  const offset=.185-howardInset+northRefugeOffset(x);
+  // The two floating loading bays north of Mission reach farther into the
+  // carriageway than the concrete separator. Ease inland before each taper.
+  const station=(x+56)*132;
+  const loadingInset=.061*MathUtils.smoothstep(station,5780,5935)*(1-MathUtils.smoothstep(station,6005,6270))
+    +.018*MathUtils.smoothstep(station,6480,6600)*(1-MathUtils.smoothstep(station,6740,6935));
+  const offset=.185-howardInset-loadingInset+northRefugeOffset(x);
   return [x+offset*Math.sin(road.heading),road.z+offset*Math.cos(road.heading)];
 }
 for(let x=-23.58;x<waterfrontEndX+4;x+=.25)roads.push(northLane(x));

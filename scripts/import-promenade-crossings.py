@@ -7,7 +7,7 @@ brightness profile locates actual stripe centers and skips medians and gaps.
 Clips the traced polygons to the rendered street and gutter survey, then bakes
 paint triangles at a 4 mm offset. Requires NumPy, Rasterio and Shapely >= 2.1.
 """
-import json,sys
+import argparse,json
 from pathlib import Path
 import numpy as np
 import rasterio
@@ -24,7 +24,11 @@ strips=[
  (2,(205,187),(205,222),13),(2,(245,279),(247,312),14),(2,(213,266),(234,277),12),
  (2,(443,186),(443,231),17),(2,(540,190),(540,220),16),(2,(444,269),(445,301),18),(2,(538,261),(539,297),17),(2,(458,313),(526,311),17),
  (2,(955,187),(954,221),18),(2,(925,245),(925,286),18)]
-with rasterio.open(sys.argv[1]) as src:
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('aerial',type=Path)
+parser.add_argument('--leg',type=int,help='rebuild one zero-based crossing in the existing survey')
+args=parser.parse_args()
+with rasterio.open(args.aerial) as src:
  # Same fixed-point luminance as Pillow's RGB -> L converter.
  red,green,blue=src.read((1,2,3),out_dtype='uint32')
  im=((red*19595+green*38470+blue*7471+32768)>>16).astype('uint8')
@@ -96,17 +100,20 @@ road=union_all(list(parcels('street'))).difference(union_all([*parcels('sidewalk
 # two gutter edge offsets and heights used in addSurveyCurbs.
 gutters=[]; levels=[]; faces=[]
 def edge(station,offset):
- x,z,nx,nz,_=station
+ x,z,nx,nz=station[:4]
  return [x+nx*offset,z+nz*offset]
 for _,median,line in curbs['lines']:
  for a,b in zip(line,line[1:]):
   back=.157 if min(a[4],b[4])<1 else .031
+  # A ramp station may set its own sidewalk-side width in curbSection.
+  a_back=a[5] if len(a)>5 else back
+  b_back=b[5] if len(b)>5 else back
   qa,qb=edge(a,.0023),edge(b,.0023)
-  if not Polygon([qa,qb,edge(b,-back),edge(a,-back)]).envelope.intersects(bounds):continue
+  if not Polygon([qa,qb,edge(b,-b_back),edge(a,-a_back)]).envelope.intersects(bounds):continue
   # A very tight curb can fold over itself in plan. Mask the projections
   # of the same triangles rendered by addSurveyCurbs, including its ramp.
-  for outer,inner in zip([.0023,0,-.011],[0,-.011,-back]):
-   for corners in [[edge(a,outer),edge(b,outer),edge(b,inner)],[edge(a,outer),edge(b,inner),edge(a,inner)]]:
+  for outer,inner_a,inner_b in [(.0023,0,0),(0,-.011,-.011),(-.011,-a_back,-b_back)]:
+   for corners in [[edge(a,outer),edge(b,outer),edge(b,inner_b)],[edge(a,outer),edge(b,inner_b),edge(a,inner_a)]]:
     face=Polygon(corners)
     if face.area>0:faces.append(face)
   # Match the renderer's diagonal as each gutter quad can bend around a corner.
@@ -211,5 +218,12 @@ for line in json.loads((data/'embarcadero-tracks.json').read_text())['tracks']:
 crossing_bars=[Polygon(b) for leg in records for b in leg if -27<b[0][0]<-21]
 junction=on_pavement(union_all(strokes).difference(union_all(rails+crossing_bars)))
 out=data/'promenade-crossings.json'
-out.write_text(json.dumps({'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','marketStart':market_start,'crossings':paint,'howardJunction':junction},separators=(',',':'))+'\n')
-print(len(records),'crossing legs;',sum(map(len,records)),'source paint bars;',sum(map(len,paint)),'road and gutter paint triangles')
+result={'survey':'San Francisco 2024 8 cm orthophoto','source':'https://tile.sf.gov','marketStart':market_start,'crossings':paint,'howardJunction':junction}
+if args.leg is not None:
+ if not 0<=args.leg<len(records):parser.error('crossing leg outside the survey')
+ result=json.loads(out.read_text())
+ if len(result['crossings'])!=len(records) or result['marketStart']!=market_start:
+  parser.error('crossing inventory changed; rebuild the entire survey')
+ result['crossings'][args.leg]=paint[args.leg]
+out.write_text(json.dumps(result,separators=(',',':'))+'\n')
+print(len(records),'crossing legs;',sum(map(len,records)),'source paint bars;',sum(map(len,result['crossings'])),'road and gutter paint triangles')

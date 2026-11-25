@@ -24,6 +24,7 @@ import { clockArrivalFrame,clockArrivalFraming,openingCamera, openingLens, openi
 import { harborStars, starVisibility } from './sky';
 import {updatePier14Visitors} from './pier14-visitors';
 import {howardBealeAttendance,howardBealeWalkerCount} from './howard-beale-walkers';
+import {loadingCallAllowed,loadingPassenger} from './mission-loading';
 import {marketShopperAttendance} from './market-shoppers';
 import {pedalBicycle} from './waterfront-bicycle';
 import {bicycleScale,bicycleWheelBottom,frontMarketShopperStart,howardBealeWalkerStart,waterfrontCyclist,waterfrontWalker} from './waterfront-routes';
@@ -299,7 +300,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
       const figureRegion=streetView?variant:undefined;
       const howardStart=howardBealeWalkerStart(figureRegion);
       const howardEnd=howardStart<0?-1:howardStart+howardBealeWalkerCount;
-      let previousHowardAttendance=-1;
+      let previousHowardAttendance=-1,previousLoading=false;
       const {courtyardSlot}=world;
       let courtyardWasOpen=false,lastCourtyardTime=NaN;
       const rearSlots=world.residentPositions.flatMap((p,i)=>p.rearShopper?[world.walkerCount+i]:[]);
@@ -816,6 +817,8 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const civilEpoch=customEpoch??Date.now();
         const marketRevision=variant==='street'?0:world.ferryMarket.update(civilEpoch,still||reducedMotion.current);
         const attendanceChanged=marketAttendance.update(world.ferryMarket.activity);
+        const loading=!streetView&&loadingCallAllowed(roadSeconds,civilEpoch/1000+expressWallOffset,customEpoch!==undefined);
+        const loadingChanged=loading!==previousLoading;previousLoading=loading;
         const howardAttendance=howardBealeAttendance(lighting.hours);
         const howardChanged=howardAttendance!==previousHowardAttendance;
         previousHowardAttendance=howardAttendance;
@@ -825,7 +828,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         const motionChanged=elapsed!==lastMotion||roadSeconds!==lastRoadMotion;
         const viewerChanged=camera.position.x!==figureViewX||camera.position.z!==figureViewZ;
         const pyxisPose=world.ferries.length&&(motionChanged||viewerChanged)?ferryPose(elapsed,0,ferryClock):null;
-        if(motionChanged||viewerChanged||attendanceChanged||howardChanged||courtyardChanged){
+        if(motionChanged||viewerChanged||attendanceChanged||howardChanged||courtyardChanged||loadingChanged){
           figureViewX=camera.position.x;figureViewZ=camera.position.z;
           world.people.setViewer(figureViewX,figureViewZ);
           for(let i=0;i<world.walkerCount;i++){
@@ -838,6 +841,13 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           }
           world.residentPositions.forEach((p,i)=>{
             const person=world.walkerCount+i;
+            if(p.loadingPassenger){
+              if(!loading){world.people.hide(person);return;}
+              const sample=(dt:number)=>loadingPassenger(roadSeconds+dt),passenger=sample(0);
+              if(passenger.aboard)world.people.hide(person);
+              else world.people.update(person,passenger.x,passenger.z,roadSeconds,1,passenger.y,0,passenger.standing,passenger.heading,sample,undefined,passenger.crouch);
+              return;
+            }
             if(marketAttendance.absent.has(person)){world.people.hide(person);return;}
             world.people.update(person,p.x,p.z,elapsed*.20,i%2?1:-1,p.y,hoveredPerson===person?1:(i%7===0&&elapsed%18<3?.7:0),true);
           });
@@ -862,6 +872,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
           world.transit?.update(elapsed,localMinutes,patioSheltered,ferryClock.date,platformTime,tramPose,passengerTime,expressSeconds,roadSeconds,mode==='bridge');
           lastTransitMinute=localMinutes;lastPatioSheltered=patioSheltered;
         }
+        if(motionChanged||loadingChanged)world.updateTraffic(roadSeconds,loading);
         if(motionChanged){
         world.updateApproach(mode==='bridge'?rideSeconds:elapsed);
         if(world.fireboat){const fireboatPose=world.fireboat.update(elapsed,tideOffset);host.dataset.fireboat=fireboatPose.phase;}
@@ -881,7 +892,7 @@ export default function CityWorld({ onVisit, variant='harbor', passerbyLines=[],
         });
         world.updateBridgeTraffic(mode==='bridge'?rideSeconds:elapsed);
         world.skaters?.update(roadSeconds);
-        world.updateTraffic(roadSeconds);
+
         const sealT=elapsed*.14;
         const sealX=24+Math.sin(sealT)*1.1,sealZ=8+Math.cos(sealT)*3;
         world.seaLion.position.set(sealX,waterHeight(sealX,sealZ,elapsed,tideOffset)-.011,sealZ);

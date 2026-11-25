@@ -5,6 +5,7 @@ import {ferryPatios} from './ferry-patios.ts';
 import {ferryGlazing} from './ferry-portico-glazing.ts';
 import {ferryEntryX,ferryHallFloor,ferryTowerZ,ferryTreads} from './ferry-portico-access.ts';
 import {harryBridgesGround,westMarketGround} from './curb-survey.ts';
+import {addMarketStoneBollards} from './market-stone-bollards.ts';
 import {createMarketPaving} from './market-paving.ts';
 import {createFerryBikeRacks} from './ferry-bike-racks.ts';
 import {addFrostPlaza} from './frost-plaza.ts';
@@ -589,6 +590,7 @@ export function ferryPublicRealm() {
   const {root,box,mesh,slab,line}=builders('Ferry plaza and Market Street');
   const metal='#586f70';
   root.add(createMarketPaving());
+  addMarketStoneBollards(mesh,root);
   addMarketStreet(mesh,root);
   addFrostPlaza(root);
   root.add(createFerryBikeRacks());

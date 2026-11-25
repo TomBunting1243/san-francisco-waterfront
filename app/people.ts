@@ -173,7 +173,7 @@ export function createPeople(count=22,seatedCount=0){
       if(i>=count-seatedCount)legs.setMatrixAt((i+seatedCount)*2+side,collapsed);
     }
   }
-  function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample,seat?:{amount:number;height:number;footReach:number;pace:number}){
+  function update(i:number,x:number,z:number,t:number,direction:number,ground=0,wave=0,standing=false,bearing=direction>0?0:Math.PI,routeSample?:RouteSample,seat?:{amount:number;height:number;footReach:number;pace:number},crouch=0){
     hidden[i]=0;
     const cadence=5.55+(i%4)*.23, phase=t*cadence+i*2.1, sway=Math.sin(phase);
     const style=i%cast.length, person=cast[style], adultHeight=1.65+(i%4)*.085;
@@ -182,7 +182,7 @@ export function createPeople(count=22,seatedCount=0){
     const stride=pedSpeed(direction)*stanceDuration/(2*size);
     const base=ground===0?.072:ground,rest=seat?.amount??0;
     const seatDrop=seat?rest*(seat.height/size+.013-.228):0;
-    const bob=seatDrop+(1-rest)*(standing?sway*.003:Math.abs(sway)*.011);
+    const bob=seatDrop-crouch/size+(1-rest)*(standing?sway*.003:Math.abs(sway)*.011);
     const viewYaw=Number.isFinite(viewer.x)?Math.atan2(viewer.x-x,viewer.y-z):0;
     const lateral=Math.cos(viewYaw+bearing);
     const yaw=viewYaw+(lateral<0?Math.PI:0);
