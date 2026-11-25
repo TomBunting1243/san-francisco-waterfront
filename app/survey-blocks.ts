@@ -8,6 +8,7 @@ import {addDonCheeVent} from './don-chee-vent.ts';
 import {stationPavingCut} from './embarcadero-station-sites.ts';
 import {addPromenadeCrossings,walkPanelCoordinates} from './promenade-pavement.ts';
 import {addTransbayCrossings} from './transbay-crossings.ts';
+import {addFremontApproachCurbs,fremontPavingRemainder} from './fremont-approach-curbs.ts';
 import {addFremontMarkings} from './fremont-markings.ts';
 import {addSurveyCurbs,bealeBeds,bealeSidewalk,howardSidewalk,howardStreet,replacementPavement} from './curb-survey.ts';
 import * as THREE from 'three';
@@ -234,6 +235,7 @@ export function addSurveyBlocks(mesh:Surface){
     }
   }
   addRinconCurbEdge(tileAt(-28,-2));
+  addFremontApproachCurbs(tileAt(-30,-32));
   addFolsomPortal(mesh);
   for(const plan of [...bealeSidewalk,...howardSidewalk])at(plan).top(plan,pavement.sidewalk[0],pavement.sidewalk[1]);
   for(const plan of howardStreet)at(plan).top(plan,pavement.street[0],pavement.street[1]);
@@ -254,7 +256,7 @@ export function addSurveyBlocks(mesh:Surface){
   addSurveyCurbs(mesh);addPromenadeCrossings(mesh);addTransbayCrossings(mesh);addFremontMarkings(mesh);
   for(const [kind,polygons] of Object.entries(survey.streets)){
     const [height,color]=pavement[kind];
-    for(const [i,polygon] of polygons.entries())for(const piece of folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
+    for(const [i,polygon] of polygons.entries())for(const piece of fremontPavingRemainder(kind,i)??folsomPavement[kind]?.[i]??replacementPavement(kind,i,polygon)){
       if(kind==='sidewalk'&&piece[0].some(([x,z])=>x>=-56&&x<=30&&z>=-8&&z<=2)){
         const id=Math.floor(piece[0][0][0]/12);let tile=walkTiles.get(id);
         if(!tile)walkTiles.set(id,tile=new Tile());

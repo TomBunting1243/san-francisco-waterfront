@@ -113,7 +113,11 @@ import {addEmbarcaderoCenterWest} from './embarcadero-center-west.ts';
 import {add500Folsom} from './500-folsom.ts';
 import {addMetropolitanTowers,addBayCrestWings} from './rincon-residential.ts';
 import {add199Fremont} from './199-fremont.ts';
+import {transitScreenName} from './transit-center-screen.ts';
+import {addSalesforceTransitCenter} from './salesforce-transit-center.ts';
 import {addTownHall} from './town-hall.ts';
+import {add215Fremont} from './215-fremont.ts';
+import {addFoundrySquare} from './foundry-square.ts';
 import {add425Market} from './425-market.ts';
 import {add455Market} from './455-market.ts';
 import {add333Market} from './333-market.ts';
@@ -281,6 +285,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(b.name==='1 Hotel San Francisco'){
       const hotel=buildingCharacter(b,detailedBuildings,font);root.add(hotel.root);windowPositions.push(...hotel.windows);return;
     }
+    if(addSalesforceTransitCenter(b,root,nightInk))return;
     if(addGoldenGatewayGarage(b,root,windowPositions))return;
     if(addOneMarketTower(b,root,windowPositions)||addMarketHistoricFrontage(b,root,windowPositions,font))return;
     if(addRinconRestaurant(b,root,windowPositions)||addMillenniumTower(b,root,windowPositions)||addRinconTower(b,root,windowPositions))return;
@@ -296,7 +301,8 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     if(add500Folsom(b,root,windowPositions))return;
     if(addMetropolitanTowers(b,root,windowPositions)||addBayCrestWings(b,root,windowPositions))return;
     if(add425Market(b,root,windowPositions)||add199Fremont(b,root,windowPositions)||addTownHall(b,root,windowPositions))return;
-    if(add455Market(b,root,windowPositions))return;
+    if(addFoundrySquare(b,root,windowPositions))return;
+    if(add215Fremont(b,root,windowPositions)||add455Market(b,root,windowPositions))return;
     if(add333Market(b,root,windowPositions)||addCaliforniaCenter(b,root,windowPositions))return;
     if(addMarketCenter(b,root,windowPositions)||addMarketFlatiron(b,root,windowPositions))return;
     if(addAveryBuilding(b,root,windowPositions)||addPgeBuilding(b,root,windowPositions))return;
@@ -679,7 +685,7 @@ export function* landscapeStages(shouldYield:()=>boolean=()=>false) {
     for(const {i,y} of tidalPanes){windowMesh.instanceMatrix.array[i*16+13]=y+offset;updatePane?.(i);}
     if(tidalPanes.length)windowMesh.instanceMatrix.needsUpdate=true;
   }
-  const moving=new Set<THREE.Object3D>([ferryFlag,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
+  const moving=new Set<THREE.Object3D>([ferryFlag,root.getObjectByName(transitScreenName)!,salesforce.getObjectByName('Perforated aluminum lantern')!,root.getObjectByName('Market granite and herringbone promenade')!,root.getObjectByName('Halprin brick court')!,root.getObjectByName(padelScreenName)!,root.getObjectByName(howardGlassName)!,rememberedWaterfront.getObjectByName('Sinbad display glass')!,...sailboats,fireboat.root,coffeeLetters,bucky,water,fountainWater,windowMesh,tram,gulls,pedestrians,streetCars,skaters.root,seaLion,...cyclists,...ferries,bridgeTraffic.batch,...clockHands.flatMap(h=>[h.minute,h.hour])]);
   const staticMeshes:THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>[]=[];
   root.traverse(o=>{
     if(!(o instanceof THREE.Mesh)||o instanceof THREE.InstancedMesh)return;

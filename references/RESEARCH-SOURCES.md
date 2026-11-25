@@ -425,3 +425,14 @@ JackPav photographed the bayward approach on 2 August 2016. KartaView lists CC B
 ## Trees and motorcycle parking on Howard Street
 
 The city’s [street-tree inventory](https://data.sfgov.org/d/tkzw-k3nq) identifies the species, trunk diameter and type of planting site. [USGS 2023 lidar](https://s3-us-west-2.amazonaws.com/usgs-lidar-public/CA_SanFrancisco_1_B23/ept.json), the [2024 municipal aerial](https://tile.sf.gov/api/tiles/p2024_rgb8cm/20/167794/405235) and [SFMTA right-of-way survey](https://services.sfmta.com/arcgis/rest/services/ROW/rightofway/MapServer/1) establish the street cross section. The [December 2019 SFMTA hearing](https://www.sfmta.com/notices/engineering-public-hearing-agenda-december-11-2019) and [meter inventory](https://data.sfgov.org/d/8vzz-qzz9) locate the motorcycle bay. Brett Norman, December 2022, observed via Google Maps, supplies two street-height views. [Looking across the row](https://www.google.com/maps/@?api=1&map_action=pano&pano=CIHM0ogKEICAgICByua6Sg&heading=135) · [Along the sidewalk](https://www.google.com/maps/@?api=1&map_action=pano&pano=CIHM0ogKEICAgICByuaGZQ&heading=95)
+
+### Fremont Street at Howard and Natoma
+
+| Photograph | Credit | View |
+|---|---|---|
+| [Fremont Street under the Transit Center, September 2018](https://s.hdnux.com/photos/75/73/12/16233095/8/640x0.jpg) | Yalonda M. James / San Francisco Chronicle | Axial view under the finished perforated awning during the temporary street closure. [Publication and caption](https://www.sfchronicle.com/bayarea/article/Fremont-St-under-transit-center-closed-10-more-13273130.php) |
+| [Fremont at Howard, September 2018](https://s.hdnux.com/photos/75/73/15/16233330/14/640x0.jpg) | Yalonda M. James / San Francisco Chronicle | Gray and ochre buildings on opposite corners, trees and pedestrian signals. |
+| [Muni terminal at Fremont and Natoma](https://www.mishalov.net/2018/08/salesforce.transit.center.html#:~:text=located%20on%20Fremont%20Street%20at%20Natoma%20Street) | Neil Mishalov, August 2018 | View across the curb into the bus bays. |
+| [Southeast down Fremont](https://www.mishalov.net/2018/08/salesforce.transit.center.html#:~:text=looking%20southeast%20down%20Fremont%20Street) | Neil Mishalov, August 2018 | Elevated reverse view of 215 Fremont and the two Foundry blocks. |
+| [215 Fremont field photograph 100_3640.JPG](https://sfplanninggis.org/docs/DPRForms/3738012.pdf#page=1) | Christopher VerPlanck / Kelley & VerPlanck, record dated November 8, 2007 | East-facing field-record photograph of the masonry and glass frontage. |
+| [Foundry Square exterior, Commons page 24330032](https://commons.wikimedia.org/wiki/File:Lead_Photo_For_Foundry_Square0-8539623124524951.jpg) | Jdlrobson, January 29, 2013, [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | Two buildings and their metal roof brows from the First Street end. |
